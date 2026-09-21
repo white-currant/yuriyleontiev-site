@@ -1,0 +1,31 @@
+name: Update releases
+
+on:
+  schedule:
+    - cron: "17 5 * * *"   # раз в сутки
+  workflow_dispatch:        # и вручную кнопкой Run workflow
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch releases and covers
+        env:
+          # необязательно: без них Spotify открывается поиском, а не точным альбомом
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+        run: python3 scripts/update_releases.py
+      - name: Commit changes
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git add releases.js covers
+          git diff --cached --quiet || git commit -m "Update releases"
+          git push
