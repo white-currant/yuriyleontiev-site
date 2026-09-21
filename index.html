@@ -408,6 +408,17 @@
       b.addEventListener("click", function () { set(b.dataset.set); });
     });
     document.getElementById("y").textContent = new Date().getFullYear();
+
+    /* «Заказать музыку»: плавная прокрутка без #contact в адресе, всегда старт с верха */
+    try { history.scrollRestoration = "manual"; } catch (e) {}
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    window.scrollTo(0, 0);
+    var go = document.querySelector('a[href="#contact"]');
+    if (go) go.addEventListener("click", function (e) {
+      e.preventDefault();
+      var t = document.getElementById("contact");
+      if (t) t.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+    });
   })();
 </script>
 </body>
