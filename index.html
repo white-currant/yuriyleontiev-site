@@ -26,6 +26,10 @@
     --pad: clamp(20px, 5vw, 64px);
     --max: 1240px;
   }
+  @property --px { syntax: '<percentage>'; inherits: true; initial-value: 30%; }
+  @property --py { syntax: '<percentage>'; inherits: true; initial-value: 20%; }
+  @property --rx { syntax: '<angle>'; inherits: true; initial-value: 0deg; }
+  @property --ry { syntax: '<angle>'; inherits: true; initial-value: 0deg; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { color-scheme: dark; -webkit-text-size-adjust: 100%; }
   body { background: var(--black); color: var(--white); font-family: var(--sans); font-size: 17px; line-height: 1.5; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -155,7 +159,7 @@
   /* listen */
   .rows { list-style: none; border-top: 1px solid var(--hair); }
   .rows li { border-bottom: 1px solid var(--hair); }
-  .row { display: grid; grid-template-columns: 52px 1fr auto; align-items: baseline; padding: 24px 0; font-size: clamp(30px, 6.4vw, 64px); font-weight: 500; letter-spacing: -.05em; line-height: 1; text-transform: uppercase; transition: padding .3s cubic-bezier(.2,.7,.2,1); }
+  .row { display: grid; grid-template-columns: 52px 1fr auto; align-items: baseline; padding: 22px 0; font-size: clamp(24px, 5vw, 48px); font-weight: 500; letter-spacing: -.04em; line-height: 1; text-transform: uppercase; transition: padding .3s cubic-bezier(.2,.7,.2,1); }
   .row .n { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; color: var(--dim); font-weight: 400; }
   .row .note2 { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; color: var(--dim); font-weight: 400; margin-left: 14px; }
   .row .arr { font-weight: 300; transition: transform .3s; }
@@ -164,13 +168,55 @@
   /* commission */
   .statement { font-weight: 500; font-size: clamp(30px, 5.4vw, 66px); line-height: 1; letter-spacing: -.05em; max-width: 15em; }
   .body { margin-top: 24px; max-width: 34em; color: var(--dim); font-size: clamp(17px, 2vw, 20px); line-height: 1.5; }
-  .cards { display: grid; gap: 0; margin-top: 46px; border-top: 1px solid var(--hair); }
-  .card { display: grid; grid-template-columns: 52px 1fr; padding: 22px 0; border-bottom: 1px solid var(--hair); }
+  .recognition-kicker { font-family: var(--sans); font-weight: 500; font-size: clamp(22px, 3.2vw, 32px); letter-spacing: -.02em; text-transform: none; color: var(--white); }
+  .cards { display: grid; gap: 18px; margin-top: 46px; }
+  .card {
+    position: relative; overflow: hidden; display: grid; grid-template-columns: 52px 1fr; padding: 22px 4px;
+    --px: 30%; --py: 20%; --rx: 0deg; --ry: 0deg;
+    border-bottom: 1px solid rgba(205,177,124,.35);
+    transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry));
+  }
   .card .mono { color: var(--dim); padding-top: 8px; }
-  .card b { display: block; font-size: clamp(24px, 3.6vw, 36px); font-weight: 500; letter-spacing: -.04em; text-transform: uppercase; line-height: 1; }
-  .card .laurel { display: block; width: 100%; max-width: 320px; height: auto; margin: 0 auto; }
+  .card b, .card .laurel {
+    background: linear-gradient(115deg, #b6935a 0%, #f4e2b8 22%, #fff 38%, #cfe0ff 50%, #b9a2ff 62%, #f4e2b8 80%, #b6935a 100%);
+    background-size: 320% 320%;
+    background-position: var(--px) var(--py);
+  }
+  .card b {
+    display: block; font-size: clamp(24px, 3.6vw, 36px); font-weight: 700; letter-spacing: -.04em; text-transform: uppercase; line-height: 1;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 1px 0 rgba(0,0,0,.4));
+  }
+  .card .laurel {
+    display: block; width: 100%; max-width: 320px; aspect-ratio: 592 / 390; margin: 0 auto;
+    -webkit-mask-image: url(badges/east-village-nyff.png); -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center;
+    mask-image: url(badges/east-village-nyff.png); mask-size: contain; mask-repeat: no-repeat; mask-position: center;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,.5));
+  }
   .card span.d { display: block; margin-top: 8px; color: var(--dim); font-size: 16px; }
-  @media (min-width: 900px) { .cards { grid-template-columns: repeat(3, 1fr); border-top: 0; gap: 24px; } .card { grid-template-columns: 1fr; border: 1px solid var(--hair); padding: 26px 24px 30px; min-height: 200px; align-content: start; gap: 16px; } .card .mono { padding-top: 0; } }
+  .card > * { position: relative; z-index: 1; }
+  @media (min-width: 900px) {
+    .cards { grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .card {
+      grid-template-columns: 1fr; padding: 26px 24px 30px; min-height: 200px; align-content: start; gap: 16px;
+      border: 1px solid transparent; border-radius: 2px;
+      background:
+        linear-gradient(165deg, #141414, #0a0a0a) padding-box,
+        var(--foil-gradient, linear-gradient(115deg, #b6935a, #f4e2b8, #fff, #cfe0ff, #b9a2ff, #f4e2b8, #b6935a)) border-box;
+      background-size: 100% 100%, 320% 320%;
+      background-position: 0 0, var(--px) var(--py);
+      box-shadow: 0 1px 1px rgba(0,0,0,.3), 0 26px 48px -26px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .card .mono { padding-top: 0; }
+    .card::after {
+      content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; border-radius: inherit;
+      background: radial-gradient(420px circle at var(--px) var(--py), rgba(255,255,255,.16), transparent 55%);
+    }
+    @media (hover: hover) and (pointer: fine) { .card:hover { transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry)) scale(1.015); } }
+  }
+  @media not all and (hover: hover) { .card { animation: holo-sweep 7s ease-in-out infinite; } }
+  .card.tilt { animation: none !important; }
+  @keyframes holo-sweep { 0%, 100% { --px: 12%; --py: 18%; } 50% { --px: 88%; --py: 78%; } }
   .mail { display: inline-block; margin-top: 8px; font-size: clamp(30px, 8.4vw, 104px); font-weight: 500; letter-spacing: -.06em; line-height: 1; border-bottom: 3px solid #fff; padding-bottom: 6px; overflow-wrap: anywhere; transition: opacity .2s; }
   .mail:hover { opacity: .6; }
 
@@ -367,9 +413,9 @@
       <p class="body" data-l="en">His credits span documentary film, narrative features and viral web series — among them the original score for the hit season “Workshop 47” (with creator MrLololoshka) and the documentary “The Altitude Limit: Climbing Everest,” built around the main theme “The Way Back.”</p>
       <p class="body" data-l="ru">Юрий Леонтьев — современный композитор и саунд-продюсер, известный эмоциональными кинематографичными звуковыми пространствами. В его музыке классическая оркестровая аранжировка вступает в диалог с тёплой фактурой аналогового синтеза, а амбиент, электроника и неоклассика соединяются в единый почерк. Классическое фортепианное образование и увлечение саунд-дизайном привели к стилю, где камерная живая инструментовка и мощь оркестра сочетаются с погружающими электронными текстурами.</p>
       <p class="body" data-l="ru">В его портфолио — документальное кино, игровые полнометражные фильмы и вирусные веб-сериалы. Среди работ — оригинальная музыка к нашумевшему сезону «Мастерская 47» (в сотрудничестве с автором MrLololoshka) и к документальному фильму «Предел высоты: восхождение на Эверест» с главной темой The Way Back.</p>
-      <p class="mono" style="color:var(--dim);margin-top:44px;margin-bottom:14px"><span data-l="en">Recognition</span><span data-l="ru">Признание</span></p>
+      <p class="recognition-kicker" style="margin-top:44px;margin-bottom:18px"><span data-l="en">Recognition</span><span data-l="ru">Признание</span></p>
       <div class="cards">
-        <div class="card laurel-card"><span class="mono">01</span><div style="text-align:center"><img class="laurel" src="badges/east-village-nyff.png" width="592" height="390" alt="East Village New York Film Festival — Original Score Finalist, 2026" loading="lazy"><span class="d"><span data-l="en">For “A Ballad of Cold Hearts.”</span><span data-l="ru">За «A Ballad of Cold Hearts».</span></span></div></div>
+        <div class="card laurel-card"><span class="mono">01</span><div style="text-align:center"><span class="laurel" role="img" aria-label="East Village New York Film Festival — Original Score Finalist, 2026"></span><span class="d"><span data-l="en">For “A Ballad of Cold Hearts.”</span><span data-l="ru">За «A Ballad of Cold Hearts».</span></span></div></div>
         <div class="card"><span class="mono">02</span><div><b>Monza Film Festival</b><span class="d"><span data-l="en">Best Soundtrack award — “Recycling” (2024).</span><span data-l="ru">Награда «Лучший саундтрек» — Recycling (2024).</span></span></div></div>
         <div class="card"><span class="mono">03</span><div><b>Embassy of Saba</b><span class="d"><span data-l="en">Acknowledged for “Under Sail to the Island of Saba.”</span><span data-l="ru">Благодарность за Under Sail to the Island of Saba.</span></span></div></div>
       </div>
@@ -562,6 +608,58 @@
       tc.textContent = "TC " + pad(Math.floor(f / 86400)) + ":" + pad(Math.floor(f / 1440) % 60) + ":" + pad(Math.floor(f / 24) % 60) + ":" + pad(f % 24);
     }
     if (!reduce) { setInterval(function () { if (!document.hidden) tick(); }, 42); }
+
+    /* ---- award cards: holo/gold sheen that follows the cursor, or the device tilt ---- */
+    var cards = [].slice.call(document.querySelectorAll(".card"));
+    if (cards.length && !reduce) {
+      var hasFinePointer = matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+      if (hasFinePointer) {
+        cards.forEach(function (c) {
+          c.addEventListener("pointerenter", function () { c.style.transition = "none"; });
+          c.addEventListener("pointermove", function (e) {
+            var r = c.getBoundingClientRect();
+            var mx = (e.clientX - r.left) / r.width, my = (e.clientY - r.top) / r.height;
+            c.style.setProperty("--px", (mx * 100) + "%");
+            c.style.setProperty("--py", (my * 100) + "%");
+            c.style.setProperty("--ry", ((mx - .5) * 14) + "deg");
+            c.style.setProperty("--rx", ((.5 - my) * 14) + "deg");
+          });
+          c.addEventListener("pointerleave", function () {
+            c.style.transition = "transform .5s cubic-bezier(.2,.8,.2,1), background-position .5s ease-out";
+            c.style.setProperty("--rx", "0deg");
+            c.style.setProperty("--ry", "0deg");
+            c.style.setProperty("--px", "30%");
+            c.style.setProperty("--py", "20%");
+          });
+        });
+      } else if (window.DeviceOrientationEvent) {
+        // сенсорный экран: ведём блик по наклону устройства (как фольга на карте в Balatro)
+        function onTilt(e) {
+          if (e.beta == null || e.gamma == null) return;
+          var px = Math.max(0, Math.min(100, 50 + e.gamma * 2.2));
+          var py = Math.max(0, Math.min(100, 50 + (e.beta - 40) * 1.6));
+          cards.forEach(function (c) {
+            c.classList.add("tilt");
+            c.style.setProperty("--px", px + "%");
+            c.style.setProperty("--py", py + "%");
+          });
+        }
+        function armTilt() { window.addEventListener("deviceorientation", onTilt); }
+        if (typeof DeviceOrientationEvent.requestPermission === "function") {
+          // iOS требует разрешение по жесту пользователя — запрашиваем при первом касании
+          var askOnce = function () {
+            document.removeEventListener("touchend", askOnce);
+            DeviceOrientationEvent.requestPermission().then(function (state) {
+              if (state === "granted") armTilt();
+            }).catch(function () {});
+          };
+          document.addEventListener("touchend", askOnce, { once: true });
+        } else {
+          armTilt();
+        }
+      }
+    }
   })();
 </script>
 </body>
