@@ -73,11 +73,11 @@
     background: var(--black); padding: max(16px, env(safe-area-inset-top)) clamp(24px, 3vw, 40px) 40px;
     display: flex; flex-direction: column;
     transform: translateX(100%); pointer-events: none;
-    transition: transform .45s cubic-bezier(.22,.8,.24,1);
-    box-shadow: -40px 0 80px -30px rgba(0,0,0,.6);
+    transition: transform .45s cubic-bezier(.22,.8,.24,1), box-shadow .45s ease;
+    box-shadow: -40px 0 80px -30px rgba(0,0,0,0); /* в закрытом виде тени нет — иначе её размытие видно у правого края даже когда меню задвинуто */
     overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
-  .menu.open { transform: translateX(0); pointer-events: auto; }
+  .menu.open { transform: translateX(0); pointer-events: auto; box-shadow: -40px 0 80px -30px rgba(0,0,0,.6); }
   .menu .top { display: flex; justify-content: space-between; align-items: center; }
   .menu nav { margin: auto 0; display: grid; gap: 2px; }
   .menu nav a {
@@ -235,6 +235,13 @@
   .card b, .card .laurel, .card span.d, .card .mono { position: relative; z-index: 1; }
   .card { border-bottom: 1px solid rgba(212,175,55,.4); }
   .card-face { padding: 22px 4px; grid-template-columns: 52px 1fr; display: grid; }
+  /* на узком экране карточка с лавром — не строка «номер + текст», а сам лавр во всю ширину;
+     иначе margin:auto центрирует его только внутри правой колонки грида, а не всей карточки.
+     Только для мобильной раскладки — на десктопе своя сетка ниже, её не трогаем. */
+  @media (max-width: 899px) {
+    /* «01» остаётся слева, как «02»/«03» — расширяем на всю ширину только строку с самим лавром */
+    .laurel-card .card-face > div { grid-column: 1 / -1; text-align: center; }
+  }
   @media (min-width: 900px) {
     .cards { grid-template-columns: repeat(3, 1fr); gap: 24px; }
     .card {
@@ -730,11 +737,18 @@
           });
         });
       } else if (window.DeviceOrientationEvent) {
-        // сенсорный экран: ведём блик по наклону устройства (как фольга на карте в Balatro)
+        // сенсорный экран: ведём блик по наклону устройства (как фольга на карте в Balatro).
+        // Точка отсчёта — не жёстко заданный угол, а то, как устройство держат прямо сейчас:
+        // первое показание датчика после разрешения становится нейтральным положением (px/py 50/50),
+        // дальше считаем только отклонение от него. Иначе у тех, кто держит планшет/телефон под
+        // непривычным углом, анимация сразу упиралась в 0 или 100 и переставала откликаться на наклон.
+        var tiltBase = null;
         function onTilt(e) {
           if (e.beta == null || e.gamma == null) return;
-          var px = Math.max(0, Math.min(100, 50 + e.gamma * 2.2));
-          var py = Math.max(0, Math.min(100, 50 + (e.beta - 40) * 1.6));
+          if (!tiltBase) tiltBase = { beta: e.beta, gamma: e.gamma };
+          var dBeta = e.beta - tiltBase.beta, dGamma = e.gamma - tiltBase.gamma;
+          var px = Math.max(0, Math.min(100, 50 + dGamma * 2.2));
+          var py = Math.max(0, Math.min(100, 50 + dBeta * 1.6));
           cards.forEach(function (c) {
             c.classList.add("tilt");
             c.style.setProperty("--px", px + "%");
