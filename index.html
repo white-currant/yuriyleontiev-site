@@ -285,7 +285,9 @@
     .card:hover .card-face { transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry)) scale(1.015); }
   }
   /* сенсорные экраны без захвата акселерометра: карточки медленно и вразнобой парят и переливаются сами —
-     разные длительности и отрицательные задержки у каждой, чтобы они не двигались в такт друг другу */
+     разные длительности и отрицательные задержки у каждой, чтобы они не двигались в такт друг другу.
+     На десктопе (мышь/трекпад) то же самое парение ведётся через JS через requestAnimationFrame —
+     не CSS-анимацией, — потому что при возврате курсора нужно точно знать текущую фазу без перезапуска. */
   @media not all and (hover: hover) {
     .card { animation: holo-sweep 19s ease-in-out infinite; }
     .card:nth-of-type(1) { animation-duration: 17.5s; animation-delay: -3s; }
@@ -737,10 +739,72 @@
     if (cards.length && !reduce) {
       var hasFinePointer = matchMedia("(hover: hover) and (pointer: fine)").matches;
       if (hasFinePointer) {
-        // во время движения — мгновенно (и наклон, и блик), при уходе курсора — плавно возвращаются вместе
-        cards.forEach(function (c) {
-          var settleTimer;
-          c.addEventListener("pointerenter", function () { c.classList.remove("settle"); clearTimeout(settleTimer); });
+        // Парение на десктопе ведётся здесь же, в JS (через requestAnimationFrame), а не CSS-анимацией —
+        // так «текущее положение» всегда точно известно по общему таймеру и не зависит от того, как
+        // браузер перезапускает CSS-анимацию с отрицательным animation-delay (ненадёжно между браузерами).
+        // Кадры и тайминг-функция (ease-in-out) совпадают с @keyframes holo-sweep для сенсорных экранов.
+        var DRIFT_KF = [
+          { t: 0,    px: 25, py: 27, gx: 75, gy: 73, rx: -4.5, ry: -5.5 },
+          { t: .25,  px: 62, py: 20, gx: 38, gy: 80, rx: 5,    ry: 6    },
+          { t: .5,   px: 75, py: 67, gx: 25, gy: 33, rx: 3.5,  ry: -6.5 },
+          { t: .75,  px: 33, py: 67, gx: 67, gy: 33, rx: -5.5, ry: 4    },
+          { t: 1,    px: 25, py: 27, gx: 75, gy: 73, rx: -4.5, ry: -5.5 }
+        ];
+        var DRIFT_TIMING = [
+          { duration: 17.5, delay: 3 },
+          { duration: 22.5, delay: 12.5 },
+          { duration: 14.5, delay: 7 }
+        ];
+        function easeInOut(x) { // cubic-bezier(.42,0,.58,1), решается методом Ньютона по x
+          var x1 = .42, y1 = 0, x2 = .58, y2 = 1;
+          function calcX(t) { return 3 * (1 - t) * (1 - t) * t * x1 + 3 * (1 - t) * t * t * x2 + t * t * t; }
+          function calcY(t) { return 3 * (1 - t) * (1 - t) * t * y1 + 3 * (1 - t) * t * t * y2 + t * t * t; }
+          function calcXd(t) { return 3 * (1 - t) * (1 - t) * x1 + 6 * (1 - t) * t * (x2 - x1) + 3 * t * t * (1 - x2); }
+          var t = x;
+          for (var i = 0; i < 6; i++) { var d = calcXd(t); if (Math.abs(d) < 1e-6) break; t -= (calcX(t) - x) / d; }
+          return calcY(t);
+        }
+        function driftAt(frac) {
+          for (var i = 0; i < DRIFT_KF.length - 1; i++) {
+            var a = DRIFT_KF[i], b = DRIFT_KF[i + 1];
+            if (frac >= a.t && frac <= b.t) {
+              var e = easeInOut((frac - a.t) / (b.t - a.t));
+              function lerp(k) { return a[k] + (b[k] - a[k]) * e; }
+              return { px: lerp("px"), py: lerp("py"), gx: lerp("gx"), gy: lerp("gy"), rx: lerp("rx"), ry: lerp("ry") };
+            }
+          }
+          return DRIFT_KF[0];
+        }
+        var t0 = performance.now(); // единая точка отсчёта на все карточки, никогда не сбрасывается
+        var states = cards.map(function (c, i) {
+          return { el: c, timing: DRIFT_TIMING[i] || { duration: 19, delay: 0 }, active: false };
+        });
+        function phaseAt(st, extraSec) {
+          var elapsed = (performance.now() - t0) / 1000 + st.timing.delay + (extraSec || 0);
+          var frac = (elapsed % st.timing.duration) / st.timing.duration;
+          if (frac < 0) frac += 1;
+          return frac;
+        }
+        function applyDrift(st, extraSec) {
+          var d = driftAt(phaseAt(st, extraSec));
+          st.el.style.setProperty("--rx", d.rx + "deg");
+          st.el.style.setProperty("--ry", d.ry + "deg");
+          st.el.style.setProperty("--px", d.px + "%");
+          st.el.style.setProperty("--py", d.py + "%");
+          st.el.style.setProperty("--gx", d.gx + "%");
+          st.el.style.setProperty("--gy", d.gy + "%");
+        }
+        (function raf() {
+          if (!document.hidden) { states.forEach(function (st) { if (!st.active) applyDrift(st); }); }
+          requestAnimationFrame(raf);
+        })();
+        states.forEach(function (st) {
+          var c = st.el, settleTimer;
+          c.addEventListener("pointerenter", function () {
+            clearTimeout(settleTimer);
+            c.classList.remove("settle");
+            st.active = true; // rAF-цикл перестаёт трогать эту карточку — дальше курсор
+          });
           c.addEventListener("pointermove", function (e) {
             var r = c.getBoundingClientRect();
             var mx = (e.clientX - r.left) / r.width, my = (e.clientY - r.top) / r.height;
@@ -755,18 +819,19 @@
           });
           c.addEventListener("pointerleave", function () {
             c.classList.add("settle");
-            c.style.setProperty("--rx", "0deg");
-            c.style.setProperty("--ry", "0deg");
-            c.style.setProperty("--px", "30%");
-            c.style.setProperty("--py", "20%");
-            c.style.setProperty("--gx", "30%");
-            c.style.setProperty("--gy", "20%");
-            settleTimer = setTimeout(function () { c.classList.remove("settle"); }, 550);
+            var SETTLE_S = .55;
+            // цель перехода — положение, в котором парение реально окажется через SETTLE_S (когда сам
+            // переход закончится), а не текущее — иначе к концу перехода цель уже успеет устареть
+            applyDrift(st, SETTLE_S);
+            settleTimer = setTimeout(function () {
+              c.classList.remove("settle");
+              st.active = false; // rAF возобновляет вести карточку с той же самой точки, без скачка
+            }, SETTLE_S * 1000);
           });
         });
       }
-      // сенсорные экраны (iPad/iPhone): без запроса доступа к акселерометру — карточки вместо этого
-      // медленно и хаотично (у каждой свой цикл, см. CSS) парят и переливаются сами по себе
+      // сенсорные экраны (iPad/iPhone): без запроса доступа к акселерометру — парение идёт CSS-анимацией
+      // (см. @media not all and (hover:hover) выше), никакого JS для них тут не требуется
     }
 
   })();
