@@ -40,26 +40,63 @@
   [hidden] { display: none !important; }
 
   /* ---------- fixed bar (ink on paper, white on black) ---------- */
-  .bar { position: fixed; z-index: 40; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: max(16px, env(safe-area-inset-top)) var(--pad) 0; color: var(--ink); pointer-events: none; transition: color .25s, background .3s; }
+  .bar { position: fixed; z-index: 40; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; gap: 28px; padding: max(16px, env(safe-area-inset-top)) var(--pad) 0; color: var(--ink); pointer-events: none; transition: color .25s, background .3s; }
   .bar.dark { color: #fff; background: rgba(6, 6, 6, .82); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
   .bar > * { pointer-events: auto; }
-  .bar .brand { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
-  .bar .tc { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; opacity: .8; display: none; }
-  .bar .right { display: flex; align-items: center; gap: 6px; }
+  .bar .brand { flex: none; font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+  .bar .tc-wrap { display: none; }
+  .bar .tc { flex: none; font-family: var(--mono); font-size: 12px; letter-spacing: .1em; opacity: .8; white-space: nowrap; }
+  /* линейка — отдельной полосой ПОД счётчиком, не под текстом: не наезжает, шва тоже нет — полоса одна на всю ширину.
+     Деления — настоящие DOM-элементы, а не анимированный repeating-gradient: у градиента с жёсткими границами
+     браузер иногда чуть пересчитывает субпиксельное положение тайлов при пересечении границы паттерна (дрожание
+     соседней чёрточки в момент появления новой). transform на статичных элементах этого не делает. */
+  .ruler { position: relative; width: 100%; height: 7px; overflow: hidden; pointer-events: none; opacity: .5; }
+  .ruler-ticks { position: absolute; top: 0; bottom: 0; left: 0; will-change: transform; }
+  .ruler-ticks i { position: absolute; top: 0; bottom: 0; width: 1px; background: currentColor; }
+  .bar .right { flex: none; display: flex; align-items: center; gap: 6px; }
   .lang { display: flex; }
   .lang button { padding: 10px 8px; font-family: var(--mono); font-size: 12px; letter-spacing: .1em; opacity: .5; }
   .lang button[aria-pressed="true"] { opacity: 1; }
   .burger { width: 46px; height: 46px; display: grid; place-content: center; gap: 7px; }
   .burger i { display: block; width: 30px; height: 2px; background: currentColor; }
-  @media (min-width: 720px) { .bar .tc { display: block; } }
+  @media (min-width: 720px) { .bar .tc-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; } }
 
-  /* ---------- menu ---------- */
-  .menu { position: fixed; inset: 0; z-index: 60; background: var(--black); padding: max(16px, env(safe-area-inset-top)) var(--pad) 40px; display: flex; flex-direction: column; opacity: 0; pointer-events: none; transition: opacity .3s; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  .menu.open { opacity: 1; pointer-events: auto; }
+  /* ---------- menu: узкая панель у правого края, а не во весь экран ---------- */
+  #page { transition: filter .45s ease; }
+  body.menu-open #page { filter: blur(10px) brightness(.7); pointer-events: none; }
+  /* скрим — прозрачный слой поверх размытой части: клик по нему закрывает меню */
+  .scrim { position: fixed; inset: 0; z-index: 55; background: transparent; border: 0; padding: 0; opacity: 0; pointer-events: none; }
+  body.menu-open .scrim { pointer-events: auto; }
+  .menu {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 60;
+    width: clamp(320px, 34vw, 480px);
+    background: var(--black); padding: max(16px, env(safe-area-inset-top)) clamp(24px, 3vw, 40px) 40px;
+    display: flex; flex-direction: column;
+    transform: translateX(100%); pointer-events: none;
+    transition: transform .45s cubic-bezier(.22,.8,.24,1);
+    box-shadow: -40px 0 80px -30px rgba(0,0,0,.6);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  .menu.open { transform: translateX(0); pointer-events: auto; }
   .menu .top { display: flex; justify-content: space-between; align-items: center; }
-  .menu nav { margin: auto 0; display: grid; gap: 4px; }
-  .menu nav a { font-size: clamp(44px, 11vw, 96px); font-weight: 500; letter-spacing: -.05em; line-height: 1; text-transform: uppercase; padding: 6px 0; transition: opacity .2s, transform .3s; }
-  .menu nav a:hover { transform: translateX(10px); }
+  .menu nav { margin: auto 0; display: grid; gap: 2px; }
+  .menu nav a {
+    font-size: clamp(26px, 4.6vw, 42px); font-weight: 500; letter-spacing: -.03em; line-height: 1.15;
+    text-transform: uppercase; padding: 6px 0 6px 0; transition: opacity .2s, padding .3s cubic-bezier(.2,.7,.2,1);
+    opacity: 0;
+  }
+  /* строки появляются по очереди, только пока панель открыта — только opacity, чтобы не конфликтовать с hover ниже */
+  .menu.open nav a { animation: menu-row .5s cubic-bezier(.22,.8,.24,1) forwards; }
+  .menu.open nav a:nth-of-type(1) { animation-delay: .08s; }
+  .menu.open nav a:nth-of-type(2) { animation-delay: .13s; }
+  .menu.open nav a:nth-of-type(3) { animation-delay: .18s; }
+  .menu.open nav a:nth-of-type(4) { animation-delay: .23s; }
+  .menu.open nav a:nth-of-type(5) { animation-delay: .28s; }
+  .menu.open nav a:nth-of-type(6) { animation-delay: .33s; }
+  .menu.open nav a:nth-of-type(7) { animation-delay: .38s; }
+  @keyframes menu-row { to { opacity: 1; } }
+  /* тот же приём, что и в «Слушать» — сдвиг padding-left, а не transform */
+  .menu nav a:hover { padding-left: 16px; }
   .menu .x { font-size: 40px; line-height: 1; width: 46px; height: 46px; }
   .menu .foot { color: var(--dim); }
 
@@ -129,6 +166,9 @@
   .poster .y { display: block; margin-top: 6px; color: var(--dim); font-family: var(--mono); font-size: 11px; letter-spacing: .1em; }
   .poster .img.contain { background: #141414; display: flex; align-items: center; justify-content: center; }
   .poster .img.contain img { width: 72%; height: 72%; object-fit: contain; }
+  /* горизонтальная обложка вместо портретной — под пропорции реального кадра, и в две колонки, чтобы смотрелась крупно */
+  .poster.wide { grid-column: span 2; }
+  .poster .img.land { aspect-ratio: 16 / 9; }
 
   /* (old) */
   .latest { display: grid; gap: 30px; align-items: end; }
@@ -235,8 +275,14 @@
   @media not all and (hover: hover) { .card { animation: holo-sweep 7s ease-in-out infinite; } }
   .card.tilt { animation: none !important; }
   @keyframes holo-sweep { 0%, 100% { --px: 12%; --py: 18%; } 50% { --px: 88%; --py: 78%; } }
-  .mail { display: inline-block; margin-top: 8px; font-size: clamp(30px, 8.4vw, 104px); font-weight: 500; letter-spacing: -.06em; line-height: 1; border-bottom: 3px solid #fff; padding-bottom: 6px; overflow-wrap: anywhere; transition: opacity .2s; }
-  .mail:hover { opacity: .6; }
+  /* простое лёгкое увеличение при наведении — без спецэффектов */
+  .mail {
+    display: inline-block; margin-top: 8px; transform-origin: left center;
+    font-size: clamp(30px, 8.4vw, 104px); font-weight: 500; letter-spacing: -.06em; line-height: 1;
+    border-bottom: 3px solid #fff; padding-bottom: 6px; overflow-wrap: anywhere;
+    transition: transform .3s cubic-bezier(.2,.8,.2,1), border-color .3s;
+  }
+  .mail:hover, .mail:focus-visible { transform: translateY(-6px); }
 
   /* ---------- final CTA panel, framed by film-perforation seams ---------- */
   .ctabox { background: var(--paper); color: var(--ink); padding: clamp(40px, 7vw, 84px) 0; }
@@ -295,9 +341,13 @@
   </filter>
 </svg>
 
+<!-- бар — вне #page: у filter на предке ломается рендер position:fixed потомков в части браузеров -->
 <div class="bar">
   <span class="brand">Y. Leontiev</span>
-  <span class="tc" id="tc" aria-hidden="true">TC 00:00:00:00</span>
+  <div class="tc-wrap" aria-hidden="true">
+    <span class="tc" id="tc">TC 00:00:00:00</span>
+    <div class="ruler"><div class="ruler-ticks js-ruler"></div></div>
+  </div>
   <div class="right">
     <div class="lang" role="group" aria-label="Language">
       <button type="button" data-set="en" aria-pressed="true">EN</button>
@@ -307,21 +357,7 @@
   </div>
 </div>
 
-<div class="menu" id="menu" aria-hidden="true">
-  <div class="top">
-    <span class="mono">Y. Leontiev</span>
-    <button type="button" class="x" id="menu-close" aria-label="Close">×</button>
-  </div>
-  <nav>
-    <a href="#films-head" id="menu-films" hidden><span data-l="en">On screen</span><span data-l="ru">На экране</span></a>
-    <a href="#scores-head"><span data-l="en">Scores</span><span data-l="ru">Кино</span></a>
-    <a href="#listen-head"><span data-l="en">Listen</span><span data-l="ru">Слушать</span></a>
-    <a href="#releases-head"><span data-l="en">Releases</span><span data-l="ru">Релизы</span></a>
-    <a href="#about-head"><span data-l="en">Bio</span><span data-l="ru">Bio</span></a>
-    <a href="#commission-head"><span data-l="en">Commission</span><span data-l="ru">Заказ</span></a>
-    <a href="#press-head"><span data-l="en">Press</span><span data-l="ru">Пресса</span></a>
-  </nav>
-</div>
+<div id="page">
 
 <header class="hero">
   <div class="wrap">
@@ -396,7 +432,7 @@
   <section class="reel" id="scores" hidden>
     <div class="wrap">
       <div class="reel-head" id="scores-head"><span class="mono"><span data-l="en">Reel <b class="rn"></b></span><span data-l="ru">Часть <b class="rn"></b></span></span>
-        <h2><span data-l="en">Scores</span><span data-l="ru">Кино</span></h2></div>
+        <h2><span data-l="en">Scores</span><span data-l="ru">Саундтреки</span></h2></div>
       <div id="scores-box"></div>
     </div>
   </section>
@@ -428,9 +464,9 @@
       <div class="reel-head" id="about-head"><span class="mono"><span data-l="en">Reel <b class="rn"></b></span><span data-l="ru">Часть <b class="rn"></b></span></span>
         <h2><span data-l="en">Bio</span><span data-l="ru">Bio</span></h2></div>
       <p class="body" data-l="en">Yuriy Leontiev is a modern composer and sound producer known for emotionally resonant, cinematic soundscapes. His work sets classical orchestral arrangement against the textured warmth of analog synthesis, moving between ambient, electronic and neoclassical idiom. A classical piano background and a parallel passion for sound design have shaped a signature balance of intimate live instrumentation, orchestral scale and immersive electronic texture.</p>
-      <p class="body" data-l="en">His credits span documentary film, narrative features and viral web series — among them the original score for the hit season “Workshop 47” (with creator MrLololoshka) and the documentary “The Altitude Limit: Climbing Everest,” built around the main theme “The Way Back.”</p>
+      <p class="body" data-l="en">His credits span documentary film, narrative features and viral web series — among them the original score for the hit season “Workshop 47” (with creator MrLololoshka) and the documentary “The Altitude Limit. Climbing Everest,” built around the main theme “The Way Back.”</p>
       <p class="body" data-l="ru">Юрий Леонтьев — современный композитор и саунд-продюсер, известный эмоциональными кинематографичными звуковыми пространствами. В его музыке классическая оркестровая аранжировка вступает в диалог с тёплой фактурой аналогового синтеза, а амбиент, электроника и неоклассика соединяются в единый почерк. Классическое фортепианное образование и увлечение саунд-дизайном привели к стилю, где камерная живая инструментовка и мощь оркестра сочетаются с погружающими электронными текстурами.</p>
-      <p class="body" data-l="ru">В его портфолио — документальное кино, игровые полнометражные фильмы и вирусные веб-сериалы. Среди работ — оригинальная музыка к нашумевшему сезону «Мастерская 47» (в сотрудничестве с автором MrLololoshka) и к документальному фильму «Предел высоты: восхождение на Эверест» с главной темой The Way Back.</p>
+      <p class="body" data-l="ru">В его портфолио — документальное кино, игровые полнометражные фильмы и вирусные веб-сериалы. Среди работ — оригинальная музыка к нашумевшему сезону «Мастерская 47» (в сотрудничестве с автором MrLololoshka) и к документальному фильму «Предел высоты. Восхождение на Эверест» с главной темой The Way Back.</p>
       <p class="recognition-kicker" style="margin-top:44px;margin-bottom:18px"><span data-l="en">Recognition</span><span data-l="ru">Признание</span></p>
       <div class="cards">
         <div class="card laurel-card"><div class="card-face"><span class="mono">01</span><div style="text-align:center"><span class="laurel" role="img" aria-label="East Village New York Film Festival — Original Score Finalist, 2026"></span><span class="d"><span data-l="en">For “A Ballad of Cold Hearts.”</span><span data-l="ru">За «A Ballad of Cold Hearts».</span></span></div></div></div>
@@ -478,6 +514,25 @@
 <footer class="wrap mono">
   <span>© <span id="y">2026</span> Yuriy Leontiev</span>
 </footer>
+</div><!-- /#page -->
+
+<div class="scrim" id="menu-scrim" aria-hidden="true"></div>
+
+<div class="menu" id="menu" aria-hidden="true">
+  <div class="top">
+    <span class="mono">Y. Leontiev</span>
+    <button type="button" class="x" id="menu-close" aria-label="Close">×</button>
+  </div>
+  <nav>
+    <a href="#films-head" id="menu-films" hidden><span data-l="en">On screen</span><span data-l="ru">На экране</span></a>
+    <a href="#scores-head"><span data-l="en">Scores</span><span data-l="ru">Саундтреки</span></a>
+    <a href="#listen-head"><span data-l="en">Listen</span><span data-l="ru">Слушать</span></a>
+    <a href="#releases-head"><span data-l="en">Releases</span><span data-l="ru">Релизы</span></a>
+    <a href="#about-head"><span data-l="en">Bio</span><span data-l="ru">Bio</span></a>
+    <a href="#commission-head"><span data-l="en">Commission</span><span data-l="ru">Заказ</span></a>
+    <a href="#press-head"><span data-l="en">Press</span><span data-l="ru">Пресса</span></a>
+  </nav>
+</div>
 
 <div class="sheet-back" id="sheet" aria-hidden="true">
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="s-title">
@@ -491,8 +546,8 @@
   </div>
 </div>
 
-<script src="releases.js"></script>
-<script src="films.js"></script>
+<script src="releases.js?v=2"></script>
+<script src="films.js?v=3"></script>
 <script>
   (function () {
     var R = window.RELEASES || [];
@@ -530,11 +585,13 @@
     var F = window.FILMS || [];
     if (F.length) {
       $("films-box").innerHTML = F.map(function (f) {
-        var inner = '<span class="img' + (f.fit === "contain" ? ' contain' : '') + '"><img src="' + esc(f.poster) + '" alt="' + esc(f.title) + '" width="400" height="600" loading="lazy"></span>' +
-          '<span class="t">' + esc(f.title) + '</span>' +
-          (f.role ? '<span class="s">' + esc(f.role) + '</span>' : '') +
+        var imgClass = "img" + (f.fit === "contain" ? " contain" : "") + (f.wide ? " land" : "");
+        var inner = '<span class="' + imgClass + '"><img src="' + esc(f.poster) + '" alt="' + esc(f.title) + '" width="400" height="600" loading="lazy"></span>' +
+          '<span class="t">' + pair(esc(f.title), esc(f.titleRu || f.title)) + '</span>' +
+          (f.role ? '<span class="s">' + pair(esc(f.role), esc(f.roleRu || f.role)) + '</span>' : '') +
           (f.year ? '<span class="y">' + esc(String(f.year)) + '</span>' : '');
-        return f.url ? '<a class="poster" href="' + esc(f.url) + '" target="_blank" rel="noopener">' + inner + '</a>' : '<div class="poster">' + inner + '</div>';
+        var posterClass = "poster" + (f.wide ? " wide" : "");
+        return f.url ? '<a class="' + posterClass + '" href="' + esc(f.url) + '" target="_blank" rel="noopener">' + inner + '</a>' : '<div class="' + posterClass + '">' + inner + '</div>';
       }).join("");
       $("films").hidden = false; $("menu-films").hidden = false;
     }
@@ -578,12 +635,15 @@
     /* ---- menu ---- */
     var menu = $("menu");
     function menuSet(on) {
+      if (on) { void menu.offsetWidth; } // форсируем reflow, чтобы построчная анимация перезапускалась каждый раз
       menu.classList.toggle("open", on); menu.setAttribute("aria-hidden", String(!on));
+      document.body.classList.toggle("menu-open", on); // левая часть сайта уходит в расфокус
       $("menu-open").setAttribute("aria-expanded", String(on));
       document.body.style.overflow = on ? "hidden" : "";
     }
     $("menu-open").addEventListener("click", function () { menuSet(true); });
     $("menu-close").addEventListener("click", function () { menuSet(false); });
+    $("menu-scrim").addEventListener("click", function () { menuSet(false); });
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") { close(); menuSet(false); } });
 
     /* ---- language ---- */
@@ -619,11 +679,26 @@
     window.addEventListener("scroll", barTheme, { passive: true }); barTheme();
 
     /* ---- running timecode, 24 fps ---- */
-    var tc = $("tc"), t0 = performance.now();
+    var tc = $("tc"), rulerTicks = document.querySelector(".js-ruler"), t0 = performance.now();
+    var RSTEP = 64; // шаг деления линейки, px
+    // настоящие DOM-чёрточки вместо анимированного background — см. комментарий в CSS про дрожание repeating-gradient
+    function buildRulerTicks() {
+      if (!rulerTicks) return;
+      var w = rulerTicks.parentElement.getBoundingClientRect().width;
+      var count = Math.ceil(w / RSTEP) + 2; // с запасом за оба края
+      var html = "";
+      for (var i = 0; i < count; i++) html += '<i style="left:' + (i * RSTEP) + 'px"></i>';
+      rulerTicks.innerHTML = html;
+    }
+    buildRulerTicks();
+    window.addEventListener("resize", buildRulerTicks);
+    if (document.fonts && document.fonts.ready) { document.fonts.ready.then(buildRulerTicks).catch(function () {}); } // ширина могла уточниться после загрузки шрифта
     function pad(n) { return (n < 10 ? "0" : "") + n; }
     function tick() {
       var f = 86400 + Math.floor((performance.now() - t0) / (1000 / 24)); // +1ч — так по традиции монтажных таймкодов
       tc.textContent = "TC " + pad(Math.floor(f / 86400)) + ":" + pad(Math.floor(f / 1440) % 60) + ":" + pad(Math.floor(f / 24) % 60) + ":" + pad(f % 24);
+      // линейка бежит в такт тому же счётчику кадров — сдвигаем весь набор чёрточек через transform
+      if (rulerTicks) rulerTicks.style.transform = "translateX(" + (-(f % RSTEP)) + "px)";
     }
     if (!reduce) { setInterval(function () { if (!document.hidden) tick(); }, 42); }
 
@@ -681,6 +756,7 @@
         }
       }
     }
+
   })();
 </script>
 </body>
