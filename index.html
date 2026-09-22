@@ -170,15 +170,13 @@
   .body { margin-top: 24px; max-width: 34em; color: var(--dim); font-size: clamp(17px, 2vw, 20px); line-height: 1.5; }
   .recognition-kicker { font-family: var(--sans); font-weight: 500; font-size: clamp(22px, 3.2vw, 32px); letter-spacing: -.02em; text-transform: none; color: var(--white); }
   .cards { display: grid; gap: 18px; margin-top: 46px; }
-  .card {
-    position: relative; overflow: hidden; display: grid; grid-template-columns: 52px 1fr; padding: 22px 4px;
-    --px: 30%; --py: 20%; --rx: 0deg; --ry: 0deg;
-    border-bottom: 1px solid rgba(205,177,124,.35);
-    transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry));
-  }
+  :root { --foil: linear-gradient(115deg, #d4af37 0%, #d4af37 8%, #fff6d8 15%, #fff6d8 19%, #ffffff 29%, #ffffff 33%, #a9d8ff 43%, #a9d8ff 47%, #c9a6ff 57%, #c9a6ff 61%, #fff6d8 73%, #fff6d8 77%, #d4af37 89%, #d4af37 100%); }
+  /* .card — статичный внешний контейнер: только позиция и тёплое свечение, не наклоняется */
+  .card { position: relative; --px: 30%; --py: 20%; --rx: 0deg; --ry: 0deg; }
+  /* .card-face — сама «фольгированная» поверхность: она и наклоняется, и переливается */
   .card .mono { color: var(--dim); padding-top: 8px; }
   .card b, .card .laurel {
-    background: linear-gradient(115deg, #b6935a 0%, #f4e2b8 22%, #fff 38%, #cfe0ff 50%, #b9a2ff 62%, #f4e2b8 80%, #b6935a 100%);
+    background: var(--foil);
     background-size: 320% 320%;
     background-position: var(--px) var(--py);
   }
@@ -194,25 +192,45 @@
     filter: drop-shadow(0 2px 6px rgba(0,0,0,.5));
   }
   .card span.d { display: block; margin-top: 8px; color: var(--dim); font-size: 16px; }
-  .card > * { position: relative; z-index: 1; }
+  .card b, .card .laurel, .card span.d, .card .mono { position: relative; z-index: 1; }
+  .card { border-bottom: 1px solid rgba(212,175,55,.4); }
+  .card-face { padding: 22px 4px; grid-template-columns: 52px 1fr; display: grid; }
   @media (min-width: 900px) {
     .cards { grid-template-columns: repeat(3, 1fr); gap: 24px; }
     .card {
-      grid-template-columns: 1fr; padding: 26px 24px 30px; min-height: 200px; align-content: start; gap: 16px;
-      border: 1px solid transparent; border-radius: 2px;
-      background:
-        linear-gradient(165deg, #141414, #0a0a0a) padding-box,
-        var(--foil-gradient, linear-gradient(115deg, #b6935a, #f4e2b8, #fff, #cfe0ff, #b9a2ff, #f4e2b8, #b6935a)) border-box;
-      background-size: 100% 100%, 320% 320%;
-      background-position: 0 0, var(--px) var(--py);
+      border-bottom: 0;
+      box-shadow: 0 40px 56px -30px rgba(205,150,70,.45); /* тёплое свечение — неподвижно, на внешнем контейнере */
+    }
+    .card-face {
+      position: relative; overflow: hidden; grid-template-columns: 1fr; padding: 26px 24px 30px; height: 100%; min-height: 200px; align-content: start; gap: 16px;
+      border-radius: 2px;
+      background: linear-gradient(165deg, #0a0a0a, #000);
+      transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry));
       box-shadow: 0 1px 1px rgba(0,0,0,.3), 0 26px 48px -26px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05);
     }
     .card .mono { padding-top: 0; }
-    .card::after {
-      content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; border-radius: inherit;
-      background: radial-gradient(420px circle at var(--px) var(--py), rgba(255,255,255,.16), transparent 55%);
+    /* окантовка-фольга — маской, без конфликта clip-областей */
+    .card-face::before {
+      content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit; padding: 1px;
+      background: var(--foil); background-size: 320% 320%; background-position: var(--px) var(--py);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
     }
-    @media (hover: hover) and (pointer: fine) { .card:hover { transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry)) scale(1.015); } }
+    /* блик под курсором */
+    .card-face::after {
+      content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; border-radius: inherit;
+      background: radial-gradient(420px circle at var(--px) var(--py), rgba(255,255,255,.18), transparent 55%);
+    }
+    /* по умолчанию — мгновенно (блик и наклон следуют за курсором без задержки);
+       .settle навешивается на время ухода курсора, чтобы всё плавно вернулось в исходное положение */
+    .card-face, .card-face::before, .card-face::after, .card b, .card .laurel { transition: none; }
+    .card.settle .card-face, .card.settle .card-face::before, .card.settle .card-face::after,
+    .card.settle b, .card.settle .laurel {
+      transition: transform .5s cubic-bezier(.2,.8,.2,1), background-position .5s ease-out;
+    }
+  }
+  @media (min-width: 900px) and (hover: hover) and (pointer: fine) {
+    .card:hover .card-face { transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry)) scale(1.015); }
   }
   @media not all and (hover: hover) { .card { animation: holo-sweep 7s ease-in-out infinite; } }
   .card.tilt { animation: none !important; }
@@ -415,9 +433,9 @@
       <p class="body" data-l="ru">В его портфолио — документальное кино, игровые полнометражные фильмы и вирусные веб-сериалы. Среди работ — оригинальная музыка к нашумевшему сезону «Мастерская 47» (в сотрудничестве с автором MrLololoshka) и к документальному фильму «Предел высоты: восхождение на Эверест» с главной темой The Way Back.</p>
       <p class="recognition-kicker" style="margin-top:44px;margin-bottom:18px"><span data-l="en">Recognition</span><span data-l="ru">Признание</span></p>
       <div class="cards">
-        <div class="card laurel-card"><span class="mono">01</span><div style="text-align:center"><span class="laurel" role="img" aria-label="East Village New York Film Festival — Original Score Finalist, 2026"></span><span class="d"><span data-l="en">For “A Ballad of Cold Hearts.”</span><span data-l="ru">За «A Ballad of Cold Hearts».</span></span></div></div>
-        <div class="card"><span class="mono">02</span><div><b>Monza Film Festival</b><span class="d"><span data-l="en">Best Soundtrack award — “Recycling” (2024).</span><span data-l="ru">Награда «Лучший саундтрек» — Recycling (2024).</span></span></div></div>
-        <div class="card"><span class="mono">03</span><div><b>Embassy of Saba</b><span class="d"><span data-l="en">Acknowledged for “Under Sail to the Island of Saba.”</span><span data-l="ru">Благодарность за Under Sail to the Island of Saba.</span></span></div></div>
+        <div class="card laurel-card"><div class="card-face"><span class="mono">01</span><div style="text-align:center"><span class="laurel" role="img" aria-label="East Village New York Film Festival — Original Score Finalist, 2026"></span><span class="d"><span data-l="en">For “A Ballad of Cold Hearts.”</span><span data-l="ru">За «A Ballad of Cold Hearts».</span></span></div></div></div>
+        <div class="card"><div class="card-face"><span class="mono">02</span><div><b>Monza Film Festival</b><span class="d"><span data-l="en">Best Soundtrack award — “Recycling” (2024).</span><span data-l="ru">Награда «Лучший саундтрек» — Recycling (2024).</span></span></div></div></div>
+        <div class="card"><div class="card-face"><span class="mono">03</span><div><b>Embassy of Saba</b><span class="d"><span data-l="en">Acknowledged for “Under Sail to the Island of Saba.”</span><span data-l="ru">Благодарность за Under Sail to the Island of Saba.</span></span></div></div></div>
       </div>
     </div>
   </section>
@@ -615,8 +633,10 @@
       var hasFinePointer = matchMedia("(hover: hover) and (pointer: fine)").matches;
 
       if (hasFinePointer) {
+        // во время движения — мгновенно (и наклон, и блик), при уходе курсора — плавно возвращаются вместе
         cards.forEach(function (c) {
-          c.addEventListener("pointerenter", function () { c.style.transition = "none"; });
+          var settleTimer;
+          c.addEventListener("pointerenter", function () { c.classList.remove("settle"); clearTimeout(settleTimer); });
           c.addEventListener("pointermove", function (e) {
             var r = c.getBoundingClientRect();
             var mx = (e.clientX - r.left) / r.width, my = (e.clientY - r.top) / r.height;
@@ -626,11 +646,12 @@
             c.style.setProperty("--rx", ((.5 - my) * 14) + "deg");
           });
           c.addEventListener("pointerleave", function () {
-            c.style.transition = "transform .5s cubic-bezier(.2,.8,.2,1), background-position .5s ease-out";
+            c.classList.add("settle");
             c.style.setProperty("--rx", "0deg");
             c.style.setProperty("--ry", "0deg");
             c.style.setProperty("--px", "30%");
             c.style.setProperty("--py", "20%");
+            settleTimer = setTimeout(function () { c.classList.remove("settle"); }, 550);
           });
         });
       } else if (window.DeviceOrientationEvent) {
