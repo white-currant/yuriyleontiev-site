@@ -82,8 +82,9 @@ window.RELEASES = [
  },
  {
   "id": "1814200115",
-  "title": "Predel Vysoty",
-  "sub": "The Way Back",
+  "title": "The Way Back",
+  "sub": "From The Altitude Limit: The Original Motion Picture Soundtrack",
+  "subRu": "From Предел высоты: The Original Motion Picture Soundtrack",
   "kind": "score",
   "date": "2025-05-18",
   "year": "2025",

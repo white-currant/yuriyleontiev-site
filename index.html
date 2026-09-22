@@ -30,6 +30,9 @@
   @property --py { syntax: '<percentage>'; inherits: true; initial-value: 20%; }
   @property --rx { syntax: '<angle>'; inherits: true; initial-value: 0deg; }
   @property --ry { syntax: '<angle>'; inherits: true; initial-value: 0deg; }
+  /* --gx/--gy — блик от «лампы в комнате»: зеркально противоположен курсору, а не сидит на нём (см. .card-face::after) */
+  @property --gx { syntax: '<percentage>'; inherits: true; initial-value: 30%; }
+  @property --gy { syntax: '<percentage>'; inherits: true; initial-value: 20%; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { color-scheme: dark; -webkit-text-size-adjust: 100%; }
   body { background: var(--black); color: var(--white); font-family: var(--sans); font-size: 17px; line-height: 1.5; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -212,7 +215,7 @@
   .cards { display: grid; gap: 18px; margin-top: 46px; }
   :root { --foil: linear-gradient(115deg, #d4af37 0%, #d4af37 8%, #fff6d8 15%, #fff6d8 19%, #ffffff 29%, #ffffff 33%, #a9d8ff 43%, #a9d8ff 47%, #c9a6ff 57%, #c9a6ff 61%, #fff6d8 73%, #fff6d8 77%, #d4af37 89%, #d4af37 100%); }
   /* .card — статичный внешний контейнер: только позиция и тёплое свечение, не наклоняется */
-  .card { position: relative; --px: 30%; --py: 20%; --rx: 0deg; --ry: 0deg; }
+  .card { position: relative; --px: 30%; --py: 20%; --rx: 0deg; --ry: 0deg; --gx: 30%; --gy: 20%; }
   /* .card-face — сама «фольгированная» поверхность: она и наклоняется, и переливается */
   .card .mono { color: var(--dim); padding-top: 8px; }
   .card b, .card .laurel {
@@ -263,25 +266,39 @@
       -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
       -webkit-mask-composite: xor; mask-composite: exclude;
     }
-    /* блик под курсором */
+    /* блик от фиксированного источника света в комнате — зеркален курсору (--gx/--gy), а не сидит под ним */
     .card-face::after {
       content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; border-radius: inherit;
-      background: radial-gradient(420px circle at var(--px) var(--py), rgba(255,255,255,.18), transparent 55%);
+      background: radial-gradient(420px circle at var(--gx) var(--gy), rgba(255,255,255,.18), transparent 55%);
     }
     /* по умолчанию — мгновенно (блик и наклон следуют за курсором без задержки);
        .settle навешивается на время ухода курсора, чтобы всё плавно вернулось в исходное положение */
     .card-face, .card-face::before, .card-face::after, .card b, .card .laurel { transition: none; }
     .card.settle .card-face, .card.settle .card-face::before, .card.settle .card-face::after,
     .card.settle b, .card.settle .laurel {
-      transition: transform .5s cubic-bezier(.2,.8,.2,1), background-position .5s ease-out;
+      /* --gx/--gy отдельно: блик у ::after задан через background (radial-gradient at X Y), а не через
+         background-position, поэтому одного background-position в списке транзишенов ему не хватает */
+      transition: transform .5s cubic-bezier(.2,.8,.2,1), background-position .5s ease-out, --gx .5s cubic-bezier(.2,.8,.2,1), --gy .5s cubic-bezier(.2,.8,.2,1);
     }
   }
   @media (min-width: 900px) and (hover: hover) and (pointer: fine) {
     .card:hover .card-face { transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry)) scale(1.015); }
   }
-  @media not all and (hover: hover) { .card { animation: holo-sweep 7s ease-in-out infinite; } }
-  .card.tilt { animation: none !important; }
-  @keyframes holo-sweep { 0%, 100% { --px: 12%; --py: 18%; } 50% { --px: 88%; --py: 78%; } }
+  /* сенсорные экраны без захвата акселерометра: карточки медленно и вразнобой парят и переливаются сами —
+     разные длительности и отрицательные задержки у каждой, чтобы они не двигались в такт друг другу */
+  @media not all and (hover: hover) {
+    .card { animation: holo-sweep 19s ease-in-out infinite; }
+    .card:nth-of-type(1) { animation-duration: 17.5s; animation-delay: -3s; }
+    .card:nth-of-type(2) { animation-duration: 22.5s; animation-delay: -12.5s; }
+    .card:nth-of-type(3) { animation-duration: 14.5s; animation-delay: -7s; }
+  }
+  @keyframes holo-sweep {
+    0%   { --px: 25%; --py: 27%; --gx: 75%; --gy: 73%; --rx: -3deg;   --ry: -3.75deg; }
+    25%  { --px: 62%; --py: 20%; --gx: 38%; --gy: 80%; --rx: 3.5deg;  --ry: 4.25deg;  }
+    50%  { --px: 75%; --py: 67%; --gx: 25%; --gy: 33%; --rx: 2.25deg; --ry: -4.25deg; }
+    75%  { --px: 33%; --py: 67%; --gx: 67%; --gy: 33%; --rx: -3.5deg; --ry: 2.75deg;  }
+    100% { --px: 25%; --py: 27%; --gx: 75%; --gy: 73%; --rx: -3deg;   --ry: -3.75deg; }
+  }
   /* простое лёгкое увеличение при наведении — без спецэффектов */
   .mail {
     display: inline-block; margin-top: 8px; transform-origin: left center;
@@ -553,8 +570,8 @@
   </div>
 </div>
 
-<script src="releases.js?v=2"></script>
-<script src="films.js?v=3"></script>
+<script src="releases.js?v=5"></script>
+<script src="films.js?v=4"></script>
 <script>
   (function () {
     var R = window.RELEASES || [];
@@ -563,10 +580,13 @@
     function $(id) { return document.getElementById(id); }
 
     function card(r) {
+      // titleRu/subRu — необязательный русский вариант подписи (как в films.js); без них берётся title/sub на обоих языках
+      var t = r.titleRu ? pair(esc(r.title), esc(r.titleRu)) : esc(r.title);
+      var s = r.subRu ? pair(esc(r.sub), esc(r.subRu)) : esc(r.sub);
       return '<button type="button" class="cover" data-id="' + r.id + '">' +
         '<span class="img"><img src="' + r.cover + '" alt="' + esc(r.title) + '" width="640" height="640" loading="lazy"></span>' +
-        '<span class="t">' + esc(r.title) + '</span>' +
-        (r.sub ? '<span class="s">' + esc(r.sub) + '</span>' : '') +
+        '<span class="t">' + t + '</span>' +
+        (r.sub ? '<span class="s">' + s + '</span>' : '') +
         '<span class="y">' + r.year + '</span></button>';
     }
 
@@ -593,9 +613,12 @@
     if (F.length) {
       $("films-box").innerHTML = F.map(function (f) {
         var imgClass = "img" + (f.fit === "contain" ? " contain" : "") + (f.wide ? " land" : "");
-        var inner = '<span class="' + imgClass + '"><img src="' + esc(f.poster) + '" alt="' + esc(f.title) + '" width="400" height="600" loading="lazy"></span>' +
-          '<span class="t">' + pair(esc(f.title), esc(f.titleRu || f.title)) + '</span>' +
-          (f.role ? '<span class="s">' + pair(esc(f.role), esc(f.roleRu || f.role)) + '</span>' : '') +
+        var alt = esc(f.title).replace(/\n/g, " ");
+        // "\n" в title/titleRu — перенос строки в заголовке (как две строки на постере)
+        function lines(s) { return esc(s).replace(/\n/g, "<br>"); }
+        var inner = '<span class="' + imgClass + '"><img src="' + esc(f.poster) + '" alt="' + alt + '" width="400" height="600" loading="lazy"></span>' +
+          '<span class="t">' + pair(lines(f.title), lines(f.titleRu || f.title)) + '</span>' +
+          (f.role ? '<span class="s">' + pair(lines(f.role), lines(f.roleRu || f.role)) + '</span>' : '') +
           (f.year ? '<span class="y">' + esc(String(f.year)) + '</span>' : '');
         var posterClass = "poster" + (f.wide ? " wide" : "");
         return f.url ? '<a class="' + posterClass + '" href="' + esc(f.url) + '" target="_blank" rel="noopener">' + inner + '</a>' : '<div class="' + posterClass + '">' + inner + '</div>';
@@ -709,11 +732,10 @@
     }
     if (!reduce) { setInterval(function () { if (!document.hidden) tick(); }, 42); }
 
-    /* ---- award cards: holo/gold sheen that follows the cursor, or the device tilt ---- */
+    /* ---- award cards: holo/gold sheen that follows the cursor (mouse/trackpad only) ---- */
     var cards = [].slice.call(document.querySelectorAll(".card"));
     if (cards.length && !reduce) {
       var hasFinePointer = matchMedia("(hover: hover) and (pointer: fine)").matches;
-
       if (hasFinePointer) {
         // во время движения — мгновенно (и наклон, и блик), при уходе курсора — плавно возвращаются вместе
         cards.forEach(function (c) {
@@ -726,6 +748,10 @@
             c.style.setProperty("--py", (my * 100) + "%");
             c.style.setProperty("--ry", ((mx - .5) * 14) + "deg");
             c.style.setProperty("--rx", ((.5 - my) * 14) + "deg");
+            // блик — зеркально напротив курсора: как будто по комнате гуляет наклон карточки
+            // под фиксированную лампу, а не лампа приклеена к мышке
+            c.style.setProperty("--gx", ((1 - mx) * 100) + "%");
+            c.style.setProperty("--gy", ((1 - my) * 100) + "%");
           });
           c.addEventListener("pointerleave", function () {
             c.classList.add("settle");
@@ -733,42 +759,14 @@
             c.style.setProperty("--ry", "0deg");
             c.style.setProperty("--px", "30%");
             c.style.setProperty("--py", "20%");
+            c.style.setProperty("--gx", "30%");
+            c.style.setProperty("--gy", "20%");
             settleTimer = setTimeout(function () { c.classList.remove("settle"); }, 550);
           });
         });
-      } else if (window.DeviceOrientationEvent) {
-        // сенсорный экран: ведём блик по наклону устройства (как фольга на карте в Balatro).
-        // Точка отсчёта — не жёстко заданный угол, а то, как устройство держат прямо сейчас:
-        // первое показание датчика после разрешения становится нейтральным положением (px/py 50/50),
-        // дальше считаем только отклонение от него. Иначе у тех, кто держит планшет/телефон под
-        // непривычным углом, анимация сразу упиралась в 0 или 100 и переставала откликаться на наклон.
-        var tiltBase = null;
-        function onTilt(e) {
-          if (e.beta == null || e.gamma == null) return;
-          if (!tiltBase) tiltBase = { beta: e.beta, gamma: e.gamma };
-          var dBeta = e.beta - tiltBase.beta, dGamma = e.gamma - tiltBase.gamma;
-          var px = Math.max(0, Math.min(100, 50 + dGamma * 2.2));
-          var py = Math.max(0, Math.min(100, 50 + dBeta * 1.6));
-          cards.forEach(function (c) {
-            c.classList.add("tilt");
-            c.style.setProperty("--px", px + "%");
-            c.style.setProperty("--py", py + "%");
-          });
-        }
-        function armTilt() { window.addEventListener("deviceorientation", onTilt); }
-        if (typeof DeviceOrientationEvent.requestPermission === "function") {
-          // iOS требует разрешение по жесту пользователя — запрашиваем при первом касании
-          var askOnce = function () {
-            document.removeEventListener("touchend", askOnce);
-            DeviceOrientationEvent.requestPermission().then(function (state) {
-              if (state === "granted") armTilt();
-            }).catch(function () {});
-          };
-          document.addEventListener("touchend", askOnce, { once: true });
-        } else {
-          armTilt();
-        }
       }
+      // сенсорные экраны (iPad/iPhone): без запроса доступа к акселерометру — карточки вместо этого
+      // медленно и хаотично (у каждой свой цикл, см. CSS) парят и переливаются сами по себе
     }
 
   })();

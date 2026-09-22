@@ -10,11 +10,10 @@ window.FILMS = [
     url: "https://www.imdb.com/title/tt40479470/",
   },
   {
-    title: "The Altitude Limit",
-    titleRu: "Предел высоты",
+    title: "The Altitude Limit\nClimbing Everest",
+    titleRu: "Предел высоты\nВосхождение на Эверест",
     year: "2025",
-    role: "Climbing Everest",
-    roleRu: "Восхождение на Эверест",
+    role: "The Original Motion Picture Soundtrack", // фраза традиционно не переводится — так же и на RU
     poster: "posters/the-altitude-limit.jpg",
     url: "https://www.imdb.com/title/tt39158705/",
   },

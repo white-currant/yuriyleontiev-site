@@ -6,7 +6,9 @@
 Spotify (точная, если заданы SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET,
 иначе ссылка на поиск), YouTube Music (поиск).
 
-Ручные правки названий: scripts/overrides.json  {"<appleId>": {"title": "...", "sub": "...", "kind": "score|release"}}
+Ручные правки названий: scripts/overrides.json
+  {"<appleId>": {"title": "...", "sub": "...", "kind": "score|release", "titleRu": "...", "subRu": "..."}}
+  titleRu/subRu — необязательны, добавляют русский вариант подписи (иначе title/sub видны на обоих языках)
 Запуск:  python3 scripts/update_releases.py
 """
 import base64
@@ -133,6 +135,7 @@ def main():
         title, sub, kind = split_title(r["collectionName"])
         o = overrides.get(cid, {})
         title, sub, kind = o.get("title", title), o.get("sub", sub), o.get("kind", kind)
+        title_ru, sub_ru = o.get("titleRu"), o.get("subRu")
 
         key = norm(r["collectionName"])
         q = urllib.parse.quote(f"{ARTIST} {title}")
@@ -144,11 +147,16 @@ def main():
         if key in deezer:
             links.append({"name": "Deezer", "url": deezer[key]})
 
-        releases.append({
+        entry = {
             "id": cid, "title": title, "sub": sub, "kind": kind,
             "date": r["releaseDate"][:10], "year": r["releaseDate"][:4],
             "cover": f"covers/{cid}.jpg", "links": links,
-        })
+        }
+        if title_ru:
+            entry["titleRu"] = title_ru
+        if sub_ru:
+            entry["subRu"] = sub_ru
+        releases.append(entry)
 
     releases.sort(key=lambda x: x["date"], reverse=True)
     out = os.path.join(ROOT, "releases.js")
