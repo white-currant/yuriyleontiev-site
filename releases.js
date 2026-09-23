@@ -84,7 +84,6 @@ window.RELEASES = [
   "id": "1814200115",
   "title": "The Way Back",
   "sub": "From The Altitude Limit: The Original Motion Picture Soundtrack",
-  "subRu": "From Предел высоты: The Original Motion Picture Soundtrack",
   "kind": "score",
   "date": "2025-05-18",
   "year": "2025",
@@ -100,13 +99,14 @@ window.RELEASES = [
    },
    {
     "name": "YouTube Music",
-    "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Predel%20Vysoty"
+    "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20The%20Way%20Back"
    },
    {
     "name": "Deezer",
     "url": "https://www.deezer.com/album/756216531"
    }
-  ]
+  ],
+  "subRu": "From Предел высоты: The Original Motion Picture Soundtrack"
  },
  {
   "id": "1812328948",
