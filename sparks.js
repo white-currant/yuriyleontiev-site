@@ -11,6 +11,7 @@
   var small = matchMedia("(max-width: 700px)").matches || (navigator.hardwareConcurrency || 8) <= 4;
   var RES = 0.5; // холст в пол-разрешения: под blur разницы не видно, а рисовать вчетверо дешевле
   var FPS = small ? 30 : 60;
+  var SPEED = 0.5; // скорость полёта относительно рилса: 0.5 — вдвое медленнее, 1 — как в ролике
 
   function mulberry32(a) {
     return function () {
@@ -146,7 +147,7 @@
   }
 
   var t0 = performance.now(), raf = 0, last = 0, onScreen = true;
-  function now() { return (((performance.now() - t0) / 1000) % LOOP); }
+  function now() { return (((performance.now() - t0) / 1000) * SPEED % LOOP); }
   function frame(ts) {
     raf = requestAnimationFrame(frame);
     if (ts - last < 1000 / FPS - 2) return;
