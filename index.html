@@ -42,8 +42,8 @@
   .mono { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
   [hidden] { display: none !important; }
 
-  /* ---------- fixed bar (ink on paper, white on black) ---------- */
-  .bar { position: fixed; z-index: 40; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; gap: 28px; padding: max(16px, env(safe-area-inset-top)) var(--pad) 0; color: var(--ink); pointer-events: none; transition: color .25s, background .3s; }
+  /* ---------- fixed bar: светлый текст; на чёрных секциях — ещё и подложка ---------- */
+  .bar { position: fixed; z-index: 40; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; gap: 28px; padding: max(16px, env(safe-area-inset-top)) var(--pad) 0; color: #fff; pointer-events: none; transition: color .25s, background .3s; }
   .bar.dark { color: #fff; background: rgba(6, 6, 6, .82); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
   .bar > * { pointer-events: auto; }
   .bar .brand { flex: none; font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
@@ -103,11 +103,17 @@
   .menu .x { font-size: 40px; line-height: 1; width: 46px; height: 46px; }
   .menu .foot { color: var(--dim); }
 
-  /* ---------- hero: white paper, black ink ---------- */
-  .hero { position: relative; background: var(--paper); color: var(--ink); min-height: 100svh; display: flex; align-items: center; padding: 110px 0 90px; }
-  .hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5; mix-blend-mode: multiply;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .12 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
-  .hero .wrap { position: relative; width: 100%; display: grid; gap: 44px; align-items: center; }
+  /* ---------- hero: тёмный янтарь и живые искры (sparks.js), светлые чернила ---------- */
+  /* --paper/--ink переопределены только внутри hero — кнопки, подчёркивание, курсор и рамки светлеют сами */
+  .hero { --paper: #120a05; --ink: #f6efe3; --ink-2: rgba(246, 239, 227, .7);
+    position: relative; isolation: isolate; overflow: hidden; background: var(--paper); color: var(--ink); min-height: 100svh; display: flex; align-items: center; padding: 110px 0 90px; }
+  /* фон в расфокусе, как в рилсе: фокус на обложке. scale прячет тёмную кромку размытия за краем */
+  .sparks { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; display: block; filter: blur(6px) brightness(1.3) saturate(1.1); transform: scale(1.04); }
+  /* затемнение под текстом, чтобы искры его не перебивали */
+  .hero::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background: linear-gradient(180deg, rgba(10, 5, 2, .62) 0%, rgba(10, 5, 2, .3) 48%, rgba(10, 5, 2, 0) 62%); }
+  @media (min-width: 900px) { .hero::after { background: linear-gradient(90deg, rgba(10, 5, 2, .7) 0%, rgba(10, 5, 2, .35) 42%, rgba(10, 5, 2, 0) 62%); } }
+  .hero .wrap { position: relative; z-index: 2; width: 100%; display: grid; gap: 44px; align-items: center; }
   h1 { font-family: var(--mono); font-weight: 500; font-size: clamp(30px, 8.4vw, 78px); letter-spacing: -.04em; line-height: 1.05; white-space: nowrap; overflow: hidden; width: 0; border-right: .09em solid var(--ink); animation: typing 1.3s steps(14, end) .35s forwards, caret .8s step-end infinite; }
   @keyframes typing { to { width: 14.4ch; } }
   @keyframes caret { 50% { border-color: transparent; } }
@@ -125,22 +131,18 @@
   .r1 { animation-delay: 1.5s; } .r2 { animation-delay: 1.75s; } .r3 { animation-delay: 2s; }
   @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
-  /* pinned covers + ink notes */
-  .pin { position: relative; width: min(85%, 420px); aspect-ratio: 1 / 1.1; margin: 0 auto; }
-  .note { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: visible; }
-  .note * { fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  /* обложка релиза: ровно, со статичным тёплым свечением, как в рилсе */
+  .pin { width: min(86%, 460px); margin: 0 auto; }
   .new-tag { display: inline-block; margin-bottom: 14px; border: 1px solid var(--ink); padding: 6px 12px; }
-  .photo { position: absolute; padding: 0; background: #111; box-shadow: 0 1px 2px rgba(0,0,0,.25), 0 18px 30px -12px rgba(0,0,0,.4); }
-  .photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
-  .photo.p1 { width: 82%; aspect-ratio: 1; right: 3%; top: 3%; transform: rotate(2.6deg); z-index: 3; animation: pinIn 1s cubic-bezier(.2,.7,.2,1) .9s both; }
-  .pin-cap { position: absolute; z-index: 4; left: 3%; right: 3%; bottom: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 14px; text-align: left; border-top: 1px solid var(--ink); padding-top: 12px; }
+  .feat { display: block; width: 100%; aspect-ratio: 1; padding: 0; background: #1a0f07; animation: pinIn 1s cubic-bezier(.2,.7,.2,1) .9s both;
+    box-shadow: 0 0 0 1px rgba(255, 214, 150, .18), 0 18px 50px rgba(0, 0, 0, .55), 0 0 32px rgba(255, 205, 130, .5), 0 0 90px rgba(255, 176, 80, .5), 0 0 180px rgba(255, 150, 60, .32); }
+  .feat img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .pin-cap { margin-top: 26px; width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 14px; text-align: left; border-top: 1px solid var(--ink); padding-top: 12px; }
   .pin-cap b { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: 14px; }
   .pin-cap .mono { color: var(--ink-2); white-space: nowrap; }
-  .pin-cap:hover .mono { color: var(--ink); }
+  button.pin-cap:hover .mono { color: var(--ink); }
   @keyframes pinIn { from { opacity: 0; translate: 0 26px; } to { opacity: 1; translate: 0 0; } }
-  .tape { position: absolute; width: 30%; height: 7%; background: rgba(226, 214, 182, .78); box-shadow: 0 1px 2px rgba(0,0,0,.18); mix-blend-mode: multiply; }
-  .tape.t1 { top: -3.5%; left: 34%; transform: rotate(-4deg); }
-    @media (hover: hover) { .photo { transition: transform .5s cubic-bezier(.2,.7,.2,1); } .photo.p1:hover { transform: rotate(1deg) translateY(-6px); } }
+  @media (hover: hover) { button.feat { transition: transform .5s cubic-bezier(.2,.7,.2,1); } button.feat:hover { transform: translateY(-6px); } }
   @media (min-width: 900px) { .hero .wrap { grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 60px; } }
 
   /* ---------- film perforation seam ---------- */
@@ -352,7 +354,7 @@
   @media (prefers-reduced-motion: reduce) {
     h1 { width: 14.4ch; animation: none; border-right: 0; }
     .stroke path { animation: none; stroke-dashoffset: 0; }
-    .rise, .photo { animation: none !important; opacity: 1; }
+    .rise, .feat { animation: none !important; opacity: 1; }
     * { transition: none !important; }
   }
 </style>
@@ -386,6 +388,7 @@
 <div id="page">
 
 <header class="hero">
+  <canvas class="sparks" id="sparks" aria-hidden="true"></canvas>
   <div class="wrap">
     <div>
       <h1>Yuriy Leontiev</h1>
@@ -405,40 +408,6 @@
 
     <div>
       <div class="pin" id="pin">
-        <svg class="note" viewBox="0 0 500 550" preserveAspectRatio="none" aria-hidden="true">
-          <g filter="url(#ink)">
-            <circle cx="46" cy="46" r="6" />
-            <path d="M8 150 l19 19 m0 -19 l-19 19" transform="rotate(-10 17 160)" />
-            <circle cx="120" cy="18" r="7" />
-            <path d="M300 40 l10 11 l21 -25" transform="rotate(8 310 40)" />
-            <circle cx="90" cy="240" r="4" />
-            <path d="M420 200 l16 16 m0 -16 l-16 16" transform="rotate(14 428 208)" />
-            <path d="M448 8 l10 11 l21 -25" transform="rotate(-6 458 8)" />
-            <path d="M6 24 Q 34 4 58 26" />
-            <path d="M180 470 Q 220 450 260 472 T 340 466" />
-            <path d="M405 -2 Q 424 -12 440 2" />
-            <circle cx="250" cy="500" r="5" />
-            <path d="M100 420 l15 15 m0 -15 l-15 15" transform="rotate(9 107 427)" />
-
-            <circle cx="130" cy="90" r="2" />
-            <circle cx="470" cy="65" r="1.6" />
-            <circle cx="18" cy="320" r="1.8" />
-            <circle cx="200" cy="465" r="2.2" />
-            <circle cx="350" cy="10" r="2" />
-            <circle cx="466" cy="345" r="4" />
-            <circle cx="60" cy="410" r="3" />
-
-            <path d="M355 250 v14 M348 257 h14" />
-            <circle cx="355" cy="257" r="9" />
-
-            <path d="M470 420 l13 13 m0 -13 l-13 13" transform="rotate(-12 476 426)" />
-            <path d="M15 60 l12 12 m0 -12 l-12 12" transform="rotate(15 21 66)" />
-
-            <path d="M230 60 Q 260 30 288 58 T 340 50" />
-            <path d="M370 380 Q 340 400 372 418" />
-            <path d="M440 260 Q 465 245 452 220" />
-          </g>
-        </svg>
       </div>
     </div>
   </div>
@@ -573,6 +542,7 @@
 </div>
 
 <script src="releases.js?v=5"></script>
+<script src="featured.js?v=1"></script>
 <script src="films.js?v=4"></script>
 <script>
   (function () {
@@ -592,14 +562,27 @@
         '<span class="y">' + r.year + '</span></button>';
     }
 
-    if (R.length) {
-      var latest = R[0];
+    // первый экран — закреплённый релиз из featured.js; без него — самый новый из releases.js
+    var key = function (s) { return String(s).toLowerCase().replace(/[^a-z0-9а-яё]+/g, ""); };
+    var FT = window.FEATURED, feat = R[0] || null;
+    if (FT) {
+      var found = R.filter(function (r) { return key(r.title) === key(FT.title); })[0];
+      // уже на стримингах — ссылки из releases.js, обложка крупная из featured.js; иначе — ещё не вышел
+      feat = found ? Object.assign({}, found, { cover: FT.cover || found.cover }) : Object.assign({ id: "featured" }, FT);
+    }
+    var ALL = feat && feat.id === "featured" ? R.concat([feat]) : R; // для шторки «Слушать на»
 
-      // hero: one pinned cover + caption that opens the "listen on" sheet
-      $("pin").insertAdjacentHTML("beforebegin", '<span class="new-tag mono">' + pair("New release", "Новый релиз") + '</span>');
-      $("pin").insertAdjacentHTML("afterbegin",
-        '<button type="button" class="photo p1" data-id="' + latest.id + '" aria-label="' + esc(latest.title) + '"><img src="' + latest.cover + '" alt="" width="640" height="640"><span class="tape t1"></span></button>' +
-        '<button type="button" class="pin-cap" data-id="' + latest.id + '"><b>' + esc(latest.title) + '</b><span class="mono">' + pair("Listen", "Слушать") + ' →</span></button>');
+    if (feat) {
+      var live = feat.links && feat.links.length;
+      $("pin").insertAdjacentHTML("afterbegin", '<span class="new-tag mono">' + (live ? pair("New release", "Новый релиз") : pair("Coming soon", "Скоро")) + '</span>' + (live
+        ? '<button type="button" class="feat" data-id="' + feat.id + '" aria-label="' + esc(feat.title) + '"><img src="' + feat.cover + '" alt="" width="1080" height="1080"></button>' +
+          '<button type="button" class="pin-cap" data-id="' + feat.id + '"><b>' + esc(feat.title) + '</b><span class="mono">' + pair("Listen", "Слушать") + ' →</span></button>'
+        : '<div class="feat"><img src="' + feat.cover + '" alt="' + esc(feat.title) + '" width="1080" height="1080"></div>' +
+          '<div class="pin-cap"><b>' + esc(feat.title) + '</b></div>'));
+    }
+
+    if (R.length) {
+      var latest = feat || R[0];
 
       var scores = R.filter(function (r) { return r.kind === "score" && r.id !== latest.id; });
       if (scores.length) {
@@ -639,7 +622,7 @@
     /* ---- where-to-listen sheet ---- */
     var back = $("sheet"), lastFocus = null;
     function open(id) {
-      var r = R.filter(function (x) { return x.id === id; })[0];
+      var r = ALL.filter(function (x) { return x.id === id; })[0];
       if (!r) return;
       $("s-img").src = r.cover;
       $("s-title").textContent = r.title;
@@ -705,7 +688,7 @@
       });
     });
 
-    /* ---- bar: dark text on paper, white text on black ---- */
+    /* ---- bar: подложка появляется ниже первого экрана ---- */
     var bar = document.querySelector(".bar"), hero = document.querySelector(".hero");
     function barTheme() { bar.classList.toggle("dark", window.scrollY > hero.offsetHeight - 50); }
     window.addEventListener("scroll", barTheme, { passive: true }); barTheme();
@@ -836,5 +819,6 @@
 
   })();
 </script>
+<script src="sparks.js?v=2"></script>
 </body>
 </html>
