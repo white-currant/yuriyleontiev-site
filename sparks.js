@@ -11,7 +11,7 @@
   var small = matchMedia("(max-width: 700px)").matches || (navigator.hardwareConcurrency || 8) <= 4;
   var RES = 0.5; // холст в пол-разрешения: под blur разницы не видно, а рисовать вчетверо дешевле
   var FPS = small ? 30 : 60;
-  var SPEED = 0.5; // скорость полёта относительно рилса: 0.5 — вдвое медленнее, 1 — как в ролике
+  var SPEED = 0.3; // скорость полёта относительно рилса: 0.3 — примерно втрое медленнее, 1 — как в ролике
 
   function mulberry32(a) {
     return function () {
