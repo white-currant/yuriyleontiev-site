@@ -552,7 +552,7 @@
 </div>
 
 <script src="releases.js?v=5"></script>
-<script src="featured.js?v=1"></script>
+<script src="featured.js?v=2"></script>
 <script src="films.js?v=4"></script>
 <script>
   (function () {
@@ -584,11 +584,15 @@
 
     if (feat) {
       var live = feat.links && feat.links.length;
-      $("pin").insertAdjacentHTML("afterbegin", '<span class="new-tag mono">' + (live ? pair("New release", "Новый релиз") : pair("Coming soon", "Скоро")) + '</span>' + (live
+      var full = feat.title + (feat.sub ? " (" + feat.sub + ")" : "");
+      var d = /^(\d{4})-(\d\d)-(\d\d)$/.exec(feat.date || ""), MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      // до выхода вместо «Скоро» — дата
+      var soon = d ? pair(+d[3] + " " + MON[d[2] - 1] + " " + d[1], d[3] + "." + d[2] + "." + d[1]) : pair("Coming soon", "Скоро");
+      $("pin").insertAdjacentHTML("afterbegin", '<span class="new-tag mono">' + (live ? pair("New release", "Новый релиз") : soon) + '</span>' + (live
         ? '<button type="button" class="feat" data-id="' + feat.id + '" aria-label="' + esc(feat.title) + '"><img src="' + feat.cover + '" alt="" width="1080" height="1080"></button>' +
-          '<button type="button" class="pin-cap" data-id="' + feat.id + '"><b>' + esc(feat.title) + '</b><span class="mono">' + pair("Listen", "Слушать") + ' →</span></button>'
+          '<button type="button" class="pin-cap" data-id="' + feat.id + '"><b>' + esc(full) + '</b><span class="mono">' + pair("Listen", "Слушать") + ' →</span></button>'
         : '<div class="feat"><img src="' + feat.cover + '" alt="' + esc(feat.title) + '" width="1080" height="1080"></div>' +
-          '<div class="pin-cap"><b>' + esc(feat.title) + '</b></div>'));
+          '<div class="pin-cap"><b>' + esc(full) + '</b></div>'));
     }
 
     if (R.length) {

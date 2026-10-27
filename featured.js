@@ -9,6 +9,7 @@ window.FEATURED = {
   title: "Workshop 47, Vol. 3",
   sub: "Original Series Soundtrack",
   cover: "covers/workshop-47-vol-3.jpg",
+  date: "2026-11-06", // дата выхода — пока релиз не вышел, стоит над обложкой вместо «Скоро»
   year: "2026",
   links: [] // пре-сейв до релиза: [{ "name": "Spotify", "url": "..." }]
 };
