@@ -611,15 +611,14 @@
 
     // обратный отсчёт под обложкой до выхода релиза
     function countdown(at) {
-      var plural = function (n, f) { var a = n % 10, b = n % 100; return f[a === 1 && b !== 11 ? 0 : a >= 2 && a <= 4 && (b < 12 || b > 14) ? 1 : 2]; };
       var U = [
-        ["days", ["day", "days"], ["день", "дня", "дней"]],
-        ["hrs", ["hour", "hours"], ["час", "часа", "часов"]],
-        ["min", ["minute", "minutes"], ["минута", "минуты", "минут"]],
-        ["sec", ["second", "seconds"], ["секунда", "секунды", "секунд"]]
+        ["days", "days", "дней"],
+        ["hrs", "hours", "часов"],
+        ["min", "minutes", "минут"],
+        ["sec", "seconds", "секунд"]
       ];
       $("pin").insertAdjacentHTML("beforeend", '<div class="cd" role="timer" aria-live="off">' + U.map(function (u) {
-        return '<span class="cd-u" data-u="' + u[0] + '"><b class="cd-n">00</b><span class="cd-l mono"></span></span>';
+        return '<span class="cd-u" data-u="' + u[0] + '"><b class="cd-n">00</b><span class="cd-l mono">' + pair(u[1], u[2]) + '</span></span>'; // подписи как на табло: «минут», «секунд» при любом числе
       }).join('<i class="cd-sep" aria-hidden="true">:</i>') + '</div>');
       var cells = [].slice.call(document.querySelectorAll("#pin .cd-u")), last = [];
       function tick() {
@@ -630,7 +629,6 @@
           var n = c.firstChild;
           n.textContent = v[i] < 10 ? "0" + v[i] : v[i];
           n.classList.remove("tick"); void n.offsetWidth; n.classList.add("tick"); // перезапуск анимации смены цифры
-          c.lastChild.innerHTML = pair(U[i][1][v[i] === 1 ? 0 : 1], plural(v[i], U[i][2]));
         });
         last = v;
         if (s === 0) { clearInterval(iv); $("pin").querySelector(".new-tag").innerHTML = pair("Out now", "Уже вышел"); }
