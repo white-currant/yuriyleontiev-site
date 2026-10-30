@@ -1,9 +1,9 @@
 window.RELEASES = [
  {
   "id": "6822019532",
-  "title": "The Lay of Chalten (From Patagonia: An Unexpected Journey)",
-  "sub": "",
-  "kind": "release",
+  "title": "The Lay of Chaltén",
+  "sub": "From Patagonia: An Unexpected Journey",
+  "kind": "score",
   "date": "2026-10-30",
   "year": "2026",
   "cover": "covers/6822019532.jpg",
