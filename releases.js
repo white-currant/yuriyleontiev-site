@@ -3,6 +3,7 @@ window.RELEASES = [
   "id": "6822019532",
   "title": "The Lay of Chaltén",
   "sub": "From Patagonia: An Unexpected Journey",
+  "subRu": "Из фильма Патагония. Нежданное путешествие",
   "kind": "score",
   "date": "2026-10-30",
   "year": "2026",
@@ -133,7 +134,7 @@ window.RELEASES = [
     "url": "https://www.deezer.com/album/756216531"
    }
   ],
-  "subRu": "From Предел высоты: The Original Motion Picture Soundtrack"
+  "subRu": "Из фильма Предел высоты: The Original Motion Picture Soundtrack"
  },
  {
   "id": "1812328948",
