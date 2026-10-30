@@ -1,5 +1,32 @@
 window.RELEASES = [
  {
+  "id": "6822019532",
+  "title": "The Lay of Chalten (From Patagonia: An Unexpected Journey)",
+  "sub": "",
+  "kind": "release",
+  "date": "2026-10-30",
+  "year": "2026",
+  "cover": "covers/6822019532.jpg",
+  "links": [
+   {
+    "name": "Spotify",
+    "url": "https://open.spotify.com/album/7MZISIDrEZMqE7DuQfuEQb"
+   },
+   {
+    "name": "Apple Music",
+    "url": "https://music.apple.com/us/album/the-lay-of-chalten-from-patagonia-an/6822019532"
+   },
+   {
+    "name": "YouTube Music",
+    "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20The%20Lay%20of%20Chalten%20%28From%20Patagonia%3A%20An%20Unexpected%20Journey%29"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/1119697732"
+   }
+  ]
+ },
+ {
   "id": "1896250550",
   "title": "A Ballad of Cold Hearts",
   "sub": "Original Film Score",
