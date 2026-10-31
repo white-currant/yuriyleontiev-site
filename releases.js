@@ -3,7 +3,6 @@ window.RELEASES = [
   "id": "6822019532",
   "title": "The Lay of Chaltén",
   "sub": "From Patagonia: An Unexpected Journey",
-  "subRu": "Из фильма Патагония. Нежданное путешествие",
   "kind": "score",
   "date": "2026-10-30",
   "year": "2026",
@@ -19,13 +18,14 @@ window.RELEASES = [
    },
    {
     "name": "YouTube Music",
-    "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20The%20Lay%20of%20Chalten%20%28From%20Patagonia%3A%20An%20Unexpected%20Journey%29"
+    "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20The%20Lay%20of%20Chalt%C3%A9n"
    },
    {
     "name": "Deezer",
     "url": "https://www.deezer.com/album/1119697732"
    }
-  ]
+  ],
+  "subRu": "Из фильма Патагония. Нежданное путешествие"
  },
  {
   "id": "1896250550",
