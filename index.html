@@ -563,7 +563,7 @@
 </div>
 
 <script src="releases.js?v=5"></script>
-<script src="featured.js?v=2"></script>
+<script src="featured.js?v=3"></script>
 <script src="films.js?v=4"></script>
 <script>
   (function () {
@@ -589,7 +589,8 @@
     if (FT) {
       var found = R.filter(function (r) { return key(r.title) === key(FT.title); })[0];
       // уже на стримингах — ссылки из releases.js, обложка крупная из featured.js; иначе — ещё не вышел
-      feat = found ? Object.assign({}, found, { cover: FT.cover || found.cover }) : Object.assign({ id: "featured" }, FT);
+      var extra = (FT.links || []).filter(function (l) { return !found || !found.links.some(function (f) { return f.name === l.name; }); });
+      feat = found ? Object.assign({}, found, { cover: FT.cover || found.cover, links: found.links.concat(extra) }) : Object.assign({ id: "featured" }, FT);
     }
     var ALL = feat && feat.id === "featured" ? R.concat([feat]) : R; // для шторки «Слушать на»
 
@@ -601,7 +602,7 @@
       var d = /^(\d{4})-(\d\d)-(\d\d)$/.exec(feat.date || ""), MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       // до выхода вместо «Скоро» — дата
       var soon = d ? pair(+d[3] + " " + MON[d[2] - 1] + " " + d[1], d[3] + "." + d[2] + "." + d[1]) : pair("Coming soon", "Скоро");
-      $("pin").insertAdjacentHTML("afterbegin", '<span class="new-tag mono">' + (live ? pair("New release", "Новый релиз") : soon) + '</span>' + (live
+      $("pin").insertAdjacentHTML("afterbegin", '<span class="new-tag mono">' + (live ? pair("New", "Новый релиз") : soon) + '</span>' + (live
         ? '<button type="button" class="feat" data-id="' + feat.id + '" aria-label="' + esc(feat.title) + '"><img src="' + feat.cover + '" alt="" width="1080" height="1080"></button>' +
           '<button type="button" class="pin-cap" data-id="' + feat.id + '">' + cap + '<span class="mono">' + pair("Listen", "Слушать") + ' →</span></button>'
         : '<div class="feat"><img src="' + feat.cover + '" alt="' + esc(feat.title) + '" width="1080" height="1080"></div>' +
