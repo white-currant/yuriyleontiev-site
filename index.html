@@ -685,13 +685,18 @@
       $("s-title").textContent = r.title;
       $("s-year").textContent = (r.sub ? r.sub + " · " : "") + r.year;
       $("s-links").innerHTML = r.links.map(function (l) {
-        return '<li><a href="' + l.url + '" target="_blank" rel="noopener"><span>' + esc(l.name) + '</span><span class="arr">↗︎</span></a></li>';
+        return '<li><a href="' + l.url + '" target="_blank" rel="noopener" data-gc="' + esc(r.title + " → " + l.name) + '"><span>' + esc(l.name) + '</span><span class="arr">↗︎</span></a></li>';
       }).join("");
       lastFocus = document.activeElement;
       back.classList.add("open"); back.setAttribute("aria-hidden", "false");
       document.body.style.overflow = "hidden";
       $("s-close").focus();
     }
+    // переходы на стриминги — в статистику GoatCounter отдельными событиями («Workshop 47, Vol. 3 → Spotify»)
+    $("s-links").addEventListener("click", function (e) {
+      var a = e.target.closest("a[data-gc]");
+      if (a && window.goatcounter && goatcounter.count) goatcounter.count({ path: "listen: " + a.dataset.gc, title: a.dataset.gc, event: true });
+    });
     function close() {
       back.classList.remove("open"); back.setAttribute("aria-hidden", "true");
       document.body.style.overflow = "";
@@ -877,5 +882,7 @@
   })();
 </script>
 <script src="sparks.js?v=5"></script>
+<!-- статистика посещений: yulion.goatcounter.com; скрипт GoatCounter лежит у нас (gc.js), чтобы его реже резали блокировщики -->
+<script data-goatcounter="https://yulion.goatcounter.com/count" async src="gc.js"></script>
 </body>
 </html>
