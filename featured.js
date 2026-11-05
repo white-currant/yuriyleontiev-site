@@ -17,6 +17,8 @@ window.FEATURED = {
     { name: "Spotify", url: "https://open.spotify.com/album/4epchM1hB0r7LQvyzT4IUD" },
     { name: "Apple Music", url: "https://geo.music.apple.com/album/6830542805" }, // geo — открывает магазин страны слушателя
     { name: "YouTube Music", url: "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Workshop%2047%2C%20Vol.%203" },
+    // в каталоге Deezer альбома ещё нет — пока поиск; когда появится, скрипт обновления подставит прямую ссылку
+    { name: "Deezer", url: "https://www.deezer.com/search/Yuriy%20Leontiev%20Workshop%2047%20Vol.%203/album" },
     { name: "YouTube", url: "https://www.youtube.com/watch?v=zf96bI-HJZg&list=PL4fdtXKg_aGe9d036xPAcmlBCRUBDK1IT&index=9&t=2802s" }
   ]
 };
