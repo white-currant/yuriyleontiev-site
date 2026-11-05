@@ -14,7 +14,7 @@ window.FEATURED = {
   // ссылки, которых нет (или ещё нет) в releases.js; когда альбом найдёт скрипт обновления,
   // его ссылки встанут первыми, а отсюда добавятся только сервисы, которых там нет
   links: [
-    { name: "Apple Music", url: "https://music.apple.com/album/6830542805" },
+    { name: "Apple Music", url: "https://geo.music.apple.com/album/6830542805" }, // geo — открывает магазин страны слушателя
     { name: "YouTube", url: "https://www.youtube.com/watch?v=zf96bI-HJZg&list=PL4fdtXKg_aGe9d036xPAcmlBCRUBDK1IT&index=9&t=2802s" }
   ]
 };
