@@ -161,8 +161,8 @@
   <header class="head">
     <span class="mono">Workshop 47 · Vol. 1–3</span>
     <h1><span data-l="en">Rate the tracks</span><span data-l="ru">Оцените треки</span></h1>
-    <p class="lead" data-l="en">Listen to a 30-second preview of each track and rate it from 1 to 10. If a track is beyond perfect — give it <b>11</b> or <b>12</b>.</p>
-    <p class="lead" data-l="ru">Послушайте 30-секундный отрывок каждого трека и поставьте оценку от 1 до 10. Если трек выше всяких похвал — <b>11</b> или <b>12</b>.</p>
+    <p class="lead" data-l="en">Listen to a 30-second preview of each track and rate it from 1 to 10. If you really love a track — <b>11</b> or <b>12</b>.</p>
+    <p class="lead" data-l="ru">Послушайте 30-секундный отрывок каждого трека и поставьте оценку от 1 до 10. Если трек очень понравился — <b>11</b> или <b>12</b>.</p>
     <p class="lead hint-touch mono" style="font-size:11px;margin-top:12px"><span data-l="en">Slide your finger along the stars</span><span data-l="ru">Ведите пальцем по звёздам</span></p>
     <span class="draft mono" id="draft" hidden><span data-l="en">Draft — scores are not real</span><span data-l="ru">Черновик — оценки ненастоящие</span></span>
   </header>
@@ -266,7 +266,7 @@
         '<div class="tr-top">' +
           '<button type="button" class="cov" aria-label="Play ' + esc(t.title) + '"><span class="rank mono"></span><img src="covers/v' + t.vol + '.jpg" alt="" width="52" height="52" loading="lazy">' +
             '<span class="ic"><svg class="pl"><use href="#i-play"/></svg><svg class="pa"><use href="#i-pause"/></svg></span></button>' +
-          '<div class="tt"><b>' + esc(t.title) + '</b><span class="mono">Vol. ' + t.vol + ' · ' + (t.n < 10 ? "0" : "") + t.n +
+          '<div class="tt"><b>' + esc(t.title) + '</b><span class="mono">Vol. ' + t.vol +
             '<a class="full" href="' + esc(t.apple) + '" target="_blank" rel="noopener">' + pair("Full ↗", "Целиком ↗") + '</a></span></div>' +
           '<div class="sc"><span class="big"></span><span class="cnt mono"></span></div>' +
         '</div>' +
