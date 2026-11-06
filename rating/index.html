@@ -283,7 +283,7 @@
       var id = li.dataset.id, a = avg(id), x = S[id], big = li.querySelector(".big");
       big.textContent = a === null ? "—" : (Math.round(a * 10) / 10).toFixed(1);
       big.className = "big" + (a === null ? " none" : (a > 10 ? " pk" : ""));
-      li.querySelector(".cnt").innerHTML = x && x.n ? votesWord(x.n) : pair("no votes yet", "пока без оценок");
+      li.querySelector(".cnt").innerHTML = x && x.n ? votesWord(x.n) : ""; // без голосов — только «—», длинная подпись теснила название на телефоне
       var v = mine[id], b = li.querySelector(".mine b");
       b.textContent = v === undefined ? "—" : v; b.className = v > 10 ? "pk" : "";
     }
