@@ -6,7 +6,8 @@
 // GET  → { "<id трека>": [число голосов, сумма оценок], ... }
 // POST { id, v, voter } → то же для этого трека. Один браузер (voter) — один голос за трек; новый голос заменяет старый.
 // Адреса посетителей не хранятся — только их отпечаток с солью, чтобы ограничивать накрутку.
-import { sqlite } from "https://esm.town/v/std/sqlite";
+// база самого val (видна в проекте: SQLite → w47_votes), а не общая база аккаунта
+import { sqlite } from "https://esm.town/v/std/sqlite/main.ts";
 
 const ORIGINS = ["https://yuriyleontiev.music", "http://127.0.0.1:8047", "http://localhost:8047"];
 
