@@ -109,6 +109,10 @@
   @keyframes tw { 0%, 100% { opacity: .2; transform: scale(.6); } 50% { opacity: 1; transform: scale(1.2); } }
   .bub { position: absolute; bottom: 100%; margin-bottom: 4px; transform: translateX(-50%); min-width: 54px; text-align: center; background: #1c1c1c; border: 1px solid rgba(255, 255, 255, .24); padding: 4px 12px; font-size: 28px; font-weight: 700; line-height: 1.15; color: var(--gold); pointer-events: none; opacity: 0; transition: opacity .12s; z-index: 2; }
   .bub.on { opacity: 1; }
+  /* подсказка на телефоне вместо текста: «палец» один раз сам проводит по звёздам первой карточки */
+  .ghost { position: absolute; top: 50%; left: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; pointer-events: none; z-index: 1;
+    background: radial-gradient(circle, rgba(255, 255, 255, .5) 0 30%, rgba(255, 255, 255, .16) 55%, transparent 70%); opacity: 0; transition: opacity .25s; }
+  .ghost.on { opacity: 1; }
   .bub.pk b { background: linear-gradient(160deg, #FFD1EC 0%, #FF5CB8 45%, #FF1F8E 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .bub b { font-weight: 700; }
 
@@ -126,8 +130,6 @@
   html[data-lang="en"] [data-l="en"], html[data-lang="ru"] [data-l="ru"] { display: inline; }
   html[data-lang="en"] p[data-l="en"], html[data-lang="ru"] p[data-l="ru"] { display: block; }
 
-  @media (hover: none) { .hint-mouse { display: none !important; } }
-  @media (hover: hover) { .hint-touch { display: none !important; } }
   @media (prefers-reduced-motion: reduce) {
     .sp::before { animation: none; }
     .sp.p .k { animation: none; opacity: 1; }
@@ -164,7 +166,6 @@
     <h1><span data-l="en">Rate the Workshop&nbsp;[47] tracks</span><span data-l="ru">Оцените треки Мастерской&nbsp;[47]</span></h1>
     <p class="lead" data-l="en">Listen to a 30-second preview of each track and rate it from 1 to 10. If you really love a track — <b>11</b> or <b>12</b>.</p>
     <p class="lead" data-l="ru">Послушайте 30-секундный отрывок каждого трека и поставьте оценку от 1 до 10. Если трек очень понравился — <b>11</b> или <b>12</b>.</p>
-    <p class="lead hint-touch mono" style="font-size:11px;margin-top:12px"><span data-l="en">Slide your finger along the stars</span><span data-l="ru">Ведите пальцем по звёздам</span></p>
     <span class="draft mono" id="draft" hidden><span data-l="en">Draft — scores are not real</span><span data-l="ru">Черновик — оценки ненастоящие</span></span>
   </header>
 
@@ -318,9 +319,26 @@
         gc("w47 vote: " + t.title);
       }
       li._paint = function () { paint(cur()); };
+      var demoOff = false;
+      li._demo = function () {
+        if (demoOff || cur() > 0) return;
+        var g = document.createElement("i"); g.className = "ghost"; box.appendChild(g);
+        var a = st[0].getBoundingClientRect(), z = st[10].getBoundingClientRect(), r = box.getBoundingClientRect();
+        var x0 = a.left + a.width / 2, x1 = z.left + z.width / 2, t0 = 0, T = 1500;
+        function stop() { g.className = "ghost"; bub.className = "bub"; setTimeout(function () { g.remove(); }, 300); if (!drag) paint(cur()); }
+        function step(now) {
+          if (demoOff) return stop();
+          if (!t0) t0 = now;
+          var k = Math.min(1, (now - t0) / T), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, cx = x0 + (x1 - x0) * e;
+          g.style.left = (cx - r.left) + "px";
+          var x = valAt(cx); paint(x); bubble(x, cx);
+          if (k < 1) requestAnimationFrame(step); else setTimeout(stop, 700);
+        }
+        requestAnimationFrame(function () { g.className = "ghost on"; requestAnimationFrame(step); });
+      };
       box.addEventListener("pointerdown", function (e) {
         if (e.pointerType === "mouse" && e.button !== 0) return;
-        drag = true; moved = false; startX = e.clientX;
+        demoOff = true; drag = true; moved = false; startX = e.clientX;
         try { box.setPointerCapture(e.pointerId); } catch (er) {}
         var x = valAt(e.clientX); paint(x);
         if (e.pointerType !== "mouse") bubble(x, e.clientX);
@@ -405,7 +423,18 @@
     document.querySelectorAll(".lang button").forEach(function (b) { b.addEventListener("click", function () { setLang(b.dataset.set); }); });
     $("y").textContent = new Date().getFullYear();
 
-    load().then(render);
+    load().then(function () {
+      render();
+      /* телефон, ещё ни одной своей оценки — показать жест на первой карточке, когда её звёзды целиком на экране */
+      var touch = matchMedia("(hover: none)").matches, calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      var first = $("list").firstElementChild;
+      if (!touch || calm || Object.keys(mine).length || !first || !window.IntersectionObserver) return;
+      var io = new IntersectionObserver(function (en) {
+        if (!en[0].isIntersecting) return;
+        io.disconnect(); setTimeout(first._demo, 450);
+      }, { threshold: 1 });
+      io.observe(first.querySelector(".stars"));
+    });
   })();
 </script>
 <!-- статистика: GoatCounter (yulion) — без cookies, скрипт свой, лежит рядом -->
