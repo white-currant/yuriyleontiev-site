@@ -121,6 +121,7 @@
   footer { display: flex; justify-content: space-between; gap: 16px; padding: 40px 0 max(32px, env(safe-area-inset-bottom)); color: var(--dim); }
 
   /* ---------- language ---------- */
+  [hidden] { display: none !important; } /* иначе display у класса перебивает hidden (плашка «Черновик» оставалась видна) */
   [data-l] { display: none; }
   html[data-lang="en"] [data-l="en"], html[data-lang="ru"] [data-l="ru"] { display: inline; }
   html[data-lang="en"] p[data-l="en"], html[data-lang="ru"] p[data-l="ru"] { display: block; }
@@ -159,8 +160,8 @@
 
 <main class="wrap">
   <header class="head">
-    <span class="mono">Workshop 47 · Vol. 1–3</span>
-    <h1><span data-l="en">Rate the tracks</span><span data-l="ru">Оцените треки</span></h1>
+    <span class="mono">Vol. 1–3 · <span data-l="en">50 tracks</span><span data-l="ru">50 треков</span></span>
+    <h1><span data-l="en">Rate the Workshop 47 tracks</span><span data-l="ru">Оцените треки Мастерской 47</span></h1>
     <p class="lead" data-l="en">Listen to a 30-second preview of each track and rate it from 1 to 10. If you really love a track — <b>11</b> or <b>12</b>.</p>
     <p class="lead" data-l="ru">Послушайте 30-секундный отрывок каждого трека и поставьте оценку от 1 до 10. Если трек очень понравился — <b>11</b> или <b>12</b>.</p>
     <p class="lead hint-touch mono" style="font-size:11px;margin-top:12px"><span data-l="en">Slide your finger along the stars</span><span data-l="ru">Ведите пальцем по звёздам</span></p>
