@@ -1,5 +1,32 @@
 window.RELEASES = [
  {
+  "id": "6830542805",
+  "title": "Workshop 47, Vol. 3",
+  "sub": "Original Series Soundtrack",
+  "kind": "score",
+  "date": "2026-11-06",
+  "year": "2026",
+  "cover": "covers/6830542805.jpg",
+  "links": [
+   {
+    "name": "Spotify",
+    "url": "https://open.spotify.com/album/4epchM1hB0r7LQvyzT4IUD"
+   },
+   {
+    "name": "Apple Music",
+    "url": "https://music.apple.com/us/album/workshop-47-vol-3-original-series-soundtrack/6830542805"
+   },
+   {
+    "name": "YouTube Music",
+    "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Workshop%2047%2C%20Vol.%203"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/1138334481"
+   }
+  ]
+ },
+ {
   "id": "6822019532",
   "title": "The Lay of Chaltén",
   "sub": "From Patagonia: An Unexpected Journey",
