@@ -1,0 +1,805 @@
+{
+"built": "2026-11-13",
+"tracks": [
+{
+"id": "6830543169",
+"title": "Hidden in the Nuances",
+"release": "6830542805",
+"n": 1,
+"date": "2026-11-06",
+"tier": "common",
+"url": "https://music.apple.com/us/album/hidden-in-the-nuances/6830542805?i=6830543169",
+"fixed": true
+},
+{
+"id": "6830543190",
+"title": "Luma (feat. The Veresk)",
+"release": "6830542805",
+"n": 2,
+"date": "2026-11-06",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/luma-feat-the-veresk/6830542805?i=6830543190",
+"fixed": true
+},
+{
+"id": "6830543196",
+"title": "Neitz Canyon",
+"release": "6830542805",
+"n": 3,
+"date": "2026-11-06",
+"tier": "common",
+"url": "https://music.apple.com/us/album/neitz-canyon/6830542805?i=6830543196",
+"fixed": true
+},
+{
+"id": "6830543360",
+"title": "Canyon Run",
+"release": "6830542805",
+"n": 4,
+"date": "2026-11-06",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/canyon-run/6830542805?i=6830543360",
+"fixed": true
+},
+{
+"id": "6830543371",
+"title": "The Warmth of a Mother",
+"release": "6830542805",
+"n": 5,
+"date": "2026-11-06",
+"tier": "common",
+"url": "https://music.apple.com/us/album/the-warmth-of-a-mother/6830542805?i=6830543371",
+"fixed": true
+},
+{
+"id": "6830543503",
+"title": "Cyberattack, Again",
+"release": "6830542805",
+"n": 6,
+"date": "2026-11-06",
+"tier": "common",
+"url": "https://music.apple.com/us/album/cyberattack-again/6830542805?i=6830543503",
+"fixed": true
+},
+{
+"id": "6830543513",
+"title": "Under the Desert Sun",
+"release": "6830542805",
+"n": 7,
+"date": "2026-11-06",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/under-the-desert-sun/6830542805?i=6830543513",
+"fixed": true
+},
+{
+"id": "6830543747",
+"title": "The Dark Forest",
+"release": "6830542805",
+"n": 8,
+"date": "2026-11-06",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/the-dark-forest/6830542805?i=6830543747",
+"fixed": true
+},
+{
+"id": "6830543766",
+"title": "The Exalted Kingdom",
+"release": "6830542805",
+"n": 9,
+"date": "2026-11-06",
+"tier": "legendary",
+"url": "https://music.apple.com/us/album/the-exalted-kingdom/6830542805?i=6830543766",
+"fixed": true
+},
+{
+"id": "6830543882",
+"title": "Still Waters",
+"release": "6830542805",
+"n": 10,
+"date": "2026-11-06",
+"tier": "common",
+"url": "https://music.apple.com/us/album/still-waters/6830542805?i=6830543882",
+"fixed": true
+},
+{
+"id": "6830543994",
+"title": "Glassy Waters",
+"release": "6830542805",
+"n": 11,
+"date": "2026-11-06",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/glassy-waters/6830542805?i=6830543994",
+"fixed": true
+},
+{
+"id": "6830544006",
+"title": "Grevsburg",
+"release": "6830542805",
+"n": 12,
+"date": "2026-11-06",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/grevsburg/6830542805?i=6830544006",
+"fixed": true
+},
+{
+"id": "6830544187",
+"title": "The Dark Side of the City",
+"release": "6830542805",
+"n": 13,
+"date": "2026-11-06",
+"tier": "common",
+"url": "https://music.apple.com/us/album/the-dark-side-of-the-city/6830542805?i=6830544187",
+"fixed": true
+},
+{
+"id": "6830544237",
+"title": "In the Shadows",
+"release": "6830542805",
+"n": 14,
+"date": "2026-11-06",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/in-the-shadows/6830542805?i=6830544237",
+"fixed": true
+},
+{
+"id": "6830544247",
+"title": "Truth",
+"release": "6830542805",
+"n": 15,
+"date": "2026-11-06",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/truth/6830542805?i=6830544247",
+"fixed": true
+},
+{
+"id": "6830544254",
+"title": "One Spark",
+"release": "6830542805",
+"n": 16,
+"date": "2026-11-06",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/one-spark/6830542805?i=6830544254",
+"fixed": true
+},
+{
+"id": "6822019813",
+"title": "The Lay of Chalten (From Patagonia: An Unexpected Journey)",
+"release": "6822019532",
+"n": 1,
+"date": "2026-10-30",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/the-lay-of-chalten-from-patagonia-an-unexpected-journey/6822019532?i=6822019813",
+"fixed": true
+},
+{
+"id": "6766245176",
+"title": "Escape Now",
+"release": "1896250550",
+"n": 1,
+"date": "2026-05-15",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/escape-now/1896250550?i=6766245176",
+"fixed": true
+},
+{
+"id": "6766245182",
+"title": "Always on Time",
+"release": "1896250550",
+"n": 2,
+"date": "2026-05-15",
+"tier": "common",
+"url": "https://music.apple.com/us/album/always-on-time/1896250550?i=6766245182",
+"fixed": true
+},
+{
+"id": "6766245185",
+"title": "Eye to Eye",
+"release": "1896250550",
+"n": 3,
+"date": "2026-05-15",
+"tier": "common",
+"url": "https://music.apple.com/us/album/eye-to-eye/1896250550?i=6766245185",
+"fixed": true
+},
+{
+"id": "6766245187",
+"title": "Tearing",
+"release": "1896250550",
+"n": 4,
+"date": "2026-05-15",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/tearing/1896250550?i=6766245187",
+"fixed": true
+},
+{
+"id": "6766245188",
+"title": "I'll Live Inside You",
+"release": "1896250550",
+"n": 5,
+"date": "2026-05-15",
+"tier": "common",
+"url": "https://music.apple.com/us/album/ill-live-inside-you/1896250550?i=6766245188",
+"fixed": true
+},
+{
+"id": "6766245190",
+"title": "Burning Forest",
+"release": "1896250550",
+"n": 6,
+"date": "2026-05-15",
+"tier": "common",
+"url": "https://music.apple.com/us/album/burning-forest/1896250550?i=6766245190",
+"fixed": true
+},
+{
+"id": "6766245191",
+"title": "Cold Hearts",
+"release": "1896250550",
+"n": 7,
+"date": "2026-05-15",
+"tier": "common",
+"url": "https://music.apple.com/us/album/cold-hearts/1896250550?i=6766245191",
+"fixed": true
+},
+{
+"id": "1888776832",
+"title": "External Control",
+"release": "1888776827",
+"n": 1,
+"date": "2026-03-30",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/external-control/1888776827?i=1888776832",
+"fixed": true
+},
+{
+"id": "1888776836",
+"title": "New Territories",
+"release": "1888776827",
+"n": 2,
+"date": "2026-03-30",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/new-territories/1888776827?i=1888776836",
+"fixed": true
+},
+{
+"id": "1888776837",
+"title": "Chuck",
+"release": "1888776827",
+"n": 3,
+"date": "2026-03-30",
+"tier": "common",
+"url": "https://music.apple.com/us/album/chuck/1888776827?i=1888776837",
+"fixed": true
+},
+{
+"id": "1888776838",
+"title": "Amarin",
+"release": "1888776827",
+"n": 4,
+"date": "2026-03-30",
+"tier": "common",
+"url": "https://music.apple.com/us/album/amarin/1888776827?i=1888776838",
+"fixed": true
+},
+{
+"id": "1888776839",
+"title": "Mad Organ Grinder",
+"release": "1888776827",
+"n": 5,
+"date": "2026-03-30",
+"tier": "common",
+"url": "https://music.apple.com/us/album/mad-organ-grinder/1888776827?i=1888776839",
+"fixed": true
+},
+{
+"id": "1888776840",
+"title": "Nothing Is the Same Anymore",
+"release": "1888776827",
+"n": 6,
+"date": "2026-03-30",
+"tier": "legendary",
+"url": "https://music.apple.com/us/album/nothing-is-the-same-anymore/1888776827?i=1888776840",
+"fixed": true
+},
+{
+"id": "1888776843",
+"title": "Ivett",
+"release": "1888776827",
+"n": 7,
+"date": "2026-03-30",
+"tier": "common",
+"url": "https://music.apple.com/us/album/ivett/1888776827?i=1888776843",
+"fixed": true
+},
+{
+"id": "1888776844",
+"title": "Cyber Intrusion",
+"release": "1888776827",
+"n": 8,
+"date": "2026-03-30",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/cyber-intrusion/1888776827?i=1888776844",
+"fixed": true
+},
+{
+"id": "1888776849",
+"title": "Vakhub",
+"release": "1888776827",
+"n": 9,
+"date": "2026-03-30",
+"tier": "legendary",
+"url": "https://music.apple.com/us/album/vakhub/1888776827?i=1888776849",
+"fixed": true
+},
+{
+"id": "1888776851",
+"title": "Friends",
+"release": "1888776827",
+"n": 10,
+"date": "2026-03-30",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/friends/1888776827?i=1888776851",
+"fixed": true
+},
+{
+"id": "1888776852",
+"title": "Something Is Wrong",
+"release": "1888776827",
+"n": 11,
+"date": "2026-03-30",
+"tier": "common",
+"url": "https://music.apple.com/us/album/something-is-wrong/1888776827?i=1888776852",
+"fixed": true
+},
+{
+"id": "1888776949",
+"title": "Iliar",
+"release": "1888776827",
+"n": 12,
+"date": "2026-03-30",
+"tier": "common",
+"url": "https://music.apple.com/us/album/iliar/1888776827?i=1888776949",
+"fixed": true
+},
+{
+"id": "1888776951",
+"title": "Reality Layer Compromised",
+"release": "1888776827",
+"n": 13,
+"date": "2026-03-30",
+"tier": "common",
+"url": "https://music.apple.com/us/album/reality-layer-compromised/1888776827?i=1888776951",
+"fixed": true
+},
+{
+"id": "1888776953",
+"title": "White Void",
+"release": "1888776827",
+"n": 14,
+"date": "2026-03-30",
+"tier": "common",
+"url": "https://music.apple.com/us/album/white-void/1888776827?i=1888776953",
+"fixed": true
+},
+{
+"id": "1888776954",
+"title": "Ascension",
+"release": "1888776827",
+"n": 15,
+"date": "2026-03-30",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/ascension/1888776827?i=1888776954",
+"fixed": true
+},
+{
+"id": "1888776955",
+"title": "Wild Barrel Organ Melody",
+"release": "1888776827",
+"n": 16,
+"date": "2026-03-30",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/wild-barrel-organ-melody/1888776827?i=1888776955",
+"fixed": true
+},
+{
+"id": "1853557590",
+"title": "Climb of the Formics",
+"release": "1853557585",
+"n": 1,
+"date": "2025-11-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/climb-of-the-formics/1853557585?i=1853557590",
+"fixed": true
+},
+{
+"id": "1853557803",
+"title": "Thoughtform",
+"release": "1853557585",
+"n": 2,
+"date": "2025-11-19",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/thoughtform/1853557585?i=1853557803",
+"fixed": true
+},
+{
+"id": "1853557806",
+"title": "Can You Be a Hero?",
+"release": "1853557585",
+"n": 3,
+"date": "2025-11-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/can-you-be-a-hero/1853557585?i=1853557806",
+"fixed": true
+},
+{
+"id": "1853557810",
+"title": "Digital Wind",
+"release": "1853557585",
+"n": 4,
+"date": "2025-11-19",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/digital-wind/1853557585?i=1853557810",
+"fixed": true
+},
+{
+"id": "1853557812",
+"title": "Garden of Eidos",
+"release": "1853557585",
+"n": 5,
+"date": "2025-11-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/garden-of-eidos/1853557585?i=1853557812",
+"fixed": true
+},
+{
+"id": "1853557817",
+"title": "Tiny Companions",
+"release": "1853557585",
+"n": 6,
+"date": "2025-11-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/tiny-companions/1853557585?i=1853557817",
+"fixed": true
+},
+{
+"id": "1853557823",
+"title": "Electric Petal",
+"release": "1853557585",
+"n": 7,
+"date": "2025-11-19",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/electric-petal/1853557585?i=1853557823",
+"fixed": true
+},
+{
+"id": "1853557825",
+"title": "Under the Living Sky",
+"release": "1853557585",
+"n": 8,
+"date": "2025-11-19",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/under-the-living-sky/1853557585?i=1853557825",
+"fixed": true
+},
+{
+"id": "1853557829",
+"title": "Voice Above the World",
+"release": "1853557585",
+"n": 9,
+"date": "2025-11-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/voice-above-the-world/1853557585?i=1853557829",
+"fixed": true
+},
+{
+"id": "1853557831",
+"title": "Together Always",
+"release": "1853557585",
+"n": 10,
+"date": "2025-11-19",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/together-always/1853557585?i=1853557831",
+"fixed": true
+},
+{
+"id": "1853557985",
+"title": "Synthetic Flora",
+"release": "1853557585",
+"n": 11,
+"date": "2025-11-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/synthetic-flora/1853557585?i=1853557985",
+"fixed": true
+},
+{
+"id": "1853557988",
+"title": "Where Life Begins",
+"release": "1853557585",
+"n": 12,
+"date": "2025-11-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/where-life-begins/1853557585?i=1853557988",
+"fixed": true
+},
+{
+"id": "1853557991",
+"title": "Subtle Forms",
+"release": "1853557585",
+"n": 13,
+"date": "2025-11-19",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/subtle-forms/1853557585?i=1853557991",
+"fixed": true
+},
+{
+"id": "1853557994",
+"title": "Inside the Stem",
+"release": "1853557585",
+"n": 14,
+"date": "2025-11-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/inside-the-stem/1853557585?i=1853557994",
+"fixed": true
+},
+{
+"id": "1853557998",
+"title": "Falling Giants",
+"release": "1853557585",
+"n": 15,
+"date": "2025-11-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/falling-giants/1853557585?i=1853557998",
+"fixed": true
+},
+{
+"id": "1853557999",
+"title": "Revelation",
+"release": "1853557585",
+"n": 16,
+"date": "2025-11-19",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/revelation/1853557585?i=1853557999",
+"fixed": true
+},
+{
+"id": "1853558003",
+"title": "The First Danger",
+"release": "1853557585",
+"n": 17,
+"date": "2025-11-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/the-first-danger/1853557585?i=1853558003",
+"fixed": true
+},
+{
+"id": "1853558005",
+"title": "The Formics' song",
+"release": "1853557585",
+"n": 18,
+"date": "2025-11-19",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/the-formics-song/1853557585?i=1853558005",
+"fixed": true
+},
+{
+"id": "1814200120",
+"title": "The Way Back (From Predel Vysoty: The Original Motion Picture Soundtrack)",
+"release": "1814200115",
+"n": 1,
+"date": "2025-05-18",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/the-way-back-from-predel-vysoty-the-original/1814200115?i=1814200120",
+"fixed": true
+},
+{
+"id": "1812328949",
+"title": "The Road",
+"release": "1812328948",
+"n": 1,
+"date": "2025-05-09",
+"tier": "common",
+"url": "https://music.apple.com/us/album/the-road/1812328948?i=1812328949",
+"fixed": true
+},
+{
+"id": "1808177220",
+"title": "Theory Four",
+"release": "1808177217",
+"n": 1,
+"date": "2025-04-25",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/theory-four/1808177217?i=1808177220",
+"fixed": true
+},
+{
+"id": "1808176327",
+"title": "Theory Three",
+"release": "1808176127",
+"n": 1,
+"date": "2025-04-15",
+"tier": "legendary",
+"url": "https://music.apple.com/us/album/theory-three/1808176127?i=1808176327",
+"fixed": true
+},
+{
+"id": "1806216536",
+"title": "Theory Two",
+"release": "1806216530",
+"n": 1,
+"date": "2025-02-04",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/theory-two/1806216530?i=1806216536",
+"fixed": true
+},
+{
+"id": "1742576147",
+"title": "Theory One",
+"release": "1742576140",
+"n": 1,
+"date": "2024-04-25",
+"tier": "common",
+"url": "https://music.apple.com/us/album/theory-one/1742576140?i=1742576147",
+"fixed": true
+},
+{
+"id": "1728835528",
+"title": "Little Big Story",
+"release": "1728835521",
+"n": 1,
+"date": "2024-02-14",
+"tier": "common",
+"url": "https://music.apple.com/us/album/little-big-story/1728835521?i=1728835528",
+"fixed": true
+},
+{
+"id": "1704957976",
+"title": "Symphony of Hurrying Time",
+"release": "1704957584",
+"n": 1,
+"date": "2023-09-17",
+"tier": "common",
+"url": "https://music.apple.com/us/album/symphony-of-hurrying-time/1704957584?i=1704957976",
+"fixed": true
+},
+{
+"id": "1700091504",
+"title": "Valley of Light",
+"release": "1700091502",
+"n": 1,
+"date": "2023-08-20",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/valley-of-light/1700091502?i=1700091504",
+"fixed": true
+},
+{
+"id": "1700091505",
+"title": "Escape from Planet Eden",
+"release": "1700091502",
+"n": 2,
+"date": "2023-08-20",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/escape-from-planet-eden/1700091502?i=1700091505",
+"fixed": true
+},
+{
+"id": "1689343457",
+"title": "Xenon Dawn",
+"release": "1689343456",
+"n": 1,
+"date": "2023-06-01",
+"tier": "common",
+"url": "https://music.apple.com/us/album/xenon-dawn/1689343456?i=1689343457",
+"fixed": true
+},
+{
+"id": "1671146139",
+"title": "Storm Time",
+"release": "1671146136",
+"n": 1,
+"date": "2023-02-20",
+"tier": "common",
+"url": "https://music.apple.com/us/album/storm-time/1671146136?i=1671146139",
+"fixed": true
+},
+{
+"id": "1643170800",
+"title": "Rebirth",
+"release": "1643170787",
+"n": 1,
+"date": "2022-09-08",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/rebirth/1643170787?i=1643170800",
+"fixed": true
+},
+{
+"id": "1568088933",
+"title": "Time",
+"release": "1568088931",
+"n": 1,
+"date": "2021-06-08",
+"tier": "common",
+"url": "https://music.apple.com/us/album/time/1568088931?i=1568088933",
+"fixed": true
+},
+{
+"id": "1568089334",
+"title": "Flow",
+"release": "1568088931",
+"n": 2,
+"date": "2021-06-08",
+"tier": "epic",
+"url": "https://music.apple.com/us/album/flow/1568088931?i=1568089334",
+"fixed": true
+},
+{
+"id": "1568089344",
+"title": "Lullaby",
+"release": "1568088931",
+"n": 3,
+"date": "2021-06-08",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/lullaby/1568088931?i=1568089344",
+"fixed": true
+},
+{
+"id": "1568089348",
+"title": "Moment",
+"release": "1568088931",
+"n": 4,
+"date": "2021-06-08",
+"tier": "common",
+"url": "https://music.apple.com/us/album/moment/1568088931?i=1568089348",
+"fixed": true
+},
+{
+"id": "1568089600",
+"title": "Eclipse",
+"release": "1568088931",
+"n": 5,
+"date": "2021-06-08",
+"tier": "common",
+"url": "https://music.apple.com/us/album/eclipse/1568088931?i=1568089600",
+"fixed": true
+},
+{
+"id": "1568089602",
+"title": "Horizon",
+"release": "1568088931",
+"n": 6,
+"date": "2021-06-08",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/horizon/1568088931?i=1568089602",
+"fixed": true
+},
+{
+"id": "1313839306",
+"title": "Through the Darkness - Kod (Original Motion Picture Soundtrack)",
+"release": "1313839134",
+"n": 1,
+"date": "2017-10-23",
+"tier": "rare",
+"url": "https://music.apple.com/us/album/through-the-darkness-kod-original-motion-picture/1313839134?i=1313839306",
+"fixed": true
+},
+{
+"id": "951202515",
+"title": "Alone With Universe",
+"release": "951202443",
+"n": 1,
+"date": "2014-12-19",
+"tier": "common",
+"url": "https://music.apple.com/us/album/alone-with-universe/951202443?i=951202515",
+"fixed": true
+},
+{
+"id": "919899909",
+"title": "The East Wind",
+"release": "919899893",
+"n": 1,
+"date": "2014-04-25",
+"tier": "common",
+"url": "https://music.apple.com/us/album/the-east-wind/919899893?i=919899909",
+"fixed": true
+}
+]
+}
