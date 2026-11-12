@@ -154,9 +154,16 @@ async function answer(u: any, round: string, choice: string) {
            answer: { id: t[0], title: t[3], vol: t[1], n: t[2] }, me: await profile(u) };
 }
 
+// кого не показывать в «Звёздном зале» (хозяин, анонимные администраторы) — список присылает бот
+async function hiddenIds(): Promise<number[]> {
+  try { return JSON.parse((await q("SELECT value FROM g_meta WHERE key = 'hidden'"))[0]?.[0] || "[]"); } catch { return []; }
+}
+
 async function top() {
-  const all = await q("SELECT name, points, title FROM g_profiles WHERE points > 0 ORDER BY points DESC LIMIT 10");
-  const day = await q("SELECT name, earned_today FROM g_users WHERE day = ? AND earned_today > 0 ORDER BY earned_today DESC LIMIT 5", [today()]);
+  const h = await hiddenIds();
+  const not = h.length ? ` AND user NOT IN (${h.map(() => "?").join(",")})` : "";
+  const all = await q(`SELECT name, points, title FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 10`, h);
+  const day = await q(`SELECT name, earned_today FROM g_users WHERE day = ? AND earned_today > 0${not} ORDER BY earned_today DESC LIMIT 5`, [today(), ...h]);
   return { all: all.map(([name, points, title]) => ({ name, points: Number(points), title })),
            today: day.map(([name, points]) => ({ name, points: Number(points) })) };
 }
@@ -202,6 +209,10 @@ export default async function (req: Request): Promise<Response> {
                  ON CONFLICT(user) DO UPDATE SET name=excluded.name, points=excluded.points, karma=excluded.karma,
                  title=excluded.title, next=excluded.next, place=excluded.place, updated=excluded.updated`,
                 [p.user, p.name, p.points, p.karma, p.title, p.next, p.place, now()]);
+      }
+      if (Array.isArray(body.hidden)) {
+        await q("INSERT INTO g_meta (key, value) VALUES ('hidden', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [JSON.stringify(body.hidden.map(Number).filter(Number.isFinite))]);
       }
       if (body.consumed != null) {
         await q("INSERT INTO g_meta (key, value) VALUES ('consumed', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(body.consumed)]);
