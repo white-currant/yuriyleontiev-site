@@ -4,7 +4,8 @@ compatibility_date = "2026-11-01"
 workers_dev = true
 preview_urls = false
 
+# база в Восточной Европе (eeur): ближе к игрокам и слушателям — запросы не ходят через океан
 [[d1_databases]]
 binding = "DB"
-database_name = "w47-rating"
-database_id = "2af97636-2908-4fcb-9f87-60691789375d"
+database_name = "w47-rating-eu"
+database_id = "5d6c20d5-075d-44e9-a525-d948a4e88d3a"

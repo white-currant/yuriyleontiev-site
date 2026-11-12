@@ -4,7 +4,8 @@ compatibility_date = "2026-11-01"
 workers_dev = true
 preview_urls = false
 
+# база в Восточной Европе (eeur): ближе к игрокам и слушателям — запросы не ходят через океан
 [[d1_databases]]
 binding = "DB"
-database_name = "starguardian-games"
-database_id = "15a68468-7fce-4f69-99b5-29f7ff5ef41c"
+database_name = "starguardian-games-eu"
+database_id = "1f480dae-68eb-4e0d-956b-3f875ab89153"

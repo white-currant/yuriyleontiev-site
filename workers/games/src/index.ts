@@ -189,11 +189,11 @@ async function top() {
   const all = await q(`SELECT name, points, title, avatar FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 10`, h);
   // имя — как его прислал бот (хозяин — названием канала), а не из Телеграма при входе в игру
   const notU = h.length ? ` AND u.user NOT IN (${h.map(() => "?").join(",")})` : "";
-  const day = await q(`SELECT COALESCE(p.name, u.name), u.earned_today, p.avatar FROM g_users u LEFT JOIN g_profiles p ON p.user = u.user
+  const day = await q(`SELECT COALESCE(p.name, u.name), u.earned_today, p.avatar, p.title FROM g_users u LEFT JOIN g_profiles p ON p.user = u.user
                        WHERE u.day = ? AND u.earned_today > 0${notU} ORDER BY u.earned_today DESC LIMIT 5`, [today(), ...h]);
   const av = (k: any) => (k ? `/avatar/${k}` : null);
   return { all: all.map(([name, points, title, a]) => ({ name, points: Number(points), title, avatar: av(a) })),
-           today: day.map(([name, points, a]) => ({ name, points: Number(points), avatar: av(a) })) };
+           today: day.map(([name, points, a, title]) => ({ name, points: Number(points), avatar: av(a), title: title || "Ученик звёзд" })) };
 }
 
 // ---------- HTTP ----------

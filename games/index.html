@@ -122,6 +122,12 @@
 
   /* ---------- игра ---------- */
   .game-top { display: flex; justify-content: space-between; align-items: center; min-height: 28px; }
+  .exit { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px 0 8px; border-radius: 99px;
+    background: rgba(22, 11, 4, .45); border: 1px solid var(--card-line); font-size: 13.5px; color: rgba(246, 239, 227, .85); }
+  .game-top .left { display: flex; align-items: center; gap: 10px; }
+  .opt.picked { border-color: var(--gold); background: rgba(255, 196, 105, .14); animation: wait 1s ease-in-out infinite; }
+  @keyframes wait { 50% { box-shadow: 0 0 0 3px rgba(255, 196, 105, .18); } }
+  .points-line { margin-top: 6px; text-align: center; font-size: 15px; font-weight: 650; min-height: 22px; color: var(--gold); }
   .streak { font-size: 14px; color: var(--gold); opacity: 0; transition: opacity .3s; }
   .streak.on { opacity: 1; }
   .orb-wrap { position: relative; width: 210px; height: 210px; margin: 26px auto 10px; }
@@ -189,13 +195,14 @@
 
   <!-- раунд -->
   <section class="screen" id="game" hidden>
-    <div class="game-top"><div class="mono" id="roundc">Раунд</div><div class="streak" id="streak"></div></div>
+    <div class="game-top"><div class="left"><button class="exit" type="button" id="exit">← В гильдию</button><div class="mono" id="roundc">Раунд</div></div><div class="streak" id="streak"></div></div>
     <div class="orb-wrap">
       <canvas class="dust" id="dust"></canvas>
       <div class="orb-text"><div><b id="sec">20</b><small id="secnote">секунд</small></div></div>
       <div class="gain" id="gain">+10</div>
     </div>
     <div class="status" id="status">Слушай…</div>
+    <div class="points-line" id="pointsline"></div>
     <div class="options" id="options"></div>
     <div class="result" id="result"></div>
     <div class="practice" id="practice" hidden>Сегодня — тренировочные раунды.</div>
@@ -388,7 +395,7 @@
     unlock(); haptic("light");
     show("game"); if (tg && tg.BackButton) tg.BackButton.show();
     dust.mode("idle"); $("options").innerHTML = ""; $("options").className = "options";
-    $("result").textContent = ""; $("nextbtn").hidden = true; $("homebtn").hidden = true; $("streak").className = "streak";
+    $("result").textContent = ""; $("pointsline").textContent = ""; $("nextbtn").hidden = true; $("homebtn").hidden = true; $("streak").className = "streak";
     $("status").textContent = "Загружаю отрывок…"; $("sec").textContent = "…"; $("secnote").textContent = ""; setRing(1, 1);
     call("/api/round").then(function (r) {
       round = r; roundNo++;
@@ -423,9 +430,12 @@
   function pick(id, btn) {
     if (!round) return; var r = round; round = null;
     clearInterval(timer); $("options").classList.add("locked");
+    if (btn) { btn.classList.add("picked"); haptic("light"); }           // сразу видно, что нажатие принято
+    $("status").textContent = id ? "Проверяю…" : "Время вышло…";
     call("/api/answer", { round: r.round, choice: id }).then(function (a) {
       if (a.error) throw new Error(a.error);
       document.querySelectorAll(".opt").forEach(function (b) {
+        b.classList.remove("picked");
         if (b.dataset.id === a.answer.id) b.classList.add("right");
         else if (b === btn) b.classList.add("wrong"); else b.classList.add("dim");
       });
@@ -435,7 +445,9 @@
       if (gained) { $("gain").textContent = "+" + gained; $("gain").className = "gain"; void $("gain").offsetWidth; $("gain").className = "gain fly"; }
       $("sec").textContent = a.right ? "✓" : "✕"; $("secnote").textContent = "";
       $("status").textContent = a.right ? (a.late ? "Верно, но время вышло" : "Верно!") : (id ? "Мимо" : "Время вышло");
-      $("result").textContent = a.answer.title + " · Vol. " + a.answer.vol + ", трек " + a.answer.n + (a.bonus ? " · серия ×5, +5" : "");
+      $("result").textContent = a.answer.title + " · Vol. " + a.answer.vol + ", трек " + a.answer.n;
+      $("pointsline").textContent = gained ? "+" + gained + " " + plural(gained, "очко", "очка", "очков") + (a.bonus ? " (из них +" + a.bonus + " за серию)" : "")
+        : a.right && a.practice ? "Тренировка — без очков" : a.right && a.late ? "Время вышло — без очков" : "";
       $("streak").textContent = a.streak > 1 ? "серия " + a.streak : ""; $("streak").className = "streak" + (a.streak > 1 ? " on" : "");
       $("practice").hidden = !a.practice;
       renderMe(a.me);
@@ -603,6 +615,7 @@
   $("play").onclick = play;
   $("nextbtn").onclick = play;
   $("homebtn").onclick = home;
+  $("exit").onclick = home;
   if (tg && tg.BackButton) tg.BackButton.onClick(home);
 
   // ---------- старт ----------
