@@ -23,6 +23,8 @@ const BY_ID = new Map(TRACKS.map((t) => [t[0], t]));
 const RANKS: [number, string][] = [[0, "Ученик звёзд"], [30, "Ловец комет"], [100, "Чтец созвездий"], [250, "Заклинатель"],
   [500, "Звездочёт"], [1000, "Маг туманностей"], [2000, "Хранитель сфер"], [4000, "Верховный маг"], [8000, "Звёздный оракул"]];
 
+import * as farm from "./farm";
+
 let DB: any = null;     // привязка D1 (env.DB)
 let ENV: any = {};      // секреты (env.GAMES_KEY)
 
@@ -216,6 +218,7 @@ async function top() {
 export default {
   async fetch(req: Request, env: any): Promise<Response> {
     DB = env.DB; ENV = env;
+    farm.setup({ q, DB, now, today, nameOf });
     return handle(req);
   },
 };
@@ -296,9 +299,13 @@ async function handle(req: Request): Promise<Response> {
       await DB.prepare("INSERT OR REPLACE INTO g_avatars (key, data) VALUES (?, ?)").bind(b.key, bytes.buffer).run();
       return json({ ok: true });
     }
+    if (req.method === "POST" && url.pathname === "/bot/rain") {   // новый пост в канале — дождь звёздной пыли
+      return json(await farm.setRain(Number((await req.json()).hours || 24)));
+    }
     if (req.method === "POST" && url.pathname === "/bot/forget") {
       const uid = Number((await req.json()).user);
       for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
+      await farm.forgetFarm(uid);
       return json({ ok: true });
     }
     return json({ error: "method" }, 405);
@@ -318,6 +325,19 @@ async function handle(req: Request): Promise<Response> {
     case "/api/top": return json(await top());
     case "/api/link/start": return json(await linkStart(user));
     case "/api/link/remove": return json(await linkRemove(user));
+    // «Лунная ферма»
+    case "/api/farm": return json(await farm.farmState(user));
+    case "/api/farm/plant": return json(await farm.plant(user, Number(body.idx), String(body.crop || "")));
+    case "/api/farm/harvest": return json(await farm.harvest(user, Number(body.idx)));
+    case "/api/farm/unlock": return json(await farm.unlock(user));
+    case "/api/farm/gifts": return json(await farm.openGifts(user));
+    case "/api/farm/neighbors": return json(await farm.neighbors(user, await hiddenIds()));
+    case "/api/farm/visit": return json(await farm.visit(user, String(body.pub || "")));
+    case "/api/farm/gift": {
+      // в подарке — публичное имя (как в «Звёздном зале»), а не имя из Телеграма
+      const [p] = await q("SELECT name FROM g_profiles WHERE user = ?", [user.id]);
+      return json(await farm.gift(user, String(body.pub || ""), p?.[0] || "Сосед"));
+    }
   }
   return json({ error: "not found" }, 404);
 }

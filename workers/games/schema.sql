@@ -10,3 +10,18 @@ CREATE TABLE IF NOT EXISTS g_profiles (user INTEGER PRIMARY KEY, name TEXT, poin
 CREATE TABLE IF NOT EXISTS g_meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS g_links (user INTEGER PRIMARY KEY, code TEXT, expires INTEGER, title TEXT, state TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS g_avatars (key TEXT PRIMARY KEY, data BLOB NOT NULL);
+-- «Лунная ферма»
+CREATE TABLE IF NOT EXISTS f_farms (user INTEGER PRIMARY KEY, pub TEXT UNIQUE NOT NULL, dust INTEGER NOT NULL DEFAULT 10,
+  unlocked INTEGER NOT NULL DEFAULT 4, created INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS f_plots (user INTEGER NOT NULL, idx INTEGER NOT NULL, crop TEXT NOT NULL, planted INTEGER NOT NULL,
+  PRIMARY KEY (user, idx));
+-- пластинка = трек; finish — отделка находки: plain / foil (фольгированная) / star (звёздная)
+CREATE TABLE IF NOT EXISTS f_vinyls (user INTEGER NOT NULL, track TEXT NOT NULL, finish TEXT NOT NULL DEFAULT 'plain',
+  count INTEGER NOT NULL DEFAULT 1, first_at INTEGER NOT NULL, PRIMARY KEY (user, track, finish));
+CREATE TABLE IF NOT EXISTS f_gifts (id INTEGER PRIMARY KEY AUTOINCREMENT, to_user INTEGER NOT NULL, from_name TEXT,
+  dust INTEGER NOT NULL, at INTEGER NOT NULL, opened INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS f_gifts_to ON f_gifts (to_user, opened);
+CREATE TABLE IF NOT EXISTS f_given (from_user INTEGER NOT NULL, to_user INTEGER NOT NULL, day TEXT NOT NULL,
+  PRIMARY KEY (from_user, to_user, day));
+CREATE TABLE IF NOT EXISTS f_daily (user INTEGER NOT NULL, day TEXT NOT NULL, points INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user, day));

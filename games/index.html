@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611130220";
+    var BUILD = "202611130242";
     try {
       fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
         v = (v || "").trim();
@@ -54,7 +54,8 @@
   .bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; isolation: isolate; background: var(--bg); pointer-events: none; }
   /* искры рилса — только в «Угадай трек из Мастерской 47»; в гильдии — Великий аттрактор */
   body:not([data-screen="game"]) .bg { display: none; }
-  body[data-screen="game"] .attractor { display: none; }
+  body[data-screen="game"] .attractor, body[data-screen^="farm"] .attractor { display: none; }
+  body[data-screen^="farm"] { background: #0b0a1c; }
   body[data-screen="game"] .bg { animation: fadein .6s ease-out; }
   @keyframes fadein { from { opacity: 0; } }
   .attractor { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; display: block; pointer-events: none; background: #04050d; }
@@ -137,6 +138,59 @@
   .list .p { font-weight: 650; }
   .empty { padding: 16px 2px; color: var(--dim); font-size: 14px; }
 
+  /* ---------- «Лунная ферма» (пиксель-арт) ---------- */
+  .pix { image-rendering: pixelated; image-rendering: crisp-edges; }
+  .farm-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .dust-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 99px; background: rgba(255, 196, 105, .14);
+    border: 1px solid rgba(255, 196, 105, .4); font-family: var(--mono); font-size: 14px; color: var(--gold); }
+  .scene { position: relative; margin: 14px -16px 0; }
+  .scene canvas { display: block; width: 100%; height: auto; }
+  .plots { position: absolute; left: 0; right: 0; top: 41%; bottom: 7%; display: grid; grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: 1fr 1fr; gap: 12% 5%; padding: 0 5%; }
+  .plot { position: relative; background: none; border: 0; padding: 0; min-height: 0; }
+  .plot canvas { width: 100%; height: 100%; object-fit: contain; }
+  .plot .lbl { position: absolute; left: 50%; bottom: -2px; transform: translate(-50%, 100%); white-space: nowrap; font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: .04em; color: rgba(246, 239, 227, .8); text-shadow: 0 1px 2px #000; }
+  .plot .lbl.ready { color: #8ff0c4; }
+  .banner { margin-top: 12px; padding: 10px 14px; border-radius: 12px; font-size: 13.5px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .banner.rain { background: rgba(255, 196, 105, .12); border: 1px solid rgba(255, 196, 105, .35); color: var(--gold); }
+  .banner.gift { background: rgba(213, 139, 255, .12); border: 1px solid rgba(213, 139, 255, .4); color: #e9c8ff; }
+  .banner button { flex: none; padding: 7px 12px; border-radius: 10px; background: rgba(255, 255, 255, .12); font-size: 13px; font-weight: 600; }
+  .farm-actions { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .farm-actions .btn { margin-top: 0; min-height: 46px; font-size: 14.5px; }
+  .farm-note { margin-top: 14px; font-size: 12.5px; color: var(--dim); text-align: center; }
+  .sheet-wrap { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .45); display: flex; align-items: flex-end; }
+  .sheet { width: 100%; max-width: 520px; margin: 0 auto; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0;
+    background: #17142c; border-top: 1px solid rgba(255, 255, 255, .1); animation: up .22s ease-out; }
+  @keyframes up { from { transform: translateY(30px); opacity: 0; } }
+  .sheet h3 { font-size: 18px; font-weight: 700; }
+  .sheet .sub { margin-top: 4px; font-size: 13px; color: var(--dim); }
+  .seed { width: 100%; margin-top: 10px; display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; text-align: left;
+    padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .08); }
+  .seed canvas { width: 44px; height: 33px; }
+  .seed b { display: block; font-size: 15px; } .seed small { color: var(--dim); font-size: 12px; }
+  .seed .cost { font-family: var(--mono); font-size: 13px; color: var(--gold); }
+  .seed[disabled] { opacity: .4; }
+  .vgrid { margin-top: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 10px; }
+  .vrec { background: none; border: 0; text-align: center; color: inherit; }
+  .vrec canvas { width: 100%; aspect-ratio: 1; }
+  .vrec span { display: block; margin-top: 4px; font-size: 11.5px; line-height: 1.25; color: rgba(246, 239, 227, .85); }
+  .vrec.locked span { color: var(--dim); }
+  .foil canvas, canvas.foil { animation: foil 3s linear infinite; }
+  @keyframes foil { 0% { filter: hue-rotate(0deg) saturate(1.2); } 100% { filter: hue-rotate(360deg) saturate(1.2); } }
+  .star canvas, canvas.star { animation: twinkle 1.6s ease-in-out infinite; }
+  @keyframes twinkle { 50% { filter: brightness(1.35) drop-shadow(0 0 4px rgba(255, 220, 140, .8)); } }
+  .vdetail canvas { width: 160px; height: 160px; display: block; margin: 4px auto 12px; }
+  .links { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .links .btn { margin-top: 0; min-height: 42px; font-size: 14px; }
+  .nlist { margin-top: 14px; list-style: none; }
+  .nlist li { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--card-line); }
+  .nlist .av { width: 36px; height: 36px; }
+  .nlist .t { display: block; font-size: 12px; color: var(--dim); }
+  .nlist button { padding: 8px 12px; border-radius: 10px; background: rgba(255, 196, 105, .16); color: var(--gold); font-size: 13px; font-weight: 600; }
+  .toast { position: fixed; left: 50%; top: calc(70px + var(--top)); transform: translateX(-50%); z-index: 40; padding: 10px 16px; border-radius: 12px;
+    background: #241e3f; border: 1px solid rgba(255, 196, 105, .4); color: var(--white); font-size: 14px; animation: up .2s ease-out; max-width: 90%; text-align: center; }
+
   /* ---------- игра ---------- */
   .game-top { display: flex; justify-content: space-between; align-items: center; min-height: 28px; }
   .exit { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px 0 8px; border-radius: 99px;
@@ -203,6 +257,13 @@
       <button class="btn" id="play">Играть</button>
     </div>
 
+    <div class="game-card farm-card">
+      <div class="mono" style="color: rgba(255,255,255,.7)">Игра</div>
+      <h2>Лунная ферма</h2>
+      <p>Свой участок на Луне: сажай, собирай урожай, находи пластинки и заходи в гости к соседям.</p>
+      <button class="btn" id="tofarm">На ферму</button>
+    </div>
+
     <div class="hall">
       <div class="hall-head">
         <div class="mono">Звёздный зал</div>
@@ -229,6 +290,41 @@
     <div class="practice" id="practice" hidden>Сегодня — тренировочные раунды.</div>
     <button class="btn" id="nextbtn" hidden>Дальше</button>
     <button class="btn ghost" id="homebtn" hidden>В гильдию</button>
+  </section>
+
+  <!-- «Лунная ферма»: свой участок, гости, пластинки -->
+  <section class="screen" id="farm" hidden>
+    <div class="farm-top">
+      <button class="exit" type="button" data-go="home">← В гильдию</button>
+      <div class="dust-pill" id="dustpill">✦ 0</div>
+    </div>
+    <div id="farmbanners"></div>
+    <div class="scene" id="scene"><canvas class="pix" id="scenecv"></canvas><div class="plots" id="plots"></div></div>
+    <div class="farm-actions">
+      <button class="btn ghost" id="tovinyls">Пластинки</button>
+      <button class="btn ghost" id="toneighbors">Соседи</button>
+    </div>
+    <div class="farm-note" id="farmnote"></div>
+  </section>
+
+  <section class="screen" id="farm-vinyls" hidden>
+    <div class="farm-top"><button class="exit" type="button" data-go="farm">← На ферму</button><div class="mono" id="vcount"></div></div>
+    <h2 style="margin-top:16px;font-size:24px;letter-spacing:-.02em">Фонотека станции</h2>
+    <div class="farm-note" style="text-align:left;margin-top:6px">Пластинки находятся при сборе урожая. Чем дольше растёт культура, тем чаще.</div>
+    <div class="vgrid" id="vgrid"></div>
+  </section>
+
+  <section class="screen" id="farm-neighbors" hidden>
+    <div class="farm-top"><button class="exit" type="button" data-go="farm">← На ферму</button><div class="mono">Соседи</div></div>
+    <ul class="nlist" id="nlist"></ul>
+    <div class="farm-note">Каждому соседу можно раз в день оставить подарок — 5 звёздной пыли.</div>
+  </section>
+
+  <section class="screen" id="farm-visit" hidden>
+    <div class="farm-top"><button class="exit" type="button" data-go="farm-neighbors">← К соседям</button><div class="mono" id="vtitle"></div></div>
+    <div class="scene"><canvas class="pix" id="visitcv"></canvas><div class="plots" id="visitplots"></div></div>
+    <button class="btn" id="giftbtn" style="margin-top:34px">Оставить подарок — 5 пыли</button>
+    <div class="farm-note" id="visitnote"></div>
   </section>
 
   <section class="screen" id="nope" hidden>
@@ -259,10 +355,12 @@
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
   }
   function show(id) {
-    ["home", "game", "nope"].forEach(function (s) { $(s).hidden = s !== id; });
+    ["home", "game", "nope", "farm", "farm-vinyls", "farm-neighbors", "farm-visit"].forEach(function (s) { $(s).hidden = s !== id; });
     var was = document.body.dataset.screen; document.body.dataset.screen = id; scrollTo(0, 0);
+    document.documentElement.style.background = id.indexOf("farm") === 0 ? "#0b0a1c" : "";
     if (id === "game" && was !== "game") { dispatchEvent(new Event("resize")); dust.start(); attractor.stop(); }
-    if (id !== "game") { dust.stop(); attractor.start(); }
+    if (id !== "game") { dust.stop(); if (id.indexOf("farm") === 0) attractor.stop(); else attractor.start(); }
+    if (tg && tg.BackButton) { if (id === "home" || id === "nope") tg.BackButton.hide(); else tg.BackButton.show(); }
   }
   function nope(text) { $("nopetext").textContent = text; show("nope"); }
 
@@ -624,11 +722,300 @@
              stop: function () { cancelAnimationFrame(raf); raf = 0; } };
   })();
 
+  // ======================= «Лунная ферма» =======================
+  // Пиксель-арт рисуется кодом в маленьком холсте и растягивается без сглаживания (.pix).
+  var F = { state: null, tick: null, releases: null, visiting: null };
+  var PAL = { sky1: "#0b0a1c", sky2: "#1a1438", sky3: "#2c1f4f", star: "#fff6df", earth1: "#3b82f6", earth2: "#22c55e",
+              moon1: "#8d86a8", moon2: "#6f6890", moon3: "#544e72", moon4: "#3d3858", soil1: "#2a2440", soil2: "#1c1830",
+              gold: "#ffc469", amber: "#f2a93b", pink: "#d58bff", teal: "#5eead4", teal2: "#2dd4bf", cyan: "#a5f3fc",
+              white: "#fff6df", stem: "#6ee7b7", berry: "#e879f9", berry2: "#a855f7", station: "#c9c3e0", station2: "#9a93b8" };
+  function px(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(x, y, w || 1, h || 1); }
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6d2b79f5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  // сцена: небо, Земля, звёзды, лунная поверхность, станция (холст 120×90)
+  function drawScene(cv, seed, t, rain) {
+    var W = 120, H = 116, G = 40, c = cv.getContext("2d"); cv.width = W; cv.height = H;   // G — линия горизонта
+    var r = rng(seed || 47);
+    for (var y = 0; y < G + 4; y++) px(c, 0, y, W, 1, y < 14 ? PAL.sky1 : y < 28 ? (y % 2 ? PAL.sky1 : PAL.sky2) : (y % 2 ? PAL.sky2 : PAL.sky3));
+    for (var i = 0; i < 40; i++) { var sx = r() * W | 0, sy = r() * (G - 2) | 0; if ((i + ((t / 600) | 0)) % 9) px(c, sx, sy, 1, 1, i % 7 ? PAL.star : PAL.pink); }
+    // Земля вдали
+    var ex = 96, ey = 12;
+    for (var dy = -6; dy <= 6; dy++) for (var dx = -6; dx <= 6; dx++) if (dx * dx + dy * dy <= 36) px(c, ex + dx, ey + dy, 1, 1, (dx + dy * 2 + 40) % 7 < 3 ? PAL.earth2 : PAL.earth1);
+    for (var dy2 = -6; dy2 <= 6; dy2++) for (var dx2 = 2; dx2 <= 6; dx2++) if (dx2 * dx2 + dy2 * dy2 <= 36 && dx2 * dx2 + dy2 * dy2 > 9) px(c, ex + dx2, ey + dy2, 1, 1, "rgba(0,0,0,.35)");
+    // поверхность Луны
+    for (var y2 = G - 3; y2 < H; y2++) for (var x = 0; x < W; x++) {
+      var h = G + Math.round(Math.sin(x / 9) * 1.5 + Math.sin(x / 4 + 1) * .7);
+      if (y2 >= h) px(c, x, y2, 1, 1, y2 === h ? PAL.moon1 : (x * 7 + y2 * 13) % 23 === 0 ? PAL.moon3 : y2 < h + 4 ? PAL.moon2 : PAL.moon3);
+    }
+    for (var k = 0; k < 9; k++) { var cx = r() * W | 0, cy = G + 4 + (r() * (H - G - 8) | 0); px(c, cx, cy, 3, 1, PAL.moon4); px(c, cx + 1, cy + 1, 2, 1, PAL.moon1); }
+    // станция: купол, антенна с мигающим огоньком
+    var sx0 = 6, sy0 = G - 8;
+    px(c, sx0 + 2, sy0, 10, 1, PAL.station); px(c, sx0 + 1, sy0 + 1, 12, 1, PAL.station); px(c, sx0, sy0 + 2, 14, 5, PAL.station2);
+    px(c, sx0 + 3, sy0 + 3, 2, 2, "#2a2440"); px(c, sx0 + 8, sy0 + 3, 2, 2, PAL.gold);
+    px(c, sx0 + 15, sy0 - 9, 1, 16, PAL.station2); px(c, sx0 + 13, sy0 - 9, 5, 1, PAL.station);
+    if (((t / 700) | 0) % 2) px(c, sx0 + 15, sy0 - 10, 1, 1, "#ff6b8a");
+    // дождь звёздной пыли
+    if (rain) for (var d = 0; d < 26; d++) { var dxp = (d * 37 + 11) % W, dyp = ((t / 40 + d * 23) % (H + 10)) - 10; px(c, dxp, dyp | 0, 1, 2, d % 3 ? PAL.gold : PAL.white); }
+  }
+
+  // грядка-кратер с культурой (холст 32×24); stage 0…1 — сколько выросло
+  function drawPlot(cv, plot, now) {
+    var W = 32, H = 24, c = cv.getContext("2d"); cv.width = W; cv.height = H; c.clearRect(0, 0, W, H);
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var e = ((x - 16) * (x - 16)) / 225 + ((y - 15) * (y - 15)) / 64;
+      if (e <= 1) px(c, x, y, 1, 1, e > .78 ? PAL.moon1 : e > .6 ? PAL.moon4 : (x + y) % 5 ? PAL.soil1 : PAL.soil2);
+    }
+    if (plot.locked) { px(c, 13, 9, 6, 6, PAL.moon4); px(c, 14, 7, 4, 1, PAL.moon1); px(c, 13, 8, 1, 2, PAL.moon1); px(c, 18, 8, 1, 2, PAL.moon1); px(c, 15, 11, 2, 2, PAL.gold); return; }
+    if (!plot.crop) return;
+    var cr = F.state.crops[plot.crop], tot = cr.minutes * 60, f = Math.max(0, Math.min(1, (now - plot.planted) / tot)), st = f >= 1 ? 3 : f > .6 ? 2 : f > .25 ? 1 : 0;
+    var glow = st === 3 && ((now * 2) | 0) % 2;
+    if (plot.crop === "moss") {
+      var spots = [[10,14],[13,12],[16,15],[19,13],[22,15],[12,17],[15,18],[18,17],[21,18],[14,15],[17,12],[20,16]];
+      for (var i = 0; i < spots.length * (st + 1) / 4; i++) px(c, spots[i][0], spots[i][1] - st, 2, 1 + (st > 1), st === 3 ? (i % 3 ? PAL.teal : PAL.cyan) : PAL.teal2);
+      if (glow) { px(c, 11, 10, 1, 1, PAL.white); px(c, 21, 11, 1, 1, PAL.white); }
+    } else if (plot.crop === "berry") {
+      var hgt = [2, 5, 8, 9][st];
+      px(c, 15, 16 - hgt, 2, hgt, PAL.stem); if (st >= 1) { px(c, 12, 14 - hgt / 2 | 0, 3, 1, PAL.stem); px(c, 17, 13 - hgt / 2 | 0, 3, 1, PAL.stem); }
+      if (st >= 2) { px(c, 13, 16 - hgt, 3, 2, st === 3 ? PAL.berry : PAL.berry2); px(c, 17, 15 - hgt, 3, 2, st === 3 ? PAL.berry : PAL.berry2); }
+      if (st === 3) { px(c, 15, 14 - hgt, 3, 2, PAL.berry); px(c, 13, 16 - hgt, 1, 1, PAL.white); if (glow) px(c, 20, 13 - hgt, 1, 1, PAL.gold); }
+    } else if (plot.crop === "crystal") {
+      var hc = [3, 6, 10, 13][st];
+      for (var j = 0; j < hc; j++) { var w = Math.max(1, Math.round((hc - j) / 3)); px(c, 16 - w, 15 - j, w * 2, 1, j % 3 ? PAL.cyan : PAL.white); }
+      if (st >= 2) for (var k2 = 0; k2 < hc / 2; k2++) px(c, 11, 15 - k2, 2, 1, PAL.cyan);
+      if (st === 3) { for (var k3 = 0; k3 < hc / 1.6; k3++) px(c, 20, 15 - k3, 2, 1, PAL.cyan); if (glow) { px(c, 16, 15 - hc - 1, 1, 1, PAL.white); px(c, 9, 8, 1, 1, PAL.white); } }
+    }
+    if (st === 0) { px(c, 15, 14, 2, 1, PAL.amber); }
+  }
+
+  function fmtLeft(sec) { sec = Math.max(0, sec | 0); return sec >= 3600 ? Math.floor(sec / 3600) + " ч " + Math.floor(sec % 3600 / 60) + " мин" : sec >= 60 ? Math.ceil(sec / 60) + " мин" : sec + " с"; }
+  function toast(text) { var t = document.createElement("div"); t.className = "toast"; t.textContent = text; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2600); }
+  function sheet(build) {
+    var w = document.createElement("div"); w.className = "sheet-wrap"; var sh = document.createElement("div"); sh.className = "sheet";
+    w.appendChild(sh); w.onclick = function (e) { if (e.target === w) w.remove(); }; build(sh, function () { w.remove(); }); document.body.appendChild(w); return w;
+  }
+
+  function renderPlots(box, plots, now, own) {
+    box.innerHTML = "";
+    plots.forEach(function (pl) {
+      var b = document.createElement("button"); b.type = "button"; b.className = "plot";
+      var cv = document.createElement("canvas"); cv.className = "pix"; b.appendChild(cv); drawPlot(cv, pl, now);
+      var lbl = document.createElement("span"); lbl.className = "lbl";
+      if (pl.locked) lbl.textContent = own ? "✦ " + pl.price : "закрыта";
+      else if (!pl.crop) lbl.textContent = own ? "посадить" : "пусто";
+      else if (now >= pl.ready_at) { lbl.textContent = own ? "собрать!" : "созрело"; lbl.classList.add("ready"); }
+      else lbl.textContent = fmtLeft(pl.ready_at - now);
+      b.appendChild(lbl);
+      if (own) b.onclick = function () { plotTap(pl); };
+      box.appendChild(b);
+    });
+  }
+
+  function renderFarm() {
+    var s = F.state; if (!s) return;
+    var now = s.now + (Date.now() - F.fetched) / 1000;
+    $("dustpill").textContent = "✦ " + s.dust;
+    var ban = $("farmbanners"); ban.innerHTML = "";
+    if (s.rain_until > now) {
+      var r = el("div", "banner rain"); r.appendChild(el("span", "", "✦ Дождь звёздной пыли — урожай ×2 ещё " + fmtLeft(s.rain_until - now))); ban.appendChild(r);
+    }
+    if (s.gifts.length) {
+      var g = el("div", "banner gift"); var names = s.gifts.map(function (x) { return x.from; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
+      g.appendChild(el("span", "", "🎁 Подарки от соседей: " + names.slice(0, 3).join(", ") + (names.length > 3 ? " и др." : "")));
+      var gb = el("button", "", "Забрать"); gb.onclick = function () { call("/api/farm/gifts").then(function (res) { toast("+" + res.dust + " звёздной пыли"); setFarm(res.farm); }); };
+      g.appendChild(gb); ban.appendChild(g);
+    }
+    renderPlots($("plots"), s.plots, now, true);
+    $("tovinyls").textContent = "Пластинки " + vinylCount() + (F.releases ? "/" + F.releases.length : "");
+    $("farmnote").textContent = "Очки в звание с фермы сегодня: " + s.today_points + " из " + s.points_cap;
+  }
+  function setFarm(st) { F.state = st; F.fetched = Date.now(); renderFarm(); }
+  function farmLoop() {
+    clearInterval(F.tick);
+    F.tick = setInterval(function () {
+      if (!F.state) return;
+      var now = F.state.now + (Date.now() - F.fetched) / 1000;
+      if (!$("farm").hidden) { drawScene($("scenecv"), 47, Date.now(), F.state.rain_until > now); renderFarm(); }
+      if (!$("farm-visit").hidden && F.visiting) { drawScene($("visitcv"), F.visiting.seed, Date.now(), F.visiting.rain_until > now); }
+    }, 1000);
+  }
+  function openFarm() {
+    show("farm"); haptic("light");
+    drawScene($("scenecv"), 47, Date.now(), false);
+    loadReleases();
+    call("/api/farm").then(function (st) { setFarm(st); farmLoop(); })
+      .catch(function (e) { toast("Не получилось: " + e.message); });
+  }
+
+  function plotTap(pl) {
+    var s = F.state, now = s.now + (Date.now() - F.fetched) / 1000;
+    if (pl.locked) {
+      if (pl.idx !== s.unlocked) return toast("Сначала открой предыдущую грядку");
+      return sheet(function (sh, close) {
+        sh.appendChild(el("h3", "", "Новая грядка")); sh.appendChild(el("div", "sub", "Открыть за " + pl.price + " звёздной пыли. У тебя: " + s.dust));
+        var b = btn("Открыть за ✦ " + pl.price, "", function () { close(); call("/api/farm/unlock").then(function (r) { if (r.error) return toast(r.error); haptic("success"); setFarm(r.farm); }); });
+        if (s.dust < pl.price) b.disabled = true; sh.appendChild(b);
+      });
+    }
+    if (pl.crop && now >= pl.ready_at) {                       // созрело — собрать сразу, без вопросов
+      haptic("light");
+      return call("/api/farm/harvest", { idx: pl.idx }).then(function (r) {
+        if (r.error) return toast(r.error);
+        haptic("success"); setFarm(r.farm);
+        toast("+" + r.dust + " звёздной пыли" + (r.rain ? " (дождь ×2)" : "") + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : ""));
+        if (r.vinyl) setTimeout(function () { showVinyl(r.vinyl.id, r.vinyl); }, 700);
+      });
+    }
+    if (pl.crop) return toast(s.crops[pl.crop].name + " созреет через " + fmtLeft(pl.ready_at - now));
+    sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", "Что посадить?")); sh.appendChild(el("div", "sub", "Звёздной пыли: " + s.dust));
+      Object.keys(s.crops).forEach(function (k) {
+        var cr = s.crops[k], b = el("button", "seed"); b.type = "button";
+        var cv = el("canvas", "pix"); drawPlot(cv, { crop: k, planted: 0, ready_at: 0 }, 1e12); b.appendChild(cv);
+        var t = el("span"); t.appendChild(el("b", "", cr.name)); t.appendChild(el("small", "", "растёт " + fmtLeft(cr.minutes * 60) + " · урожай ✦ " + cr.dust)); b.appendChild(t);
+        b.appendChild(el("span", "cost", cr.cost ? "✦ " + cr.cost : "даром"));
+        if (s.dust < cr.cost) b.disabled = true;
+        b.onclick = function () { close(); call("/api/farm/plant", { idx: pl.idx, crop: k }).then(function (r) { if (r.error) return toast(r.error); haptic("success"); setFarm(r.farm); }); };
+        sh.appendChild(b);
+      });
+    });
+  }
+
+  // ---------- пластинки: одна пластинка — один трек; редкость у трека, отделка — у находки ----------
+  var TIER = { common: ["Обычная", "#c9c3e0"], rare: ["Редкая", "#60a5fa"], epic: ["Эпическая", "#c084fc"], legendary: ["Легендарная", "#ffc469"] };
+  var FINISH = { plain: "обычная", foil: "фольгированная", star: "звёздная" };
+  function loadReleases() {
+    if (F.releases) return Promise.resolve(F.releases);
+    var hour = Math.floor(Date.now() / 3600000);
+    return Promise.all([
+      fetch("../releases.js?t=" + hour).then(function (r) { return r.text(); }),
+      fetch("vinyls.json?t=" + hour).then(function (r) { return r.json(); }),
+    ]).then(function (res) {
+      var rels = JSON.parse(res[0].match(/=\s*(\[[\s\S]*\])\s*;?\s*$/)[1]), byId = {};
+      rels.forEach(function (r) { byId[r.id] = r; });
+      F.albums = rels; F.albumById = byId; F.releases = res[1].tracks; F.trackById = {};
+      F.releases.forEach(function (t) { F.trackById[t.id] = t; });
+      return F.releases;
+    }).catch(function () { F.releases = []; return []; });
+  }
+  function ownedMap() {                                    // трек → { plain: n, foil: n, star: n }
+    var m = {}; ((F.state && F.state.vinyls) || []).forEach(function (v) { (m[v.id] = m[v.id] || {})[v.finish] = v.count; }); return m;
+  }
+  function bestFinish(f) { return f ? (f.star ? "star" : f.foil ? "foil" : "plain") : null; }
+  var coverCache = {};
+  function drawVinyl(cv, track, size, finish) {
+    var S = size, c = cv.getContext("2d"); cv.width = S; cv.height = S; c.clearRect(0, 0, S, S);
+    var tier = TIER[track.tier] || TIER.common, owned = !!finish;
+    var R = S / 2 - 1, cx = S / 2 + S * .12, cy = S / 2;
+    for (var y = 0; y < S; y++) for (var x = 0; x < S; x++) { var d = Math.hypot(x - cx, y - cy);
+      if (d <= R * .82) px(c, x, y, 1, 1, d < 1.5 ? "#0b0a1c" : d < R * .22 ? (owned ? tier[1] : "#3d3858") : d > R * .78 ? (owned ? tier[1] : "#2a2440") : (Math.round(d) % 3 ? "#16131f" : "#24202f")); }
+    var sl = Math.round(S * .62), x0 = 1, y0 = Math.round((S - sl) / 2);
+    if (!owned) {                                          // не найдена: силуэт, по краю — цвет редкости
+      px(c, x0, y0, sl, sl, "#221d36"); px(c, x0, y0, sl, 1, tier[1]); px(c, x0, y0 + sl - 1, sl, 1, tier[1]);
+      px(c, x0 + sl / 2 - 2, y0 + sl / 2 - 4, 4, 2, PAL.moon1); px(c, x0 + sl / 2, y0 + sl / 2 - 2, 2, 2, PAL.moon1); px(c, x0 + sl / 2, y0 + sl / 2 + 2, 2, 2, PAL.moon1);
+      return;
+    }
+    var rel = F.albumById[track.release] || {}, img = coverCache[rel.cover];
+    var paint = function () {
+      c.imageSmoothingEnabled = false; var tmp = document.createElement("canvas"); tmp.width = tmp.height = Math.max(12, Math.round(sl / 1.6));
+      tmp.getContext("2d").drawImage(img, 0, 0, tmp.width, tmp.height); c.drawImage(tmp, x0, y0, sl, sl);
+      px(c, x0, y0, sl, 1, tier[1]); px(c, x0, y0 + sl - 1, sl, 1, tier[1]); px(c, x0, y0, 1, sl, tier[1]); px(c, x0 + sl - 1, y0, 1, sl, tier[1]);
+      if (finish === "foil") for (var k = -sl; k < sl; k += 3) for (var t = 0; t < sl; t++) { var xx = x0 + t, yy = y0 + t + k;
+        if (yy > y0 && yy < y0 + sl - 1 && xx > x0 && xx < x0 + sl - 1) px(c, xx, yy, 1, 1, ["rgba(255,90,200,.28)", "rgba(90,220,255,.28)", "rgba(255,240,120,.28)"][((k / 3) % 3 + 3) % 3]); }
+      if (finish === "star") [[2, 2], [sl - 4, 4], [4, sl - 5], [sl - 6, sl - 4], [sl / 2 | 0, 1]].forEach(function (q) {
+        px(c, x0 + q[0], y0 + q[1], 1, 3, "#fff6df"); px(c, x0 + q[0] - 1, y0 + q[1] + 1, 3, 1, "#fff6df"); });
+    };
+    if (img && img.complete && img.naturalWidth) paint(); else { img = coverCache[rel.cover] = coverCache[rel.cover] || new Image(); img.addEventListener("load", paint); if (!img.src && rel.cover) img.src = "../" + rel.cover; }
+  }
+  function vinylCount() { return Object.keys(ownedMap()).length; }
+  function openVinyls() {
+    show("farm-vinyls");
+    loadReleases().then(function (list) {
+      var own = ownedMap(), g = $("vgrid"); g.innerHTML = "";
+      $("vcount").textContent = Object.keys(own).length + " из " + list.length;
+      var lastRel = null;
+      list.forEach(function (t) {
+        if (t.release !== lastRel) {                     // заголовок альбома
+          lastRel = t.release; var a = F.albumById[t.release] || {};
+          var h = el("div", "mono", (a.title || "") + (a.year ? " · " + a.year : "")); h.style.cssText = "grid-column:1/-1;margin-top:10px;color:var(--dim)"; g.appendChild(h);
+        }
+        var fin = bestFinish(own[t.id]), b = el("button", "vrec" + (fin ? "" : " locked") + (fin === "foil" ? " foil" : fin === "star" ? " star" : "")); b.type = "button";
+        var cv = el("canvas", "pix"); b.appendChild(cv); drawVinyl(cv, t, 40, fin);
+        b.appendChild(el("span", "", fin ? t.title : "???"));
+        if (fin) b.onclick = function () { showVinyl(t.id); };
+        g.appendChild(b);
+      });
+    });
+  }
+  function showVinyl(id, found) {
+    loadReleases().then(function () {
+      var t = F.trackById[id]; if (!t) return;
+      var rel = F.albumById[t.release] || {}, own = ownedMap()[id] || {}, fin = found ? found.finish : bestFinish(own), tier = TIER[t.tier] || TIER.common;
+      sheet(function (sh) {
+        sh.classList.add("vdetail");
+        if (found) { var n = el("div", "mono", found.duplicate ? "Повтор — +" + found.dust + " звёздной пыли" : "Новая пластинка в фонотеке!"); n.style.color = "var(--gold)"; sh.appendChild(n); }
+        var cv = el("canvas", "pix" + (fin === "foil" ? " foil" : fin === "star" ? " star" : "")); sh.appendChild(cv); drawVinyl(cv, t, 64, fin);
+        sh.appendChild(el("h3", "", t.title));
+        var sub = el("div", "sub"); var tb = el("b", "", tier[0]); tb.style.color = tier[1]; sub.appendChild(tb);
+        sub.append(" · " + (rel.title || "") + (rel.year ? ", " + rel.year : "")); sh.appendChild(sub);
+        var have = Object.keys(own).map(function (k) { return FINISH[k] + (own[k] > 1 ? " ×" + own[k] : ""); });
+        if (have.length) sh.appendChild(el("div", "sub", "В фонотеке: " + have.join(", ")));
+        var ls = el("div", "links");
+        if (t.url) ls.appendChild(btn("Слушать трек", "", function () { if (tg && tg.openLink) tg.openLink(t.url); else open(t.url, "_blank"); }));
+        (rel.links || []).filter(function (l) { return !/Apple/.test(l.name) || !t.url; }).forEach(function (l) {
+          ls.appendChild(btn(l.name, "ghost", function () { if (tg && tg.openLink) tg.openLink(l.url); else open(l.url, "_blank"); }));
+        });
+        sh.appendChild(ls);
+      });
+    });
+  }
+
+  // ---------- соседи и гости ----------
+  function openNeighbors() {
+    show("farm-neighbors");
+    var ul = $("nlist"); ul.innerHTML = "<li class='empty' style='display:block'>Загружаю…</li>";
+    call("/api/farm/neighbors").then(function (r) {
+      ul.innerHTML = "";
+      if (!r.neighbors.length) { ul.innerHTML = "<li class='empty' style='display:block'>Пока соседей нет — позови друзей из чата</li>"; return; }
+      r.neighbors.forEach(function (n) {
+        var li = el("li"); var av = el("span", "av"); av.className = "av"; av.style.cssText = "border-radius:50%;display:grid;place-items:center;font-weight:650;background:radial-gradient(circle at 35% 30%,#fff1d2,#ffc469 35%,#8a4a14);color:#2a1406";
+        av.textContent = (n.name || "✦").charAt(0).toUpperCase(); setPhoto(av, n.avatar); li.appendChild(av);
+        var t = el("span"); t.appendChild(el("span", "", n.name)); t.appendChild(el("span", "t", n.title + (n.gifted ? " · подарок оставлен" : ""))); li.appendChild(t);
+        li.appendChild(btn("В гости", "", function () { visit(n.pub); })); li.lastChild.className = "";
+        ul.appendChild(li);
+      });
+    });
+  }
+  function visit(pub) {
+    call("/api/farm/visit", { pub: pub }).then(function (v) {
+      if (v.error) return toast(v.error);
+      F.visiting = { pub: pub, seed: parseInt(pub.slice(0, 6), 16), rain_until: v.rain_until };
+      show("farm-visit"); $("vtitle").textContent = v.name;
+      drawScene($("visitcv"), F.visiting.seed, Date.now(), v.rain_until > v.now);
+      renderPlots($("visitplots"), v.plots, v.now, false);
+      $("visitnote").textContent = v.title + " · пластинок: " + v.vinyls;
+      var gb = $("giftbtn"); gb.disabled = v.gifted; gb.textContent = v.gifted ? "Подарок уже оставлен сегодня" : "Оставить подарок — 5 пыли";
+      gb.onclick = function () { gb.disabled = true; call("/api/farm/gift", { pub: pub }).then(function (r) {
+        if (r.error) { toast(r.error); return; } haptic("success"); toast("Подарок оставлен!"); gb.textContent = "Подарок уже оставлен сегодня"; }); };
+    });
+  }
+
+  $("tofarm").onclick = openFarm;
+  $("tovinyls").onclick = openVinyls;
+  $("toneighbors").onclick = openNeighbors;
+  document.querySelectorAll("[data-go]").forEach(function (b) {
+    b.onclick = function () { var to = b.dataset.go; if (to === "home") home(); else if (to === "farm") { show("farm"); renderFarm(); } else if (to === "farm-neighbors") openNeighbors(); };
+  });
+  function back() {
+    var cur = document.body.dataset.screen;
+    if (cur === "farm-visit") openNeighbors(); else if (cur === "farm-vinyls" || cur === "farm-neighbors") { show("farm"); renderFarm(); } else home();
+  }
+
   $("play").onclick = play;
   $("nextbtn").onclick = play;
   $("homebtn").onclick = home;
   $("exit").onclick = home;
-  if (tg && tg.BackButton) tg.BackButton.onClick(home);
+  if (tg && tg.BackButton) tg.BackButton.onClick(function () { back(); });
 
   // ---------- старт ----------
   if (!API) nope("Сервер игр ещё не подключён.");
