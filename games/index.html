@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Игры · StarGuardian</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#07060f">
+<link rel="stylesheet" href="../fonts.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #07060f;
+    --card: rgba(255, 255, 255, .045);
+    --card-line: rgba(255, 255, 255, .09);
+    --white: rgba(255, 255, 255, .95);
+    --dim: rgba(255, 255, 255, .58);
+    --faint: rgba(255, 255, 255, .16);
+    --violet: #a78bfa;
+    --violet-deep: #6d4bd8;
+    --cyan: #7dd3fc;
+    --gold: #f5c66b;
+    --good: #5eead4;
+    --bad: #fb7185;
+    --sans: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --top: var(--tg-content-safe-area-inset-top, 0px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { background: var(--bg); color: var(--white); font-family: var(--sans); font-size: 16px; line-height: 1.45;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden; min-height: 100%; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .mono { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+
+  #sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  .nebula { position: fixed; z-index: 0; pointer-events: none; border-radius: 50%; filter: blur(60px); opacity: .35; }
+  .nebula.a { width: 70vw; height: 70vw; left: -25vw; top: -15vw; background: radial-gradient(#4c2d9b, transparent 70%); }
+  .nebula.b { width: 60vw; height: 60vw; right: -25vw; top: 45vh; background: radial-gradient(#0e5a7a, transparent 70%); }
+  main { position: relative; z-index: 1; max-width: 520px; margin: 0 auto;
+    padding: calc(18px + var(--top)) 16px calc(28px + env(safe-area-inset-bottom)); }
+  [hidden] { display: none !important; }
+
+  /* ---------- профиль ---------- */
+  .who { margin-top: 6px; display: flex; align-items: center; gap: 14px; }
+  .sigil { flex: none; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center;
+    background: radial-gradient(circle at 35% 30%, #c4b5fd, var(--violet-deep) 60%, #2a1a5e);
+    box-shadow: 0 0 24px rgba(167, 139, 250, .45), inset 0 0 12px rgba(255, 255, 255, .25);
+    font-size: 24px; font-weight: 700; }
+  .who h1 { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+  .who .name { color: var(--dim); font-size: 14px; margin-top: 3px; }
+  .bar { margin-top: 18px; height: 8px; border-radius: 99px; background: var(--faint); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: 99px; transition: width .8s cubic-bezier(.2, .8, .2, 1);
+    background: linear-gradient(90deg, var(--violet-deep), var(--violet), var(--cyan)); box-shadow: 0 0 12px rgba(167, 139, 250, .7); }
+  .bar-note { margin-top: 7px; display: flex; justify-content: space-between; font-size: 13px; color: var(--dim); }
+  .chips { margin-top: 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .chip { padding: 10px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--card-line); }
+  .chip b { display: block; font-size: 20px; font-weight: 650; }
+  .chip span { font-size: 12px; color: var(--dim); }
+
+  /* ---------- карточка игры ---------- */
+  .game-card { margin-top: 22px; padding: 18px; border-radius: 20px; position: relative; overflow: hidden;
+    background: linear-gradient(140deg, rgba(109, 75, 216, .35), rgba(14, 90, 122, .22)); border: 1px solid rgba(167, 139, 250, .3); }
+  .game-card h2 { font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+  .game-card p { margin-top: 6px; color: rgba(255, 255, 255, .78); font-size: 14px; max-width: 30em; }
+  .game-card .rules { margin-top: 10px; font-size: 12.5px; color: var(--dim); }
+  .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 50px; margin-top: 16px;
+    border-radius: 14px; font-weight: 650; font-size: 16px; background: var(--white); color: #120d24;
+    transition: transform .12s, opacity .2s; }
+  .btn:active { transform: scale(.98); }
+  .btn.ghost { background: transparent; color: var(--white); border: 1px solid var(--faint); }
+  .btn[disabled] { opacity: .45; pointer-events: none; }
+
+  /* ---------- лидеры ---------- */
+  .hall { margin-top: 26px; }
+  .hall-head { display: flex; justify-content: space-between; align-items: center; }
+  .seg { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--card); }
+  .seg button { padding: 6px 10px; border-radius: 8px; font-size: 12.5px; color: var(--dim); }
+  .seg button[aria-pressed="true"] { background: rgba(255, 255, 255, .12); color: var(--white); }
+  .list { margin-top: 10px; list-style: none; border-top: 1px solid var(--card-line); }
+  .list li { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 11px 2px;
+    border-bottom: 1px solid var(--card-line); font-size: 15px; }
+  .list .n { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .list li:nth-child(1) .n { color: var(--gold); }
+  .list .t { display: block; font-size: 12px; color: var(--dim); }
+  .list .p { font-weight: 650; }
+  .empty { padding: 16px 2px; color: var(--dim); font-size: 14px; }
+
+  /* ---------- игра ---------- */
+  .game-top { display: flex; justify-content: space-between; align-items: center; min-height: 28px; }
+  .streak { font-size: 14px; color: var(--gold); opacity: 0; transition: opacity .3s; }
+  .streak.on { opacity: 1; }
+  .orb-wrap { position: relative; width: 210px; height: 210px; margin: 26px auto 10px; }
+  .orb { position: absolute; inset: 22px; border-radius: 50%;
+    background: radial-gradient(circle at 38% 32%, #ddd6fe 0%, #8b5cf6 28%, #3b1f8a 62%, #120a33 100%);
+    box-shadow: 0 0 40px rgba(139, 92, 246, .55), inset 0 0 30px rgba(255, 255, 255, .15); transition: transform .3s; }
+  .orb.playing { animation: pulse 1.6s ease-in-out infinite; }
+  .orb.right { background: radial-gradient(circle at 38% 32%, #ccfbf1, #2dd4bf 30%, #0f5e57 70%, #062b29); box-shadow: 0 0 46px rgba(94, 234, 212, .6); }
+  .orb.wrong { background: radial-gradient(circle at 38% 32%, #ffe4e6, #f43f5e 30%, #6b1023 70%, #2a0610); box-shadow: 0 0 40px rgba(251, 113, 133, .5); }
+  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+  .ring { position: absolute; inset: 0; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 3; }
+  .ring .track { stroke: var(--faint); }
+  .ring .left { stroke: var(--cyan); stroke-linecap: round; filter: drop-shadow(0 0 4px rgba(125, 211, 252, .8)); }
+  .orb-text { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; }
+  .orb-text b { font-size: 44px; font-weight: 700; letter-spacing: -.03em; text-shadow: 0 0 18px rgba(0, 0, 0, .4); }
+  .orb-text small { display: block; font-size: 12px; color: rgba(255, 255, 255, .8); margin-top: -4px; }
+  .gain { position: absolute; left: 50%; top: 20%; transform: translateX(-50%); font-size: 30px; font-weight: 750; color: var(--good);
+    opacity: 0; pointer-events: none; text-shadow: 0 0 16px rgba(94, 234, 212, .8); }
+  .gain.fly { animation: fly 1.2s ease-out forwards; }
+  @keyframes fly { 0% { opacity: 0; transform: translate(-50%, 10px); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50px); } }
+  .status { text-align: center; color: var(--dim); font-size: 14px; min-height: 21px; }
+  .options { margin-top: 16px; display: grid; gap: 9px; }
+  .opt { text-align: left; padding: 14px 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--card-line);
+    font-size: 16px; font-weight: 550; transition: background .2s, border-color .2s, transform .12s, opacity .3s; }
+  .opt:active { transform: scale(.985); }
+  .opt.right { background: rgba(94, 234, 212, .16); border-color: var(--good); }
+  .opt.wrong { background: rgba(251, 113, 133, .14); border-color: var(--bad); }
+  .opt.dim { opacity: .4; }
+  .options.locked .opt { pointer-events: none; }
+  .result { margin-top: 14px; text-align: center; font-size: 14px; color: var(--dim); min-height: 20px; }
+  .notice { margin-top: 40vh; text-align: center; color: var(--dim); }
+  .practice { margin-top: 10px; text-align: center; font-size: 12.5px; color: var(--gold); }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<div class="nebula a"></div><div class="nebula b"></div>
+<main>
+  <!-- главная: профиль, игра, лидеры -->
+  <section class="screen" id="home" hidden>
+    <div class="mono">Звёздная гильдия · StarGuardian</div>
+    <div class="who">
+      <div class="sigil" id="sigil">✦</div>
+      <div><h1 id="title">Ученик звёзд</h1><div class="name" id="name"></div></div>
+    </div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="bar-note"><span id="pts">0 очков</span><span id="next"></span></div>
+    <div class="chips">
+      <div class="chip"><b id="karma">0</b><span>карма</span></div>
+      <div class="chip"><b id="place">—</b><span>место</span></div>
+      <div class="chip"><b id="todayc">0/12</b><span>раундов сегодня</span></div>
+    </div>
+
+    <div class="game-card">
+      <div class="mono" style="color: rgba(255,255,255,.7)">Игра</div>
+      <h2>Угадай трек</h2>
+      <p>Звучит отрывок из «Мастерской 47». Узнай трек, пока не погасло кольцо.</p>
+      <div class="rules">Быстро — 10 очков, за 15 секунд — 7, позже — 5. Пять подряд — ещё +5. Очки — за 12 раундов в день, дальше можно тренироваться.</div>
+      <button class="btn" id="play">Играть</button>
+    </div>
+
+    <div class="hall">
+      <div class="hall-head">
+        <div class="mono">Звёздный зал</div>
+        <div class="seg"><button aria-pressed="true" data-k="all">За всё время</button><button aria-pressed="false" data-k="today">Сегодня</button></div>
+      </div>
+      <ol class="list" id="list"></ol>
+    </div>
+  </section>
+
+  <!-- раунд -->
+  <section class="screen" id="game" hidden>
+    <div class="game-top"><div class="mono" id="roundc">Раунд</div><div class="streak" id="streak"></div></div>
+    <div class="orb-wrap">
+      <svg class="ring" viewBox="0 0 210 210"><circle class="track" cx="105" cy="105" r="101"/><circle class="left" id="left" cx="105" cy="105" r="101"/></svg>
+      <div class="orb" id="orb"></div>
+      <div class="orb-text"><div><b id="sec">20</b><small id="secnote">секунд</small></div></div>
+      <div class="gain" id="gain">+10</div>
+    </div>
+    <div class="status" id="status">Слушай…</div>
+    <div class="options" id="options"></div>
+    <div class="result" id="result"></div>
+    <div class="practice" id="practice" hidden>Сегодня очки уже собраны — это тренировка.</div>
+    <button class="btn" id="nextbtn" hidden>Дальше</button>
+    <button class="btn ghost" id="homebtn" hidden>В гильдию</button>
+  </section>
+
+  <section class="screen" id="nope" hidden>
+    <div class="notice" id="nopetext">Открой игру из Телеграма — через бота StarGuardian.</div>
+  </section>
+</main>
+
+<script>
+(function () {
+  // адрес сервера игр (Val Town); на локальной проверке можно передать ?api=
+  var API = "";
+  var local = /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
+  if (local && new URLSearchParams(location.search).get("api")) API = new URLSearchParams(location.search).get("api");
+
+  var tg = window.Telegram && Telegram.WebApp;
+  var initData = (tg && tg.initData) || (local && new URLSearchParams(location.search).get("init")) || "";
+  if (tg) {
+    tg.ready(); tg.expand();
+    try { tg.setHeaderColor("#07060f"); tg.setBackgroundColor("#07060f"); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
+  }
+  var haptic = function (kind) { try { tg && tg.HapticFeedback && (kind === "light" ? tg.HapticFeedback.impactOccurred("light") : tg.HapticFeedback.notificationOccurred(kind)); } catch (e) {} };
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------- звёздное небо ----------
+  var sky = $("sky"), ctx = sky.getContext("2d"), stars = [];
+  function sizeSky() {
+    var r = Math.min(devicePixelRatio || 1, 2);
+    sky.width = innerWidth * r; sky.height = innerHeight * r; ctx.setTransform(r, 0, 0, r, 0, 0);
+    stars = [];
+    for (var i = 0; i < Math.round(innerWidth * innerHeight / 2600); i++)
+      stars.push({ x: Math.random() * innerWidth, y: Math.random() * innerHeight, r: Math.random() * 1.2 + .2, p: Math.random() * 6.28, s: .4 + Math.random() * 1.4 });
+  }
+  function drawSky(t) {
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i], a = .35 + .65 * (.5 + .5 * Math.sin(s.p + t / 1000 * s.s));
+      ctx.globalAlpha = a; ctx.fillStyle = i % 9 ? "#fff" : "#c4b5fd";
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.283); ctx.fill();
+    }
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) requestAnimationFrame(drawSky);
+  }
+  sizeSky(); requestAnimationFrame(drawSky); addEventListener("resize", sizeSky);
+
+  // ---------- сервер ----------
+  function call(path, body) {
+    return fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json", "X-Init-Data": initData }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
+  }
+  function show(id) { ["home", "game", "nope"].forEach(function (s) { $(s).hidden = s !== id; }); scrollTo(0, 0); }
+  function nope(text) { $("nopetext").textContent = text; show("nope"); }
+
+  // ---------- профиль ----------
+  var me = null, topData = null, topKey = "all";
+  function renderMe(p) {
+    me = p;
+    $("title").textContent = p.title; $("name").textContent = p.name;
+    $("sigil").textContent = (p.name || "✦").trim().charAt(0).toUpperCase();
+    $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
+    $("karma").textContent = p.karma; $("place").textContent = p.place || "—";
+    $("todayc").textContent = Math.min(p.today.scored, p.today.max) + "/" + p.today.max;
+    var lad = [0, 30, 100, 250, 500, 1000, 2000, 4000, 8000], prev = 0;
+    lad.forEach(function (n) { if (p.points >= n) prev = n; });
+    $("next").textContent = p.next ? "до следующего звания " + (p.next - p.points) : "высшее звание";
+    $("bar").style.width = (p.next ? Math.max(3, (p.points - prev) / (p.next - prev) * 100) : 100) + "%";
+  }
+  function plural(n, a, b, c) { n = Math.abs(n) % 100; var m = n % 10; return n > 10 && n < 20 ? c : m === 1 ? a : m >= 2 && m <= 4 ? b : c; }
+  function renderTop() {
+    var rows = topData ? topData[topKey] : [], list = $("list");
+    list.innerHTML = "";
+    if (!rows.length) { list.innerHTML = '<li class="empty" style="display:block">' + (topKey === "today" ? "Сегодня ещё никто не играл" : "Пока пусто — стань первым") + "</li>"; return; }
+    rows.forEach(function (r, i) {
+      var li = document.createElement("li");
+      li.innerHTML = '<span class="n">' + (i + 1) + '</span><span><span class="nm"></span><span class="t"></span></span><span class="p">' + r.points + "</span>";
+      li.querySelector(".nm").textContent = r.name; li.querySelector(".t").textContent = r.title || "";
+      list.appendChild(li);
+    });
+  }
+  document.querySelectorAll(".seg button").forEach(function (b) {
+    b.onclick = function () {
+      topKey = b.dataset.k; document.querySelectorAll(".seg button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); }); renderTop();
+    };
+  });
+  function home() {
+    show("home");
+    if (tg && tg.BackButton) tg.BackButton.hide();
+    stopAudio(false);
+    return Promise.all([call("/api/me").then(renderMe), call("/api/top").then(function (t) { topData = t; renderTop(); })]);
+  }
+
+  // ---------- раунд ----------
+  // Звук — через Web Audio: контекст включается в момент нажатия (иначе iOS молчит), отрывок играет из памяти.
+  var actx = null, source = null, gainNode = null;
+  var timer = null, round = null, startAt = 0, roundNo = 0;
+  var C = 2 * Math.PI * 101; $("left").style.strokeDasharray = C;
+  function unlock() {
+    if (!actx) { var A = window.AudioContext || window.webkitAudioContext; actx = new A(); gainNode = actx.createGain(); gainNode.connect(actx.destination); }
+    if (actx.state !== "running") actx.resume();
+  }
+  function stopAudio(fade) {
+    clearInterval(timer);
+    if (!source) return;
+    var s = source; source = null;
+    try {
+      if (fade) { gainNode.gain.setTargetAtTime(0, actx.currentTime, .35); setTimeout(function () { try { s.stop(); } catch (e) {} gainNode.gain.value = 1; }, 1500); }
+      else s.stop();
+    } catch (e) {}
+  }
+  function loadAudio(url) {
+    return fetch(url).then(function (r) { if (!r.ok) throw new Error("отрывок не загрузился"); return r.arrayBuffer(); })
+      .then(function (buf) { return new Promise(function (ok, fail) { actx.decodeAudioData(buf, ok, fail); }); });
+  }
+  function setRing(left, total) { $("left").style.strokeDashoffset = C * (1 - left / total); }
+
+  function play() {
+    unlock(); haptic("light");
+    show("game"); if (tg && tg.BackButton) tg.BackButton.show();
+    $("orb").className = "orb"; $("options").innerHTML = ""; $("options").className = "options";
+    $("result").textContent = ""; $("nextbtn").hidden = true; $("homebtn").hidden = true;
+    $("status").textContent = "Загружаю отрывок…"; $("sec").textContent = "…"; $("secnote").textContent = ""; setRing(1, 1);
+    call("/api/round").then(function (r) {
+      round = r; roundNo++;
+      $("roundc").textContent = "Раунд " + roundNo;
+      $("practice").hidden = !r.practice;
+      r.options.forEach(function (o) {
+        var b = document.createElement("button"); b.className = "opt"; b.textContent = o.title; b.dataset.id = o.id;
+        b.onclick = function () { pick(o.id, b); }; $("options").appendChild(b);
+      });
+      startAt = 0;
+      return loadAudio(API + r.audio).then(function (buffer) {
+        if (round !== r) return;
+        gainNode.gain.value = 1;
+        source = actx.createBufferSource(); source.buffer = buffer; source.connect(gainNode); source.start();
+        begin(r.seconds);
+      });
+    }).catch(function (e) { $("status").textContent = "Не получилось: " + e.message; $("homebtn").hidden = false; });
+  }
+  function begin(total) {
+    startAt = Date.now(); $("orb").classList.add("playing"); $("status").textContent = "Слушай и выбирай";
+    clearInterval(timer);
+    timer = setInterval(function () {
+      var left = Math.max(0, total - (Date.now() - startAt) / 1000);
+      $("sec").textContent = Math.ceil(left); $("secnote").textContent = "секунд"; setRing(left, total);
+      if (left <= 0) { clearInterval(timer); if (round) pick("", null); }
+    }, 100);
+  }
+  function pick(id, btn) {
+    if (!round) return; var r = round; round = null;
+    clearInterval(timer); $("options").classList.add("locked"); $("orb").classList.remove("playing");
+    call("/api/answer", { round: r.round, choice: id }).then(function (a) {
+      if (a.error) throw new Error(a.error);
+      document.querySelectorAll(".opt").forEach(function (b) {
+        if (b.dataset.id === a.answer.id) b.classList.add("right");
+        else if (b === btn) b.classList.add("wrong"); else b.classList.add("dim");
+      });
+      $("orb").classList.add(a.right ? "right" : "wrong");
+      haptic(a.right ? "success" : "error");
+      var gained = a.points + a.bonus;
+      if (gained) { $("gain").textContent = "+" + gained; $("gain").className = "gain"; void $("gain").offsetWidth; $("gain").className = "gain fly"; }
+      $("sec").textContent = a.right ? "✓" : "✕"; $("secnote").textContent = "";
+      $("status").textContent = a.right ? (a.late ? "Верно, но время вышло" : "Верно!") : (id ? "Мимо" : "Время вышло");
+      $("result").textContent = a.answer.title + " · Vol. " + a.answer.vol + ", трек " + a.answer.n + (a.bonus ? " · серия ×5, +5" : "");
+      $("streak").textContent = a.streak > 1 ? "серия " + a.streak : ""; $("streak").className = "streak" + (a.streak > 1 ? " on" : "");
+      $("practice").hidden = !a.practice;
+      renderMe(a.me);
+      $("nextbtn").hidden = false; $("homebtn").hidden = false;
+      setTimeout(function () { stopAudio(true); }, a.right ? 2500 : 4000);
+    }).catch(function (e) { $("status").textContent = "Не получилось: " + e.message; $("homebtn").hidden = false; });
+  }
+
+  $("play").onclick = play;
+  $("nextbtn").onclick = play;
+  $("homebtn").onclick = home;
+  if (tg && tg.BackButton) tg.BackButton.onClick(home);
+
+  // ---------- старт ----------
+  if (!API) nope("Сервер игр ещё не подключён.");
+  else if (!initData) nope("Открой игру из Телеграма — через бота StarGuardian.");
+  else home().catch(function (e) { nope(e.message === "Открой игру из Телеграма" ? "Открой игру из Телеграма — через бота StarGuardian." : "Не получилось связаться с сервером игр."); });
+})();
+</script>
+</body>
+</html>
