@@ -35,6 +35,12 @@
 
   /* фон — искры рилса «Мастерской 47», Vol. 3 (../sparks.js, как на первом экране сайта): тёмный янтарь, расфокус, туман */
   .bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; isolation: isolate; background: var(--bg); pointer-events: none; }
+  /* искры рилса — только в «Угадай трек из Мастерской 47»; в гильдии — Великий аттрактор */
+  body:not([data-screen="game"]) .bg { display: none; }
+  body[data-screen="game"] .attractor { display: none; }
+  body[data-screen="game"] .bg { animation: fadein .6s ease-out; }
+  @keyframes fadein { from { opacity: 0; } }
+  .attractor { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; display: block; pointer-events: none; background: #04050d; }
   .sparks { position: absolute; inset: 0; width: 100%; height: 100%; display: block; filter: blur(3.5px) brightness(1.6) saturate(1.2); transform: scale(1.04); }
   .bg::before { content: ""; position: absolute; inset: 0; z-index: 1;
     background:
@@ -101,17 +107,7 @@
   .streak { font-size: 14px; color: var(--gold); opacity: 0; transition: opacity .3s; }
   .streak.on { opacity: 1; }
   .orb-wrap { position: relative; width: 210px; height: 210px; margin: 26px auto 10px; }
-  .orb { position: absolute; inset: 22px; border-radius: 50%;
-    background: radial-gradient(circle at 38% 32%, #fff6df 0%, #ffd27a 22%, #e08a2a 50%, #6b2f0c 78%, #2a1206 100%);
-    box-shadow: 0 0 50px rgba(255, 180, 80, .55), 0 0 120px rgba(242, 169, 59, .25), inset 0 0 30px rgba(255, 255, 255, .18); transition: transform .3s; }
-  .orb.playing { animation: pulse 1.6s ease-in-out infinite; }
-  .orb.right { background: radial-gradient(circle at 38% 32%, #ccfbf1, #2dd4bf 30%, #0f5e57 70%, #062b29); box-shadow: 0 0 46px rgba(94, 234, 212, .6); }
-  .orb.wrong { background: radial-gradient(circle at 38% 32%, #ffe4e6, #f43f5e 30%, #6b1023 70%, #2a0610); box-shadow: 0 0 40px rgba(251, 113, 133, .5); }
-  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.045); } }
-  .ring { position: absolute; inset: 0; transform: rotate(-90deg); }
-  .ring circle { fill: none; stroke-width: 3; }
-  .ring .track { stroke: var(--faint); }
-  .ring .left { stroke: var(--gold); stroke-linecap: round; filter: drop-shadow(0 0 5px rgba(255, 196, 105, .9)); }
+  .dust { position: absolute; left: -60px; top: -60px; width: 330px; height: 330px; pointer-events: none; }  /* с запасом: пыль разлетается за кольцо */
   .orb-text { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; }
   .orb-text b { font-size: 44px; font-weight: 700; letter-spacing: -.03em; color: #fffaf0; text-shadow: 0 1px 14px rgba(80, 30, 0, .6); }
   .orb-text small { display: block; font-size: 12px; color: rgba(255, 255, 255, .8); margin-top: -4px; }
@@ -135,6 +131,7 @@
 </style>
 </head>
 <body>
+<canvas class="attractor" id="attractor" aria-hidden="true"></canvas>
 <div class="bg" aria-hidden="true"><canvas class="sparks" id="sparks"></canvas></div>
 <main>
   <!-- главная: профиль, игра, лидеры -->
@@ -154,9 +151,8 @@
 
     <div class="game-card">
       <div class="mono" style="color: rgba(255,255,255,.7)">Игра</div>
-      <h2>Угадай трек</h2>
-      <p>Звучит отрывок из «Мастерской 47». Узнай трек, пока не погасло кольцо.</p>
-      <div class="rules">Быстро — 10 очков, за 15 секунд — 7, позже — 5. Пять подряд — ещё +5. Очки — за 12 раундов в день, дальше можно тренироваться.</div>
+      <h2>Угадай трек из Мастерской 47</h2>
+      <p>Звучит отрывок — узнай трек, пока кольцо звёздной пыли не рассеялось.</p>
       <button class="btn" id="play">Играть</button>
     </div>
 
@@ -173,15 +169,14 @@
   <section class="screen" id="game" hidden>
     <div class="game-top"><div class="mono" id="roundc">Раунд</div><div class="streak" id="streak"></div></div>
     <div class="orb-wrap">
-      <svg class="ring" viewBox="0 0 210 210"><circle class="track" cx="105" cy="105" r="101"/><circle class="left" id="left" cx="105" cy="105" r="101"/></svg>
-      <div class="orb" id="orb"></div>
+      <canvas class="dust" id="dust"></canvas>
       <div class="orb-text"><div><b id="sec">20</b><small id="secnote">секунд</small></div></div>
       <div class="gain" id="gain">+10</div>
     </div>
     <div class="status" id="status">Слушай…</div>
     <div class="options" id="options"></div>
     <div class="result" id="result"></div>
-    <div class="practice" id="practice" hidden>Сегодня очки уже собраны — это тренировка.</div>
+    <div class="practice" id="practice" hidden>Сегодня — тренировочные раунды.</div>
     <button class="btn" id="nextbtn" hidden>Дальше</button>
     <button class="btn ghost" id="homebtn" hidden>В гильдию</button>
   </section>
@@ -213,7 +208,12 @@
       .catch(function () { throw new Error("нет связи с сервером игр"); })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
   }
-  function show(id) { ["home", "game", "nope"].forEach(function (s) { $(s).hidden = s !== id; }); scrollTo(0, 0); }
+  function show(id) {
+    ["home", "game", "nope"].forEach(function (s) { $(s).hidden = s !== id; });
+    var was = document.body.dataset.screen; document.body.dataset.screen = id; scrollTo(0, 0);
+    if (id === "game" && was !== "game") { dispatchEvent(new Event("resize")); dust.start(); attractor.stop(); }
+    if (id !== "game") { dust.stop(); attractor.start(); }
+  }
   function nope(text) { $("nopetext").textContent = text; show("nope"); }
 
   // ---------- профиль ----------
@@ -257,9 +257,14 @@
   // ---------- раунд ----------
   // Звук — через Web Audio: контекст включается в момент нажатия (иначе iOS молчит), отрывок играет из памяти.
   // У каждого отрывка свой регулятор громкости; новый отрывок всегда сначала глушит старый.
-  var actx = null, playing = null, loading = null;
+  var actx = null, playing = null, loading = null, analyser = null, levelBuf = null;
+  function level() {        // громкость отрывка 0…1 — пыль дрожит в такт
+    if (!analyser || !playing) return 0;
+    analyser.getByteTimeDomainData(levelBuf);
+    var sum = 0; for (var i = 0; i < levelBuf.length; i += 4) { var v = (levelBuf[i] - 128) / 128; sum += v * v; }
+    return Math.min(1, Math.sqrt(sum / (levelBuf.length / 4)) * 3);
+  }
   var timer = null, round = null, startAt = 0, roundNo = 0, busy = false;
-  var C = 2 * Math.PI * 101; $("left").style.strokeDasharray = C;
   function unlock() {
     if (!actx) { var A = window.AudioContext || window.webkitAudioContext; actx = new A(); }
     if (actx.state !== "running") { var r = actx.resume(); if (r && r.catch) r.catch(function () {}); }
@@ -276,6 +281,8 @@
   function startAudio(buffer) {
     stopAudio(false);
     var g = actx.createGain(); g.connect(actx.destination);
+    if (!analyser) { analyser = actx.createAnalyser(); analyser.fftSize = 512; levelBuf = new Uint8Array(analyser.fftSize); }
+    g.connect(analyser);
     var src = actx.createBufferSource(); src.buffer = buffer; src.connect(g); src.start();
     playing = { src: src, gain: g };
     return playing;
@@ -290,14 +297,14 @@
       .then(function (buf) { return new Promise(function (ok, fail) { actx.decodeAudioData(buf, ok, fail); }); })
       .finally(function () { clearTimeout(guard); if (loading === ctrl) loading = null; });
   }
-  function setRing(left, total) { $("left").style.strokeDashoffset = C * (1 - left / total); }
+  function setRing(left, total) { dust.set(left / total); }
 
   function play() {
     if (busy) return;                      // двойное нажатие — один раунд
     busy = true; round = null; clearInterval(timer); stopAudio(false);
     unlock(); haptic("light");
     show("game"); if (tg && tg.BackButton) tg.BackButton.show();
-    $("orb").className = "orb"; $("options").innerHTML = ""; $("options").className = "options";
+    dust.mode("idle"); $("options").innerHTML = ""; $("options").className = "options";
     $("result").textContent = ""; $("nextbtn").hidden = true; $("homebtn").hidden = true; $("streak").className = "streak";
     $("status").textContent = "Загружаю отрывок…"; $("sec").textContent = "…"; $("secnote").textContent = ""; setRing(1, 1);
     call("/api/round").then(function (r) {
@@ -322,7 +329,7 @@
     });
   }
   function begin(total) {
-    startAt = Date.now(); $("orb").classList.add("playing"); $("status").textContent = "Слушай и выбирай";
+    startAt = Date.now(); dust.mode("play"); $("status").textContent = "Слушай и выбирай";
     clearInterval(timer);
     timer = setInterval(function () {
       var left = Math.max(0, total - (Date.now() - startAt) / 1000);
@@ -332,14 +339,14 @@
   }
   function pick(id, btn) {
     if (!round) return; var r = round; round = null;
-    clearInterval(timer); $("options").classList.add("locked"); $("orb").classList.remove("playing");
+    clearInterval(timer); $("options").classList.add("locked");
     call("/api/answer", { round: r.round, choice: id }).then(function (a) {
       if (a.error) throw new Error(a.error);
       document.querySelectorAll(".opt").forEach(function (b) {
         if (b.dataset.id === a.answer.id) b.classList.add("right");
         else if (b === btn) b.classList.add("wrong"); else b.classList.add("dim");
       });
-      $("orb").classList.add(a.right ? "right" : "wrong");
+      dust.mode(a.right ? "right" : "wrong");
       haptic(a.right ? "success" : "error");
       var gained = a.points + a.bonus;
       if (gained) { $("gain").textContent = "+" + gained; $("gain").className = "gain"; void $("gain").offsetWidth; $("gain").className = "gain fly"; }
@@ -360,6 +367,155 @@
   }
   // приложение свернули — звук на паузу не нужен, но таймер и звук не должны «зависнуть» после возврата
   document.addEventListener("visibilitychange", function () { if (!document.hidden && actx && actx.state !== "running") actx.resume(); });
+
+  // ---------- кольцо звёздной пыли (таймер раунда) ----------
+  // Плоское кольцо из частиц: светится дуга оставшегося времени (от верха по часовой), прошедшее — рассеивается наружу.
+  var dust = (function () {
+    var cv = $("dust"), c = cv.getContext("2d"), S = 330, CX = 165, R = 86, parts = [], raf = 0, t0 = performance.now();
+    var f = 1, mode = "idle", lvl = 0, tint = 0, swell = 0, tintTo = 0, swellTo = 0;
+    function g() { var s = 0; for (var i = 0; i < 4; i++) s += Math.random(); return (s - 2) / .577; }
+    function init() {
+      var d = Math.min(devicePixelRatio || 1, 2); cv.width = S * d; cv.height = S * d; c.setTransform(d, 0, 0, d, 0, 0);
+      parts = [];
+      for (var i = 0; i < 1100; i++) {
+        var haze = i < 90;
+        parts.push({ a: Math.random() * 6.2832, r: R + g() * (haze ? 9 : 5.5), w: (.05 + Math.random() * .16) * (Math.random() < .15 ? -1 : 1),
+          s: haze ? 5 + Math.random() * 7 : .6 + Math.random() * 1.5, k: haze ? .05 + Math.random() * .05 : .25 + Math.random() * .75,
+          col: haze ? 0 : Math.random() < .14 ? 2 : Math.random() < .55 ? 1 : 3, lit: 1, ph: Math.random() * 6.28 });
+      }
+    }
+    // цвета: 0 — тёплая дымка, 1 — золото, 2 — розово-фиолетовые крупинки (как в рилсе), 3 — светлая пыль
+    var PAL = [[255, 170, 80], [255, 200, 110], [225, 120, 255], [255, 240, 215]], GOOD = [94, 234, 212], BAD = [251, 113, 133];
+    function frame(ts) {
+      raf = requestAnimationFrame(frame);
+      var t = (ts - t0) / 1000;
+      lvl += (level() - lvl) * .25;
+      tint += (tintTo - tint) * .08; swell += (swellTo - swell) * .06;
+      c.clearRect(0, 0, S, S); c.globalCompositeOperation = "lighter";
+      var limit = f * 6.2832;
+      for (var i = 0; i < parts.length; i++) {
+        var p = parts[i], ang = p.a + t * p.w * (1 + lvl * .8);
+        var pos = ((ang % 6.2832) + 6.2832) % 6.2832;
+        var on = mode === "play" ? (pos <= limit ? 1 : 0) : 1;
+        p.lit += (on - p.lit) * .07;
+        var r = p.r + (1 - p.lit) * (14 + p.k * 10) + Math.sin(t * 3 + p.ph) * lvl * 3 + swell * (p.r - R + 8);
+        var x = CX + Math.sin(ang) * r, y = CX - Math.cos(ang) * r;
+        var base = PAL[p.col], to = tintTo > 0 ? GOOD : BAD, m = Math.abs(tint);
+        var col = [base[0] + (to[0] - base[0]) * m, base[1] + (to[1] - base[1]) * m, base[2] + (to[2] - base[2]) * m];
+        var a = p.k * (.12 + .88 * p.lit) * (.75 + .25 * Math.sin(t * 2 + p.ph)) * (1 + lvl * .6);
+        c.globalAlpha = Math.min(1, a);
+        c.fillStyle = "rgb(" + (col[0] | 0) + "," + (col[1] | 0) + "," + (col[2] | 0) + ")";
+        if (p.s > 3) { c.beginPath(); c.arc(x, y, p.s, 0, 6.2832); c.fill(); } else c.fillRect(x - p.s / 2, y - p.s / 2, p.s, p.s);
+      }
+      c.globalCompositeOperation = "source-over"; c.globalAlpha = 1;
+    }
+    init();
+    return {
+      start: function () { if (!raf) raf = requestAnimationFrame(frame); },
+      stop: function () { cancelAnimationFrame(raf); raf = 0; },
+      set: function (v) { f = Math.max(0, Math.min(1, v)); },
+      mode: function (m) {
+        mode = m;
+        if (m === "idle" || m === "play") { tintTo = 0; swellTo = 0; f = 1; parts.forEach(function (p) { if (m === "idle") p.lit = 1; }); }
+        if (m === "right") { tintTo = 1; swellTo = -.35; f = 1; }   // верно — пыль бирюзовая и собирается
+        if (m === "wrong") { tintTo = -1; swellTo = .7; f = 1; }    // мимо — розовая и разлетается
+      }
+    };
+  })();
+
+  // ---------- Великий аттрактор (фон гильдии) ----------
+  // Невидимая точка за полосой пыли Млечного Пути: к ней медленно стекаются галактики и звёзды.
+  var attractor = (function () {
+    var cv = $("attractor"), c = cv.getContext("2d"), still = document.createElement("canvas"), sc = still.getContext("2d");
+    var W = 0, H = 0, P = [0, 0], flow = [], raf = 0, last = 0, t0 = performance.now();
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function layout() {
+      var d = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
+      cv.width = still.width = W * d; cv.height = still.height = H * d;
+      c.setTransform(d, 0, 0, d, 0, 0); sc.setTransform(d, 0, 0, d, 0, 0);
+      P = [W * .7, H * .3];
+      // неподвижный слой: глубина, далёкие звёзды, свечение аттрактора и тёмная полоса пыли
+      var bg = sc.createLinearGradient(0, 0, W * .4, H);
+      bg.addColorStop(0, "#070818"); bg.addColorStop(.55, "#0a0716"); bg.addColorStop(1, "#04040b");
+      sc.fillStyle = bg; sc.fillRect(0, 0, W, H);
+      for (var i = 0; i < W * H / 900; i++) {
+        sc.globalAlpha = Math.random() * .7 + .1; sc.fillStyle = Math.random() < .2 ? "#c9b8ff" : Math.random() < .3 ? "#ffe2b8" : "#ffffff";
+        var s = Math.random() < .93 ? .7 : 1.4; sc.fillRect(Math.random() * W, Math.random() * H, s, s);
+      }
+      sc.globalAlpha = 1;
+      var glow = sc.createRadialGradient(P[0], P[1], 0, P[0], P[1], Math.max(W, H) * .55);
+      glow.addColorStop(0, "rgba(255, 244, 225, .95)"); glow.addColorStop(.03, "rgba(255, 210, 150, .6)"); glow.addColorStop(.1, "rgba(240, 150, 120, .3)");
+      glow.addColorStop(.26, "rgba(150, 90, 220, .2)"); glow.addColorStop(.55, "rgba(60, 40, 140, .08)"); glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+      sc.fillStyle = glow; sc.fillRect(0, 0, W, H);
+      // полоса пыли Млечного Пути — «зона избегания», за ней прячется аттрактор
+      sc.save(); sc.translate(P[0], P[1]); sc.rotate(-.42);
+      sc.filter = "blur(16px)";                       // полоса — мягкая, как пыль, а не нарисованная лента
+      for (var k = 0; k < 26; k++) {
+        var w = (Math.random() * .5 + .5) * 70, y = g() * 22, x = (Math.random() - .5) * W * 2.4;
+        var lane = sc.createRadialGradient(x, y, 0, x, y, w * 2.2);
+        lane.addColorStop(0, "rgba(6, 3, 10, .75)"); lane.addColorStop(.5, "rgba(20, 10, 18, .35)"); lane.addColorStop(1, "rgba(20, 10, 18, 0)");
+        sc.fillStyle = lane; sc.beginPath(); sc.ellipse(x, y, w * 3.4, w * .9, 0, 0, 6.2832); sc.fill();
+      }
+      var band = sc.createLinearGradient(0, -60, 0, 60);
+      band.addColorStop(0, "rgba(120, 70, 60, 0)"); band.addColorStop(.35, "rgba(70, 35, 40, .18)"); band.addColorStop(.5, "rgba(8, 4, 10, .55)");
+      band.addColorStop(.65, "rgba(70, 35, 40, .18)"); band.addColorStop(1, "rgba(120, 70, 60, 0)");
+      sc.fillStyle = band; sc.fillRect(-W * 1.5, -60, W * 3, 120);
+      sc.filter = "none"; sc.restore();
+      // свет аттрактора пробивается сквозь край пыли
+      sc.globalCompositeOperation = "lighter";
+      var leak = sc.createRadialGradient(P[0], P[1] - 14, 0, P[0], P[1] - 14, Math.max(W, H) * .22);
+      leak.addColorStop(0, "rgba(255, 225, 180, .55)"); leak.addColorStop(.12, "rgba(255, 170, 110, .22)");
+      leak.addColorStop(.45, "rgba(170, 100, 230, .08)"); leak.addColorStop(1, "rgba(0, 0, 0, 0)");
+      sc.fillStyle = leak; sc.fillRect(0, 0, W, H);
+      sc.globalCompositeOperation = "source-over";
+      // далёкие галактики-пятнышки
+      for (var q = 0; q < 14; q++) {
+        var gx = Math.random() * W, gy = Math.random() * H, gr = 3 + Math.random() * 6;
+        var gg = sc.createRadialGradient(gx, gy, 0, gx, gy, gr * 3);
+        gg.addColorStop(0, "rgba(255, 235, 215, .5)"); gg.addColorStop(1, "rgba(160, 130, 255, 0)");
+        sc.save(); sc.translate(gx, gy); sc.rotate(Math.random() * 3.14); sc.scale(1, .45); sc.translate(-gx, -gy);
+        sc.fillStyle = gg; sc.beginPath(); sc.arc(gx, gy, gr * 3, 0, 6.2832); sc.fill(); sc.restore();
+      }
+      // туман снизу — под список лидеров
+      var fog = sc.createLinearGradient(0, H * .45, 0, H);
+      fog.addColorStop(0, "rgba(4, 4, 11, 0)"); fog.addColorStop(1, "rgba(4, 4, 11, .55)");
+      sc.fillStyle = fog; sc.fillRect(0, 0, W, H);
+      flow = []; for (var j = 0; j < 420; j++) flow.push(spawn(true));
+      draw(performance.now());
+    }
+    function g() { var s = 0; for (var i = 0; i < 4; i++) s += Math.random(); return (s - 2) / .577; }
+    function spawn(anywhere) {
+      var R = Math.hypot(W, H) * (anywhere ? .08 + Math.random() * .95 : .9 + Math.random() * .2);
+      return { r: R, a: Math.random() * 6.2832, gal: Math.random() < .12, tilt: Math.random() * 3.14, s: .6 + Math.random() * 1.2,
+               hue: Math.random() < .3 ? "#c9b8ff" : Math.random() < .5 ? "#ffd9a8" : "#eef0ff" };
+    }
+    function draw(ts) {
+      var dt = Math.min(.05, (ts - (last || ts)) / 1000); last = ts;
+      c.drawImage(still, 0, 0, W, H);
+      for (var i = 0; i < flow.length; i++) {
+        var p = flow[i];
+        p.r -= dt * (10 + 2600 / (p.r + 40));          // ближе к аттрактору — быстрее
+        p.a += dt * (14 / (p.r + 60));                 // лёгкое закручивание
+        if (p.r < 6) { flow[i] = spawn(false); continue; }
+        var x = P[0] + Math.cos(p.a) * p.r, y = P[1] + Math.sin(p.a) * p.r * .8;
+        var near = Math.max(0, 1 - p.r / 260);
+        c.globalAlpha = Math.min(1, .4 + near * .6) * Math.min(1, p.r / 30);
+        c.fillStyle = p.hue;
+        if (p.gal) { c.save(); c.translate(x, y); c.rotate(p.tilt); c.beginPath(); c.ellipse(0, 0, 2.6 * p.s, .9 * p.s, 0, 0, 6.2832); c.fill(); c.restore(); }
+        else c.fillRect(x, y, p.s, p.s);
+        if (near > .4) {                                // у самого аттрактора — растягиваются в штрихи
+          c.globalAlpha *= .35; c.strokeStyle = p.hue; c.lineWidth = p.s * .6; c.beginPath(); c.moveTo(x, y);
+          c.lineTo(x + Math.cos(p.a) * 9 * near, y + Math.sin(p.a) * 7 * near); c.stroke();
+        }
+      }
+      c.globalAlpha = 1;
+    }
+    function frame(ts) { raf = requestAnimationFrame(frame); if (ts - last < 30) return; draw(ts); }
+    var rz = 0; addEventListener("resize", function () { clearTimeout(rz); rz = setTimeout(layout, 150); });
+    layout();
+    return { start: function () { if (!raf && !reduce) { last = 0; raf = requestAnimationFrame(frame); } },
+             stop: function () { cancelAnimationFrame(raf); raf = 0; } };
+  })();
 
   $("play").onclick = play;
   $("nextbtn").onclick = play;
