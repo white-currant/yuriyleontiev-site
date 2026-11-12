@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611130242";
+    var BUILD = "202611130244";
     try {
       fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
         v = (v || "").trim();
@@ -227,6 +227,45 @@
   .result { margin-top: 14px; text-align: center; font-size: 14px; color: var(--dim); min-height: 20px; }
   .notice { margin-top: 40vh; text-align: center; color: var(--dim); }
   .practice { margin-top: 10px; text-align: center; font-size: 12.5px; color: var(--gold); }
+
+  /* ======= без рамочек (вкус пользователя, 2026-11-13): группируем воздухом, типографикой и цветом, а не коробками ======= */
+  .chips { display: flex; gap: 28px; margin-top: 18px; }
+  .chip { padding: 0; border: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 0; }
+  .chip b { font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .chip span { display: block; margin-top: -2px; }
+  .game-card { margin-top: 34px; padding: 0; border: 0; border-radius: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; overflow: visible; }
+  .game-card h2 { font-size: 26px; letter-spacing: -.02em; }
+  .game-card p { color: var(--dim); }
+  .game-card .btn { width: auto; display: inline-flex; padding: 0 26px; }
+  .link-card { margin-top: 26px; padding: 0; border: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 0; }
+  .btn.ghost { border: 0; background: none; padding: 0; min-height: 36px; width: auto; display: inline-flex; color: var(--gold); font-weight: 600; justify-content: flex-start; }
+  .link-card .row .btn.ghost::after, .farm-actions .btn.ghost::after { content: " →"; white-space: pre; }
+  .hall { margin-top: 44px; }
+  .seg { background: none; padding: 0; gap: 16px; }
+  .seg button { padding: 4px 0; border-radius: 0; background: none !important; border-bottom: 2px solid transparent; }
+  .seg button[aria-pressed="true"] { color: var(--white); border-bottom-color: var(--gold); }
+  .list { border: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; padding: 0; margin-top: 14px; border-radius: 0; }
+  .list li { border: 0; padding: 9px 0; }
+  .exit { border: 0; background: none; padding: 0; min-height: 34px; color: var(--dim); }
+  .opt { border: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; padding: 12px 4px; border-radius: 10px;
+    font-size: 19px; font-weight: 600; letter-spacing: -.01em; transition: color .2s, opacity .3s, background .2s; }
+  .opt:active { background: rgba(255, 255, 255, .05); }
+  .opt.picked { background: none; box-shadow: none; transform: none; color: var(--gold); padding-right: 36px; }
+  .opt.picked::after { border-color: rgba(255, 196, 105, .3); border-top-color: var(--gold); }
+  .opt.right { background: none; color: #8ff0c4; }
+  .opt.right::before { content: "✓ "; }
+  .opt.wrong { background: none; color: var(--bad); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .options { gap: 2px; }
+  .dust-pill { border: 0; background: none; padding: 0; font-size: 18px; }
+  .banner { padding: 0; border: 0 !important; background: none !important; margin-top: 10px; }
+  .banner button { background: none; padding: 0; color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+  .farm-actions { display: flex; gap: 28px; }
+  .seed { border: 0; background: none; padding: 10px 0; }
+  .sheet { border-top: 0; }
+  .nlist li { border: 0; padding: 8px 0; }
+  .nlist button { background: none; padding: 0; }
+  .toast { border: 0; box-shadow: 0 10px 30px rgba(0, 0, 0, .4); }
+  .links .btn.ghost { min-height: 42px; }
 </style>
 </head>
 <body>
@@ -252,7 +291,7 @@
 
     <div class="game-card">
       <div class="mono" style="color: rgba(255,255,255,.7)">Игра</div>
-      <h2>Угадай трек из Мастерской 47</h2>
+      <h2>Угадай трек из Мастерской&nbsp;47</h2>
       <p>Звучит отрывок — узнай трек, пока кольцо звёздной пыли не рассеялось.</p>
       <button class="btn" id="play">Играть</button>
     </div>
