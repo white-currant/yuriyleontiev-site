@@ -65,15 +65,15 @@ export async function verifyInitData(raw: string, keyHex = testing.key, botId = 
 
 const nameOf = (u: any) => [u.first_name, u.last_name].filter(Boolean).join(" ") || "Без имени";
 
+// Игрок: завести/обновить имя и сбросить дневные счётчики в новый день — одним запросом (быстрее ответа в игре).
 async function player(u: any) {
-  await q("INSERT OR IGNORE INTO g_users (user, name, day) VALUES (?, ?, ?)", [u.id, nameOf(u), today()]);
-  await q("UPDATE g_users SET name = ? WHERE user = ?", [nameOf(u), u.id]);
-  const [row] = await q("SELECT day, scored, earned_today, streak, best_streak, played, correct, recent FROM g_users WHERE user = ?", [u.id]);
-  let [day, scored, earned, streak, best, played, correct, recent] = row;
-  if (day !== today()) {
-    await q("UPDATE g_users SET day = ?, scored = 0, earned_today = 0 WHERE user = ?", [today(), u.id]);
-    scored = 0; earned = 0;
-  }
+  const [row] = await q(`INSERT INTO g_users (user, name, day) VALUES (?1, ?2, ?3)
+      ON CONFLICT(user) DO UPDATE SET name = excluded.name,
+        scored = CASE WHEN g_users.day = excluded.day THEN g_users.scored ELSE 0 END,
+        earned_today = CASE WHEN g_users.day = excluded.day THEN g_users.earned_today ELSE 0 END,
+        day = excluded.day
+      RETURNING scored, earned_today, streak, best_streak, played, correct, recent`, [u.id, nameOf(u), today()]);
+  const [scored, earned, streak, best, played, correct, recent] = row;
   return { scored: Number(scored), earned: Number(earned), streak: Number(streak), best: Number(best),
            played: Number(played), correct: Number(correct), recent: JSON.parse(recent || "[]") as string[] };
 }
@@ -111,18 +111,26 @@ async function linkRemove(u: any) {
   return { state: "none" };
 }
 
-async function profile(u: any) {
-  const g = await player(u);
-  const [snap] = await q("SELECT points, karma, place, updated, name, avatar FROM g_profiles WHERE user = ?", [u.id]);
-  const consumed = Number((await q("SELECT value FROM g_meta WHERE key = 'consumed'"))[0]?.[0] || 0);
-  const pending = Number((await q("SELECT COALESCE(SUM(delta), 0) FROM g_events WHERE user = ? AND id > ?", [u.id, consumed]))[0][0]);
-  const points = Number(snap?.[0] || 0) + pending;
-  const link = await linkState(u.id);
+async function profile(u: any, g?: any) {
+  g = g || await player(u);
+  const [r] = await q(`SELECT p.points, p.karma, p.place, p.name, p.avatar,
+      (SELECT COALESCE(SUM(delta), 0) FROM g_events WHERE user = ?1
+         AND id > COALESCE((SELECT CAST(value AS INTEGER) FROM g_meta WHERE key = 'consumed'), 0)),
+      (SELECT value FROM g_meta WHERE key = 'owner'),
+      l.code, l.expires, l.title, l.state
+    FROM (SELECT ?1 AS uid) x LEFT JOIN g_profiles p ON p.user = x.uid LEFT JOIN g_links l ON l.user = x.uid`, [u.id]);
+  const [sp, karma, place, sname, savatar, pending, owner, lcode, lexp, ltitle, lstate] = r;
+  const points = Number(sp || 0) + Number(pending || 0);
+  // хозяин и так виден каналом — привязка ему не нужна
+  const link = String(u.id) === String(owner || "") ? null
+    : lstate === "linked" ? { state: "linked", title: ltitle }
+    : lstate === "pending" && Number(lexp) >= now() ? { state: "pending", code: lcode, expires: Number(lexp) }
+    : { state: "none" };
   // имя — как его показывает бот (хозяин — названием канала, привязавший — каналом); своё фото — только себе
-  const name = link?.state === "linked" ? link.title : snap?.[4] || nameOf(u);
-  const avatar = snap?.[5] ? `/avatar/${snap[5]}` : (link === null || link?.state === "linked") ? null : (u.photo_url || null);
+  const name = link?.state === "linked" ? link.title : sname || nameOf(u);
+  const avatar = savatar ? `/avatar/${savatar}` : (link === null || link?.state === "linked") ? null : (u.photo_url || null);
   return { name, avatar, link,
-           points, karma: Number(snap?.[1] || 0), place: snap ? Number(snap[2]) : null, ...rankOf(points),
+           points, karma: Number(karma || 0), place: sp != null ? Number(place) : null, ...rankOf(points),
            today: { scored: g.scored, max: SCORED_PER_DAY, earned: g.earned }, streak: g.streak, best_streak: g.best,
            played: g.played, correct: g.correct };
 }
@@ -142,9 +150,11 @@ async function newRound(u: any) {
   const others = pick(TRACKS.filter((t) => t[0] !== track[0]), 3);
   const options = pick([track, ...others], 4).map((t) => t[0]);
   const id = [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, "0")).join("");
-  await q("INSERT INTO g_rounds (id, user, track, options, started) VALUES (?, ?, ?, ?, ?)", [id, u.id, track[0], JSON.stringify(options), now()]);
-  await q("UPDATE g_users SET recent = ? WHERE user = ?", [JSON.stringify([track[0], ...g.recent].slice(0, 20)), u.id]);
-  await q("DELETE FROM g_rounds WHERE started < ?", [now() - 86400]);
+  await DB.batch([                                     // три записи — одним обращением к базе
+    DB.prepare("INSERT INTO g_rounds (id, user, track, options, started) VALUES (?, ?, ?, ?, ?)").bind(id, u.id, track[0], JSON.stringify(options), now()),
+    DB.prepare("UPDATE g_users SET recent = ? WHERE user = ?").bind(JSON.stringify([track[0], ...g.recent].slice(0, 20)), u.id),
+    DB.prepare("DELETE FROM g_rounds WHERE started < ?").bind(now() - 86400),
+  ]);
   return { round: id, audio: `/audio/${id}`, seconds: ROUND_SECONDS,
            options: options.map((tid) => ({ id: tid, title: BY_ID.get(tid)![3] })),
            practice: g.scored >= SCORED_PER_DAY };
@@ -154,7 +164,6 @@ async function answer(u: any, round: string, choice: string) {
   const [r] = await q("SELECT user, track, options, started, done FROM g_rounds WHERE id = ?", [round]);
   if (!r || Number(r[0]) !== u.id) return { error: "Раунд не найден" };
   if (Number(r[4])) return { error: "Уже отвечено" };
-  await q("UPDATE g_rounds SET done = 1 WHERE id = ?", [round]);
   const g = await player(u);
   const elapsed = now() - Number(r[3]);
   const right = choice === r[1];
@@ -166,16 +175,22 @@ async function answer(u: any, round: string, choice: string) {
     points = elapsed <= 8 ? 10 : elapsed <= 15 ? 7 : 5;
     if (streak % 5 === 0) bonus = 5; // каждые 5 угаданных подряд
   }
-  await q(`UPDATE g_users SET streak = ?, best_streak = MAX(best_streak, ?), played = played + 1, correct = correct + ?,
-             scored = scored + ?, earned_today = earned_today + ? WHERE user = ?`,
-          [streak, streak, right ? 1 : 0, scoring ? 1 : 0, points + bonus, u.id]);
+  const writes = [
+    DB.prepare("UPDATE g_rounds SET done = 1 WHERE id = ?").bind(round),
+    DB.prepare(`UPDATE g_users SET streak = ?, best_streak = MAX(best_streak, ?), played = played + 1, correct = correct + ?,
+                scored = scored + ?, earned_today = earned_today + ? WHERE user = ?`)
+      .bind(streak, streak, right ? 1 : 0, scoring ? 1 : 0, points + bonus, u.id),
+  ];
   if (points + bonus > 0) {
-    await q("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)",
-            [u.id, nameOf(u), points + bonus, "Угадай трек" + (bonus ? ", серия" : ""), now()]);
+    writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)")
+      .bind(u.id, nameOf(u), points + bonus, "Угадай трек" + (bonus ? ", серия" : ""), now()));
   }
+  await DB.batch(writes);                               // все записи — одним обращением к базе
+  const g2 = { ...g, streak, best: Math.max(g.best, streak), played: g.played + 1, correct: g.correct + (right ? 1 : 0),
+               scored: g.scored + (scoring ? 1 : 0), earned: g.earned + points + bonus };
   const t = BY_ID.get(r[1])!;
   return { right, late, points, bonus, streak, practice: !scoring,
-           answer: { id: t[0], title: t[3], vol: t[1], n: t[2] }, me: await profile(u) };
+           answer: { id: t[0], title: t[3], vol: t[1], n: t[2] }, me: await profile(u, g2) };
 }
 
 // кого не показывать в «Звёздном зале» (хозяин, анонимные администраторы) — список присылает бот
