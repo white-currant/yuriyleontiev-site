@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-lang="ru">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -77,16 +77,26 @@
   .mail { display: inline-block; margin-top: 20px; font-size: clamp(22px, 5vw, 32px); font-weight: 650; letter-spacing: -.02em; border-bottom: 1px solid var(--faint); }
   .mail:hover { border-bottom-color: var(--white); }
 
+  [data-l] { display: none; }
+  html[data-lang="ru"] [data-l="ru"], html[data-lang="en"] [data-l="en"] { display: block; }
+  .lang { display: flex; }
+  .lang button { padding: 10px 8px; font-family: var(--mono); font-size: 12px; letter-spacing: .1em; opacity: .5; }
+  .lang button[aria-pressed="true"] { opacity: 1; }
+
   footer { padding: 72px 0 max(40px, env(safe-area-inset-bottom)); color: var(--dim); }
 </style>
 </head>
 <body>
 <div class="bar" id="bar">
   <a class="mono" href="../">← Y. Leontiev</a>
-  <span class="mono" style="color: var(--dim)">Чат канала</span>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" data-set="en" aria-pressed="false">EN</button>
+    <button type="button" data-set="ru" aria-pressed="true">RU</button>
+  </div>
 </div>
 
 <main class="wrap">
+<div data-l="ru">
   <header class="head">
     <div class="mono">YULION music · Telegram</div>
     <h1>Правила<br>чата</h1>
@@ -179,6 +189,102 @@
     </div>
   </section>
 
+</div>
+
+<div data-l="en">
+  <header class="head">
+    <div class="mono">YULION music · Telegram</div>
+    <h1>Chat<br>rules</h1>
+    <p class="lead">A space where music and art stay at the centre. By joining the chat and taking part in the channel, you agree to these rules. Breaking them may lead to restricted access without prior notice.</p>
+    <nav class="toc" aria-label="Sections">
+      <a href="#rules-en">Rules</a>
+      <a href="#credits-en">Credits</a>
+      <a href="#contacts-en">Contacts</a>
+      <a href="#about-en">About</a>
+    </nav>
+  </header>
+
+  <section id="rules-en">
+    <div class="mono">01 — Rules</div>
+    <h2>How we do things</h2>
+    <div class="rules">
+      <div class="rule"><div class="n">1</div><h3>General</h3><ul>
+        <li>The channel is for talking about music, sound, creative work and related topics. The goal is a professional, respectful and safe place to talk.</li>
+        <li>Everyone is expected to be ethical, polite and courteous.</li>
+      </ul></div>
+      <div class="rule"><div class="n">2</div><h3>Communication and behaviour</h3><ul>
+        <li>No aggression, rudeness, trolling, humiliation or provocation.</li>
+        <li>Criticism is welcome only when it is constructive and on point.</li>
+        <li>Flooding, spam, excessive off-topic, pushy self-promotion and empty comments are removed without warning.</li>
+      </ul></div>
+      <div class="rule"><div class="n">3</div><h3>Politics, ideology and symbols</h3><ul>
+        <li>Political slogans, campaigning and ideological debates are not allowed.</li>
+        <li>Any symbols or content related to fascism, violence, discrimination, extremism or intolerance are strictly forbidden.</li>
+        <li>The channel is neutral and not affiliated with any political, religious or ideological groups.</li>
+      </ul></div>
+      <div class="rule"><div class="n">4</div><h3>Names and avatars</h3><ul>
+        <li>Please use names and pictures free of offensive, provocative or inappropriate content.</li>
+        <li>Nicknames and avatars with violence, erotica, extremist symbols or degrading imagery are not allowed.</li>
+      </ul></div>
+      <div class="rule"><div class="n">5</div><h3>18+ content</h3><ul>
+        <li>Erotic, shocking or sexually explicit material is not allowed.</li>
+        <li>Intimate topics are fine only in the context of art, psychology or culture — without vulgarity or visuals.</li>
+        <li>This is not a place for NSFW content or any indecent behaviour.</li>
+      </ul></div>
+      <div class="rule"><div class="n">6</div><h3>Topics</h3><ul>
+        <li>The focus is music, sound design, film, and audio and visual projects.</li>
+        <li>Creative process, technology, inspiration and aesthetics are welcome when they fit the channel.</li>
+        <li>Ads and third-party materials only with the admins’ approval.</li>
+      </ul></div>
+      <div class="rule"><div class="n">7</div><h3>Copyright</h3><ul>
+        <li>Don’t post other people’s content without their consent. Always credit the source when quoting or reposting.</li>
+        <li>The music may be used only with credit — see the lines below.</li>
+        <li>Commercial use of the music requires prior written agreement with the author.</li>
+      </ul></div>
+      <div class="rule"><div class="n">8</div><h3>Moderation</h3><ul>
+        <li>Admins and moderators may remove anything that breaks these rules and restrict access without notice.</li>
+        <li>Serious or repeated violations lead to a temporary or permanent ban.</li>
+        <li>Appeals and suggestions — via the contacts below.</li>
+      </ul></div>
+    </div>
+    <p class="outro">These rules exist to keep the chat professional, cultured and friendly. They apply to everyone.</p>
+  </section>
+
+  <section id="credits-en">
+    <div class="mono">02 — Credits</div>
+    <h2>How to credit</h2>
+    <p class="intro">Any of these lines will do — tap to copy.</p>
+    <div class="credits">
+      <div class="credit"><span>Music by Yuriy Leontiev</span><button class="copy" type="button">Copy</button></div>
+      <div class="credit"><span>Composer: Yuriy Leontiev</span><button class="copy" type="button">Copy</button></div>
+      <div class="credit"><span>Sound producer: Yuriy Leontiev</span><button class="copy" type="button">Copy</button></div>
+    </div>
+    <p class="note">In digital releases and the press, please also mention the platforms (YouTube, Spotify, Apple Music) and, if possible, link the Telegram channel.</p>
+  </section>
+
+  <section id="contacts-en">
+    <div class="mono">03 — Contacts</div>
+    <h2>Get in touch</h2>
+    <p class="intro">Collaboration, licensing and legal questions. You can also message the channel or leave a comment. I usually reply within 24–48 hours.</p>
+    <a class="mail" href="mailto:notes@yuriyleontiev.music">notes@yuriyleontiev.music</a>
+  </section>
+
+  <section id="about-en">
+    <div class="mono">04 — About</div>
+    <h2>Yuriy Leontiev</h2>
+    <p class="about">Composer and sound producer. Writes orchestral and electronic cinematic music, works with sound design, sonic textures and ambient.</p>
+    <p class="projects">Soundtrack for the film “The Altitude Limit. Climbing Everest”, “A Ballad of Cold Hearts”, the dance film “Metamorphosis”, the soundtrack for the “Workshop 47” season, TV commercials.</p>
+    <div class="links">
+      <a href="../">Website <span class="mono">yuriyleontiev.music</span></a>
+      <a href="https://www.imdb.com/name/nm14636927/" target="_blank" rel="noopener">IMDb <span class="mono">Filmography ↗</span></a>
+      <a href="https://www.youtube.com/@YULION" target="_blank" rel="noopener">YouTube <span class="mono">@YULION ↗</span></a>
+      <a href="https://open.spotify.com/artist/2xHIhkS5rqeGInYDac9gLq" target="_blank" rel="noopener">Spotify <span class="mono">Artist ↗</span></a>
+      <a href="https://itunes.apple.com/by/artist/yuriy-leontiev/id919899904" target="_blank" rel="noopener">Apple Music <span class="mono">Discography ↗</span></a>
+      <a href="https://instagram.com/yulion_primary" target="_blank" rel="noopener">Instagram <span class="mono">@yulion_primary ↗</span></a>
+    </div>
+  </section>
+</div>
+
   <footer class="mono">© YULION music</footer>
 </main>
 
@@ -186,8 +292,9 @@
   document.querySelectorAll(".copy").forEach(function (b) {
     b.addEventListener("click", function () {
       var text = b.previousElementSibling.textContent;
-      var ok = function () { b.textContent = "Скопировано"; b.classList.add("done");
-        setTimeout(function () { b.textContent = "Копировать"; b.classList.remove("done"); }, 1600); };
+      var en = document.documentElement.getAttribute("data-lang") === "en", label = b.textContent;
+      var ok = function () { b.textContent = en ? "Copied" : "Скопировано"; b.classList.add("done");
+        setTimeout(function () { b.textContent = label; b.classList.remove("done"); }, 1600); };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(ok, function () { fallback(text); ok(); });
       } else { fallback(text); ok(); }
@@ -198,6 +305,21 @@
     t.style.position = "fixed"; t.style.opacity = "0"; document.body.appendChild(t); t.select();
     try { document.execCommand("copy"); } catch (e) {} document.body.removeChild(t);
   }
+  (function () {
+    var root = document.documentElement, KEY = "yl-lang";
+    var titles = { ru: "Правила чата · YULION music", en: "Chat rules · YULION music" };
+    function setLang(l) {
+      root.setAttribute("data-lang", l); root.lang = l; document.title = titles[l];
+      document.querySelectorAll(".lang button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.set === l)); });
+      try { localStorage.setItem(KEY, l); } catch (e) {}
+    }
+    var asked = (new URLSearchParams(location.search).get("lang") || "").toLowerCase();
+    var l = (navigator.language || "").toLowerCase().indexOf("ru") === 0 ? "ru" : "en";
+    try { l = localStorage.getItem(KEY) || l; } catch (e) {}
+    if (asked === "ru" || asked === "en") l = asked;
+    setLang(l);
+    document.querySelectorAll(".lang button").forEach(function (b) { b.addEventListener("click", function () { setLang(b.dataset.set); }); });
+  })();
   var bar = document.getElementById("bar");
   addEventListener("scroll", function () { bar.classList.toggle("scrolled", scrollY > 8); }, { passive: true });
 </script>
