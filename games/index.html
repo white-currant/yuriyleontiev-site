@@ -210,6 +210,7 @@
   // ---------- сервер ----------
   function call(path, body) {
     return fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json", "X-Init-Data": initData }, body: JSON.stringify(body || {}) })
+      .catch(function () { throw new Error("нет связи с сервером игр"); })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
   }
   function show(id) { ["home", "game", "nope"].forEach(function (s) { $(s).hidden = s !== id; }); scrollTo(0, 0); }
@@ -249,39 +250,55 @@
   function home() {
     show("home");
     if (tg && tg.BackButton) tg.BackButton.hide();
-    stopAudio(false);
+    round = null; busy = false; clearInterval(timer); stopAudio(false);
     return Promise.all([call("/api/me").then(renderMe), call("/api/top").then(function (t) { topData = t; renderTop(); })]);
   }
 
   // ---------- раунд ----------
   // Звук — через Web Audio: контекст включается в момент нажатия (иначе iOS молчит), отрывок играет из памяти.
-  var actx = null, source = null, gainNode = null;
-  var timer = null, round = null, startAt = 0, roundNo = 0;
+  // У каждого отрывка свой регулятор громкости; новый отрывок всегда сначала глушит старый.
+  var actx = null, playing = null, loading = null;
+  var timer = null, round = null, startAt = 0, roundNo = 0, busy = false;
   var C = 2 * Math.PI * 101; $("left").style.strokeDasharray = C;
   function unlock() {
-    if (!actx) { var A = window.AudioContext || window.webkitAudioContext; actx = new A(); gainNode = actx.createGain(); gainNode.connect(actx.destination); }
-    if (actx.state !== "running") actx.resume();
+    if (!actx) { var A = window.AudioContext || window.webkitAudioContext; actx = new A(); }
+    if (actx.state !== "running") { var r = actx.resume(); if (r && r.catch) r.catch(function () {}); }
   }
   function stopAudio(fade) {
-    clearInterval(timer);
-    if (!source) return;
-    var s = source; source = null;
+    if (loading) { loading.abort(); loading = null; }
+    if (!playing) return;
+    var p = playing; playing = null;
     try {
-      if (fade) { gainNode.gain.setTargetAtTime(0, actx.currentTime, .35); setTimeout(function () { try { s.stop(); } catch (e) {} gainNode.gain.value = 1; }, 1500); }
-      else s.stop();
+      if (fade) { p.gain.gain.setTargetAtTime(0, actx.currentTime, .3); setTimeout(function () { try { p.src.stop(); } catch (e) {} }, 1500); }
+      else p.src.stop();
     } catch (e) {}
   }
+  function startAudio(buffer) {
+    stopAudio(false);
+    var g = actx.createGain(); g.connect(actx.destination);
+    var src = actx.createBufferSource(); src.buffer = buffer; src.connect(g); src.start();
+    playing = { src: src, gain: g };
+    return playing;
+  }
   function loadAudio(url) {
-    return fetch(url).then(function (r) { if (!r.ok) throw new Error("отрывок не загрузился"); return r.arrayBuffer(); })
-      .then(function (buf) { return new Promise(function (ok, fail) { actx.decodeAudioData(buf, ok, fail); }); });
+    var ctrl = window.AbortController ? new AbortController() : null;
+    loading = ctrl;
+    var guard = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+    return fetch(url, ctrl ? { signal: ctrl.signal } : {})
+      .catch(function (e) { if (e.name === "AbortError") throw e; throw new Error("нет связи с сервером игр"); })
+      .then(function (r) { if (!r.ok) throw new Error("отрывок не загрузился"); return r.arrayBuffer(); })
+      .then(function (buf) { return new Promise(function (ok, fail) { actx.decodeAudioData(buf, ok, fail); }); })
+      .finally(function () { clearTimeout(guard); if (loading === ctrl) loading = null; });
   }
   function setRing(left, total) { $("left").style.strokeDashoffset = C * (1 - left / total); }
 
   function play() {
+    if (busy) return;                      // двойное нажатие — один раунд
+    busy = true; round = null; clearInterval(timer); stopAudio(false);
     unlock(); haptic("light");
     show("game"); if (tg && tg.BackButton) tg.BackButton.show();
     $("orb").className = "orb"; $("options").innerHTML = ""; $("options").className = "options";
-    $("result").textContent = ""; $("nextbtn").hidden = true; $("homebtn").hidden = true;
+    $("result").textContent = ""; $("nextbtn").hidden = true; $("homebtn").hidden = true; $("streak").className = "streak";
     $("status").textContent = "Загружаю отрывок…"; $("sec").textContent = "…"; $("secnote").textContent = ""; setRing(1, 1);
     call("/api/round").then(function (r) {
       round = r; roundNo++;
@@ -293,12 +310,16 @@
       });
       startAt = 0;
       return loadAudio(API + r.audio).then(function (buffer) {
+        busy = false;
         if (round !== r) return;
-        gainNode.gain.value = 1;
-        source = actx.createBufferSource(); source.buffer = buffer; source.connect(gainNode); source.start();
+        startAudio(buffer);
         begin(r.seconds);
       });
-    }).catch(function (e) { $("status").textContent = "Не получилось: " + e.message; $("homebtn").hidden = false; });
+    }).catch(function (e) {
+      busy = false; round = null; clearInterval(timer);
+      $("status").textContent = e.name === "AbortError" ? "Отрывок долго грузится" : "Не получилось: " + e.message;
+      $("nextbtn").textContent = "Попробовать ещё"; $("nextbtn").hidden = false; $("homebtn").hidden = false;
+    });
   }
   function begin(total) {
     startAt = Date.now(); $("orb").classList.add("playing"); $("status").textContent = "Слушай и выбирай";
@@ -329,9 +350,16 @@
       $("practice").hidden = !a.practice;
       renderMe(a.me);
       $("nextbtn").hidden = false; $("homebtn").hidden = false;
-      setTimeout(function () { stopAudio(true); }, a.right ? 2500 : 4000);
-    }).catch(function (e) { $("status").textContent = "Не получилось: " + e.message; $("homebtn").hidden = false; });
+      var mine = playing;                    // гасим только этот отрывок, если к тому времени не начался новый
+      setTimeout(function () { if (playing === mine) stopAudio(true); }, a.right ? 2500 : 4000);
+      $("nextbtn").textContent = "Дальше";
+    }).catch(function (e) {
+      stopAudio(true); $("status").textContent = "Не получилось: " + e.message;
+      $("nextbtn").textContent = "Дальше"; $("nextbtn").hidden = false; $("homebtn").hidden = false;
+    });
   }
+  // приложение свернули — звук на паузу не нужен, но таймер и звук не должны «зависнуть» после возврата
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && actx && actx.state !== "running") actx.resume(); });
 
   $("play").onclick = play;
   $("nextbtn").onclick = play;
