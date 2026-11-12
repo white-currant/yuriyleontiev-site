@@ -10,11 +10,13 @@
 // Игрок:  POST /api/me | /api/round | /api/answer | /api/top | /api/link/start | /api/link/remove
 //         (заголовок X-Init-Data — Telegram.WebApp.initData)
 //         GET  /audio/<раунд>                                   (отрывок трека, не выдаёт, какой это трек)
-// Бот:    GET  /bot/events?after=N | POST /bot/profiles | /bot/link | /bot/forget   (заголовок X-Games-Key)
+//         GET  /avatar/<ключ>                                   (аватарка; ключ — хеш, по нему не узнать, чей аккаунт)
+// Бот:    GET  /bot/events?after=N | POST /bot/profiles | /bot/link | /bot/forget | /bot/avatar   (заголовок X-Games-Key)
 //
 // Привязка канала: игрок по своей воле получает код, пишет его в чат от имени канала, бот подтверждает (/bot/link).
 // Здесь хранится только состояние привязки и название канала — номер канала знает лишь бот.
 import { sqlite } from "https://esm.town/v/std/sqlite/main.ts";
+import { blob } from "https://esm.town/v/std/blob";
 
 const BOT_ID = 8990614166; // @starguardian_yl_bot
 const TG_KEY = "e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d"; // открытый ключ Телеграма (production)
@@ -44,6 +46,7 @@ await sqlite.batch([
   `CREATE TABLE IF NOT EXISTS g_meta (key TEXT PRIMARY KEY, value TEXT)`,
   `CREATE TABLE IF NOT EXISTS g_links (user INTEGER PRIMARY KEY, code TEXT, expires INTEGER, title TEXT, state TEXT NOT NULL)`,
 ]);
+try { await sqlite.execute("ALTER TABLE g_profiles ADD COLUMN avatar TEXT"); } catch { /* колонка уже есть */ }
 
 function rows(r: any): any[][] {
   return (r.rows || []).map((x: any) => Array.isArray(x) ? x : r.columns.map((c: string) => x[c]));
@@ -132,12 +135,15 @@ async function linkRemove(u: any) {
 
 async function profile(u: any) {
   const g = await player(u);
-  const [snap] = await q("SELECT points, karma, place, updated FROM g_profiles WHERE user = ?", [u.id]);
+  const [snap] = await q("SELECT points, karma, place, updated, name, avatar FROM g_profiles WHERE user = ?", [u.id]);
   const consumed = Number((await q("SELECT value FROM g_meta WHERE key = 'consumed'"))[0]?.[0] || 0);
   const pending = Number((await q("SELECT COALESCE(SUM(delta), 0) FROM g_events WHERE user = ? AND id > ?", [u.id, consumed]))[0][0]);
   const points = Number(snap?.[0] || 0) + pending;
   const link = await linkState(u.id);
-  return { name: link?.state === "linked" ? link.title : nameOf(u), link,
+  // имя — как его показывает бот (хозяин — названием канала, привязавший — каналом); своё фото — только себе
+  const name = link?.state === "linked" ? link.title : snap?.[4] || nameOf(u);
+  const avatar = snap?.[5] ? `/avatar/${snap[5]}` : (link === null || link?.state === "linked") ? null : (u.photo_url || null);
+  return { name, avatar, link,
            points, karma: Number(snap?.[1] || 0), place: snap ? Number(snap[2]) : null, ...rankOf(points),
            today: { scored: g.scored, max: SCORED_PER_DAY, earned: g.earned }, streak: g.streak, best_streak: g.best,
            played: g.played, correct: g.correct };
@@ -202,13 +208,14 @@ async function hiddenIds(): Promise<number[]> {
 async function top() {
   const h = await hiddenIds();
   const not = h.length ? ` AND user NOT IN (${h.map(() => "?").join(",")})` : "";
-  const all = await q(`SELECT name, points, title FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 10`, h);
+  const all = await q(`SELECT name, points, title, avatar FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 10`, h);
   // имя — как его прислал бот (хозяин — названием канала), а не из Телеграма при входе в игру
   const notU = h.length ? ` AND u.user NOT IN (${h.map(() => "?").join(",")})` : "";
-  const day = await q(`SELECT COALESCE(p.name, u.name), u.earned_today FROM g_users u LEFT JOIN g_profiles p ON p.user = u.user
+  const day = await q(`SELECT COALESCE(p.name, u.name), u.earned_today, p.avatar FROM g_users u LEFT JOIN g_profiles p ON p.user = u.user
                        WHERE u.day = ? AND u.earned_today > 0${notU} ORDER BY u.earned_today DESC LIMIT 5`, [today(), ...h]);
-  return { all: all.map(([name, points, title]) => ({ name, points: Number(points), title })),
-           today: day.map(([name, points]) => ({ name, points: Number(points) })) };
+  const av = (k: any) => (k ? `/avatar/${k}` : null);
+  return { all: all.map(([name, points, title, a]) => ({ name, points: Number(points), title, avatar: av(a) })),
+           today: day.map(([name, points, a]) => ({ name, points: Number(points), avatar: av(a) })) };
 }
 
 // ---------- HTTP ----------
@@ -236,6 +243,15 @@ export default async function (req: Request): Promise<Response> {
     return new Response(res.body, { status: res.status, headers: { ...cors, "Content-Type": "audio/mp4", "Cache-Control": "private, max-age=600" } });
   }
 
+  // аватарки — по хешу, без номера аккаунта
+  if (req.method === "GET" && url.pathname.startsWith("/avatar/")) {
+    const key = url.pathname.slice(8);
+    if (!/^[0-9a-f]{16,40}$/.test(key)) return new Response("not found", { status: 404, headers: cors });
+    const res = await blob.get(`avatar_${key}`).catch(() => null);
+    if (!res || !res.ok) return new Response("not found", { status: 404, headers: cors });
+    return new Response(res.body, { headers: { ...cors, "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } });
+  }
+
   // бот на Proxima
   if (url.pathname.startsWith("/bot/")) {
     const key = Deno.env.get("GAMES_KEY");
@@ -248,10 +264,10 @@ export default async function (req: Request): Promise<Response> {
     if (req.method === "POST" && url.pathname === "/bot/profiles") {
       const body = await req.json();
       for (const p of body.profiles || []) {
-        await q(`INSERT INTO g_profiles (user, name, points, karma, title, next, place, updated) VALUES (?,?,?,?,?,?,?,?)
+        await q(`INSERT INTO g_profiles (user, name, points, karma, title, next, place, updated, avatar) VALUES (?,?,?,?,?,?,?,?,?)
                  ON CONFLICT(user) DO UPDATE SET name=excluded.name, points=excluded.points, karma=excluded.karma,
-                 title=excluded.title, next=excluded.next, place=excluded.place, updated=excluded.updated`,
-                [p.user, p.name, p.points, p.karma, p.title, p.next, p.place, now()]);
+                 title=excluded.title, next=excluded.next, place=excluded.place, updated=excluded.updated, avatar=excluded.avatar`,
+                [p.user, p.name, p.points, p.karma, p.title, p.next, p.place, now(), /^[0-9a-f]{16,40}$/.test(p.avatar || "") ? p.avatar : null]);
       }
       if (body.owner) {
         await q("INSERT INTO g_meta (key, value) VALUES ('owner', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(body.owner)]);
@@ -272,6 +288,12 @@ export default async function (req: Request): Promise<Response> {
       if (!l) return json({ error: "нет такого кода" });
       await q("UPDATE g_links SET state = 'linked', code = NULL, expires = NULL, title = ? WHERE user = ?", [String(b.title || "Канал"), l[0]]);
       return json({ user: Number(l[0]) });
+    }
+    if (req.method === "POST" && url.pathname === "/bot/avatar") {
+      const b = await req.json();
+      if (!/^[0-9a-f]{16,40}$/.test(b.key || "") || !b.data || b.data.length > 200000) return json({ error: "avatar" }, 400);
+      await blob.set(`avatar_${b.key}`, Uint8Array.from(atob(b.data), (c) => c.charCodeAt(0)));
+      return json({ ok: true });
     }
     if (req.method === "POST" && url.pathname === "/bot/forget") {
       const uid = Number((await req.json()).user);
