@@ -163,7 +163,10 @@ async function top() {
   const h = await hiddenIds();
   const not = h.length ? ` AND user NOT IN (${h.map(() => "?").join(",")})` : "";
   const all = await q(`SELECT name, points, title FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 10`, h);
-  const day = await q(`SELECT name, earned_today FROM g_users WHERE day = ? AND earned_today > 0${not} ORDER BY earned_today DESC LIMIT 5`, [today(), ...h]);
+  // имя — как его прислал бот (хозяин — названием канала), а не из Телеграма при входе в игру
+  const notU = h.length ? ` AND u.user NOT IN (${h.map(() => "?").join(",")})` : "";
+  const day = await q(`SELECT COALESCE(p.name, u.name), u.earned_today FROM g_users u LEFT JOIN g_profiles p ON p.user = u.user
+                       WHERE u.day = ? AND u.earned_today > 0${notU} ORDER BY u.earned_today DESC LIMIT 5`, [today(), ...h]);
   return { all: all.map(([name, points, title]) => ({ name, points: Number(points), title })),
            today: day.map(([name, points]) => ({ name, points: Number(points) })) };
 }
