@@ -71,6 +71,20 @@
   .chip b { display: block; font-size: 20px; font-weight: 650; }
   .chip span { font-size: 12px; color: var(--dim); }
 
+  /* ---------- привязка канала ---------- */
+  .link-card { margin-top: 14px; padding: 14px 16px; border-radius: 16px; background: var(--card); border: 1px solid var(--card-line);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); font-size: 14px; color: rgba(246, 239, 227, .85); }
+  .link-card p + p { margin-top: 8px; }
+  .link-card .small { font-size: 12.5px; color: var(--dim); }
+  .link-card .row { display: flex; gap: 8px; margin-top: 12px; }
+  .link-card .row .btn { margin-top: 0; min-height: 42px; font-size: 14.5px; }
+  .code { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px;
+    border-radius: 12px; background: rgba(255, 196, 105, .1); border: 1px dashed rgba(255, 196, 105, .5);
+    font-family: var(--mono); font-size: 18px; letter-spacing: .06em; color: var(--gold); }
+  .code button { font-family: var(--sans); font-size: 12.5px; color: var(--dim); }
+  .foot { margin-top: 22px; text-align: center; font-size: 12.5px; }
+  .foot a { color: var(--dim); text-decoration: underline; text-underline-offset: 3px; }
+
   /* ---------- карточка игры ---------- */
   .game-card { margin-top: 22px; padding: 18px; border-radius: 20px; position: relative; overflow: hidden;
     background: linear-gradient(140deg, rgba(60, 28, 6, .62), rgba(70, 20, 80, .45)); border: 1px solid rgba(255, 196, 105, .32);
@@ -149,6 +163,8 @@
       <div class="chip"><b id="todayc">0/12</b><span>раундов сегодня</span></div>
     </div>
 
+    <div class="link-card" id="linkcard" hidden></div>
+
     <div class="game-card">
       <div class="mono" style="color: rgba(255,255,255,.7)">Игра</div>
       <h2>Угадай трек из Мастерской 47</h2>
@@ -163,6 +179,7 @@
       </div>
       <ol class="list" id="list"></ol>
     </div>
+    <div class="foot"><a href="#" id="privacy">Что хранит бот и как удалить свои данные</a></div>
   </section>
 
   <!-- раунд -->
@@ -229,7 +246,56 @@
     lad.forEach(function (n) { if (p.points >= n) prev = n; });
     $("next").textContent = p.next ? "до следующего звания " + (p.next - p.points) : "высшее звание";
     $("bar").style.width = (p.next ? Math.max(3, (p.points - prev) / (p.next - prev) * 100) : 100) + "%";
+    if ("link" in p && !$("home").hidden) renderLink(p.link);
   }
+  // ---------- играть от имени канала ----------
+  var linkPoll = null;
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function btn(text, cls, fn) { var b = el("button", "btn" + (cls ? " " + cls : ""), text); b.type = "button"; b.onclick = fn; return b; }
+  function renderLink(link, consent) {
+    var box = $("linkcard"); clearInterval(linkPoll);
+    if (!link) { box.hidden = true; return; }
+    box.hidden = false; box.innerHTML = "";
+    box.appendChild(el("div", "mono", "Играть от имени канала"));
+    if (link.state === "linked") {
+      var p = el("p"); p.style.marginTop = "8px"; p.append("Ты играешь как «", el("b", "", link.title), "». Очки и звание — у канала.");
+      box.appendChild(p);
+      var r = el("div", "row"); r.appendChild(btn("Отвязать канал", "ghost", function () {
+        var go = function (yes) { if (yes) call("/api/link/remove").then(function () { return home(); }); };
+        if (tg && tg.showConfirm && tg.isVersionAtLeast && tg.isVersionAtLeast("6.2")) tg.showConfirm("Отвязать канал? Очки, набранные каналом, останутся у него.", go); else go(confirm("Отвязать канал?"));
+      })); box.appendChild(r); return;
+    }
+    if (link.state === "pending") {
+      box.appendChild(el("p", "", "Напиши в «YULION music Chat» от имени своего канала этот код:")).style.marginTop = "8px";
+      var c = el("div", "code"); c.appendChild(el("span", "", link.code));
+      c.appendChild(btn("Скопировать", "", function () { try { navigator.clipboard.writeText(link.code); haptic("success"); } catch (e) {} }));
+      c.lastChild.className = ""; box.appendChild(c);
+      box.appendChild(el("p", "small", "Бот удалит сообщение и привяжет канал. Код действует 15 минут."));
+      var r2 = el("div", "row"); r2.appendChild(btn("Отменить", "ghost", function () { call("/api/link/remove").then(function () { return home(); }); }));
+      box.appendChild(r2);
+      linkPoll = setInterval(function () {                // ждём, пока бот увидит код в чате
+        if ($("home").hidden) return;
+        call("/api/me").then(function (p) { if (p.link && p.link.state !== "pending") { renderMe(p); haptic("success"); } });
+      }, 4000);
+      return;
+    }
+    if (consent) {
+      box.appendChild(el("p", "", "Бот и администратор чата будут знать, что этот канал — твой. Другим участникам твой личный аккаунт не покажется.")).style.marginTop = "8px";
+      box.appendChild(el("p", "small", "Отвязать можно в любой момент здесь, удалить все свои данные — командой /forget в боте."));
+      var r3 = el("div", "row");
+      r3.appendChild(btn("Согласен, привязать", "", function () { call("/api/link/start").then(function (l) { renderLink(l); }); }));
+      r3.appendChild(btn("Не надо", "ghost", function () { renderLink(link); }));
+      box.appendChild(r3); return;
+    }
+    box.appendChild(el("p", "", "Пишешь в чат от имени своего канала? Привяжи его — очки и звание будут у канала, а личный аккаунт нигде не появится.")).style.marginTop = "8px";
+    var r4 = el("div", "row"); r4.appendChild(btn("Привязать канал", "ghost", function () { renderLink(link, true); })); box.appendChild(r4);
+  }
+  $("privacy").onclick = function (e) {
+    e.preventDefault();
+    var url = "https://yuriyleontiev.music/chatrules/#privacy";
+    if (tg && tg.openLink) tg.openLink(url); else open(url, "_blank");
+  };
+
   function plural(n, a, b, c) { n = Math.abs(n) % 100; var m = n % 10; return n > 10 && n < 20 ? c : m === 1 ? a : m >= 2 && m <= 4 ? b : c; }
   function renderTop() {
     var rows = topData ? topData[topKey] : [], list = $("list");

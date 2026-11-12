@@ -7,9 +7,13 @@
 // Очки, заработанные в игре, копятся как события; бот на Proxima раз в минуту забирает их (GET /bot/events),
 // начисляет, ставит звания в теги и присылает обратно профили для таблицы лидеров (POST /bot/profiles).
 //
-// Игрок:  POST /api/me | /api/round | /api/answer | /api/top   (заголовок X-Init-Data — Telegram.WebApp.initData)
+// Игрок:  POST /api/me | /api/round | /api/answer | /api/top | /api/link/start | /api/link/remove
+//         (заголовок X-Init-Data — Telegram.WebApp.initData)
 //         GET  /audio/<раунд>                                   (отрывок трека, не выдаёт, какой это трек)
-// Бот:    GET  /bot/events?after=N | POST /bot/profiles          (заголовок X-Games-Key)
+// Бот:    GET  /bot/events?after=N | POST /bot/profiles | /bot/link | /bot/forget   (заголовок X-Games-Key)
+//
+// Привязка канала: игрок по своей воле получает код, пишет его в чат от имени канала, бот подтверждает (/bot/link).
+// Здесь хранится только состояние привязки и название канала — номер канала знает лишь бот.
 import { sqlite } from "https://esm.town/v/std/sqlite/main.ts";
 
 const BOT_ID = 8990614166; // @starguardian_yl_bot
@@ -38,6 +42,7 @@ await sqlite.batch([
   `CREATE TABLE IF NOT EXISTS g_profiles (user INTEGER PRIMARY KEY, name TEXT, points INTEGER, karma INTEGER,
      title TEXT, next INTEGER, place INTEGER, updated INTEGER)`,
   `CREATE TABLE IF NOT EXISTS g_meta (key TEXT PRIMARY KEY, value TEXT)`,
+  `CREATE TABLE IF NOT EXISTS g_links (user INTEGER PRIMARY KEY, code TEXT, expires INTEGER, title TEXT, state TEXT NOT NULL)`,
 ]);
 
 function rows(r: any): any[][] {
@@ -92,13 +97,48 @@ async function player(u: any) {
            played: Number(played), correct: Number(correct), recent: JSON.parse(recent || "[]") as string[] };
 }
 
+const WORDS = ["ЗВЕЗДА", "КОМЕТА", "ТУМАННОСТЬ", "ОРБИТА", "ПУЛЬСАР", "КВАЗАР", "НЕБУЛА", "СОЗВЕЗДИЕ", "ГАЛАКТИКА", "МЕТЕОР"];
+
+async function linkState(uid: number) {
+  if (String(uid) === ((await q("SELECT value FROM g_meta WHERE key = 'owner'"))[0]?.[0] || "")) return null; // хозяин и так виден каналом
+  const [l] = await q("SELECT code, expires, title, state FROM g_links WHERE user = ?", [uid]);
+  if (!l) return { state: "none" };
+  if (l[3] === "linked") return { state: "linked", title: l[2] };
+  if (Number(l[1]) < now()) { await q("DELETE FROM g_links WHERE user = ?", [uid]); return { state: "none" }; }
+  return { state: "pending", code: l[0], expires: Number(l[1]) };
+}
+
+async function linkStart(u: any) {
+  const cur = await linkState(u.id);
+  if (!cur || cur.state !== "none") return cur || { error: "Ты и так показан каналом" };
+  let code = "";
+  for (let i = 0; i < 10; i++) {
+    code = WORDS[Math.floor(Math.random() * WORDS.length)] + "-" + String(1000 + Math.floor(Math.random() * 9000));
+    if (!(await q("SELECT 1 FROM g_links WHERE code = ?", [code])).length) break;
+  }
+  await q("INSERT OR REPLACE INTO g_links (user, code, expires, title, state) VALUES (?, ?, ?, NULL, 'pending')", [u.id, code, now() + 900]);
+  return linkState(u.id);
+}
+
+async function linkRemove(u: any) {
+  const [l] = await q("SELECT state FROM g_links WHERE user = ?", [u.id]);
+  await q("DELETE FROM g_links WHERE user = ?", [u.id]);
+  if (l && l[0] === "linked") {
+    await q("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, '', 0, 'unlink', ?)", [u.id, now()]);
+    await q("DELETE FROM g_profiles WHERE user = ?", [u.id]); // профиль канала больше не его
+  }
+  return { state: "none" };
+}
+
 async function profile(u: any) {
   const g = await player(u);
   const [snap] = await q("SELECT points, karma, place, updated FROM g_profiles WHERE user = ?", [u.id]);
   const consumed = Number((await q("SELECT value FROM g_meta WHERE key = 'consumed'"))[0]?.[0] || 0);
   const pending = Number((await q("SELECT COALESCE(SUM(delta), 0) FROM g_events WHERE user = ? AND id > ?", [u.id, consumed]))[0][0]);
   const points = Number(snap?.[0] || 0) + pending;
-  return { name: nameOf(u), points, karma: Number(snap?.[1] || 0), place: snap ? Number(snap[2]) : null, ...rankOf(points),
+  const link = await linkState(u.id);
+  return { name: link?.state === "linked" ? link.title : nameOf(u), link,
+           points, karma: Number(snap?.[1] || 0), place: snap ? Number(snap[2]) : null, ...rankOf(points),
            today: { scored: g.scored, max: SCORED_PER_DAY, earned: g.earned }, streak: g.streak, best_streak: g.best,
            played: g.played, correct: g.correct };
 }
@@ -213,6 +253,9 @@ export default async function (req: Request): Promise<Response> {
                  title=excluded.title, next=excluded.next, place=excluded.place, updated=excluded.updated`,
                 [p.user, p.name, p.points, p.karma, p.title, p.next, p.place, now()]);
       }
+      if (body.owner) {
+        await q("INSERT INTO g_meta (key, value) VALUES ('owner', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(body.owner)]);
+      }
       if (Array.isArray(body.hidden)) {
         await q("INSERT INTO g_meta (key, value) VALUES ('hidden', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 [JSON.stringify(body.hidden.map(Number).filter(Number.isFinite))]);
@@ -221,6 +264,18 @@ export default async function (req: Request): Promise<Response> {
         await q("INSERT INTO g_meta (key, value) VALUES ('consumed', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(body.consumed)]);
         await q("DELETE FROM g_events WHERE id <= ? AND at < ?", [Number(body.consumed), now() - 30 * 86400]);
       }
+      return json({ ok: true });
+    }
+    if (req.method === "POST" && url.pathname === "/bot/link") {
+      const b = await req.json();
+      const [l] = await q("SELECT user FROM g_links WHERE code = ? AND state = 'pending' AND expires >= ?", [String(b.code || ""), now()]);
+      if (!l) return json({ error: "нет такого кода" });
+      await q("UPDATE g_links SET state = 'linked', code = NULL, expires = NULL, title = ? WHERE user = ?", [String(b.title || "Канал"), l[0]]);
+      return json({ user: Number(l[0]) });
+    }
+    if (req.method === "POST" && url.pathname === "/bot/forget") {
+      const uid = Number((await req.json()).user);
+      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
       return json({ ok: true });
     }
     return json({ error: "method" }, 405);
@@ -238,6 +293,8 @@ export default async function (req: Request): Promise<Response> {
     case "/api/round": return json(await newRound(user));
     case "/api/answer": return json(await answer(user, String(body.round || ""), String(body.choice || "")));
     case "/api/top": return json(await top());
+    case "/api/link/start": return json(await linkStart(user));
+    case "/api/link/remove": return json(await linkRemove(user));
   }
   return json({ error: "not found" }, 404);
 }
