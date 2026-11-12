@@ -5,21 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Игры · StarGuardian</title>
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#07060f">
+<meta name="theme-color" content="#120a05">
 <link rel="stylesheet" href="../fonts.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
-    --bg: #07060f;
-    --card: rgba(255, 255, 255, .045);
-    --card-line: rgba(255, 255, 255, .09);
-    --white: rgba(255, 255, 255, .95);
-    --dim: rgba(255, 255, 255, .58);
-    --faint: rgba(255, 255, 255, .16);
-    --violet: #a78bfa;
-    --violet-deep: #6d4bd8;
-    --cyan: #7dd3fc;
-    --gold: #f5c66b;
+    --bg: #120a05;
+    --card: rgba(22, 11, 4, .5);
+    --card-line: rgba(255, 220, 170, .12);
+    --white: #f6efe3;
+    --dim: rgba(246, 239, 227, .62);
+    --faint: rgba(246, 239, 227, .16);
+    --violet: #d58bff;
+    --violet-deep: #9b3fd6;
+    --cyan: #ffd58a;
+    --gold: #ffc469;
+    --amber: #f2a93b;
     --good: #5eead4;
     --bad: #fb7185;
     --sans: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
@@ -32,10 +33,17 @@
   button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
   .mono { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
 
-  #sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
-  .nebula { position: fixed; z-index: 0; pointer-events: none; border-radius: 50%; filter: blur(60px); opacity: .35; }
-  .nebula.a { width: 70vw; height: 70vw; left: -25vw; top: -15vw; background: radial-gradient(#4c2d9b, transparent 70%); }
-  .nebula.b { width: 60vw; height: 60vw; right: -25vw; top: 45vh; background: radial-gradient(#0e5a7a, transparent 70%); }
+  /* фон — искры рилса «Мастерской 47», Vol. 3 (../sparks.js, как на первом экране сайта): тёмный янтарь, расфокус, туман */
+  .bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; isolation: isolate; background: var(--bg); pointer-events: none; }
+  .sparks { position: absolute; inset: 0; width: 100%; height: 100%; display: block; filter: blur(3.5px) brightness(1.6) saturate(1.2); transform: scale(1.04); }
+  .bg::before { content: ""; position: absolute; inset: 0; z-index: 1;
+    background:
+      radial-gradient(ellipse 80% 45% at 60% 45%, rgba(255, 170, 70, .16), rgba(255, 170, 70, 0) 70%),
+      linear-gradient(90deg, rgba(14, 8, 4, .5) 0%, rgba(14, 8, 4, 0) 18%),
+      linear-gradient(270deg, rgba(14, 8, 4, .5) 0%, rgba(14, 8, 4, 0) 18%),
+      rgba(30, 18, 10, .18); }
+  .bg::after { content: ""; position: absolute; inset: 0; z-index: 1;
+    background: linear-gradient(180deg, rgba(10, 5, 2, .45) 0%, rgba(10, 5, 2, .05) 35%, rgba(10, 5, 2, .05) 70%, rgba(10, 5, 2, .4) 100%); }
   main { position: relative; z-index: 1; max-width: 520px; margin: 0 auto;
     padding: calc(18px + var(--top)) 16px calc(28px + env(safe-area-inset-bottom)); }
   [hidden] { display: none !important; }
@@ -43,31 +51,33 @@
   /* ---------- профиль ---------- */
   .who { margin-top: 6px; display: flex; align-items: center; gap: 14px; }
   .sigil { flex: none; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center;
-    background: radial-gradient(circle at 35% 30%, #c4b5fd, var(--violet-deep) 60%, #2a1a5e);
-    box-shadow: 0 0 24px rgba(167, 139, 250, .45), inset 0 0 12px rgba(255, 255, 255, .25);
+    background: radial-gradient(circle at 35% 30%, #fff1d2, var(--gold) 30%, #b0601a 70%, #3a1806);
+    box-shadow: 0 0 26px rgba(255, 196, 105, .45), inset 0 0 12px rgba(255, 255, 255, .3); color: #2a1406;
     font-size: 24px; font-weight: 700; }
   .who h1 { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
   .who .name { color: var(--dim); font-size: 14px; margin-top: 3px; }
   .bar { margin-top: 18px; height: 8px; border-radius: 99px; background: var(--faint); overflow: hidden; }
   .bar i { display: block; height: 100%; width: 0; border-radius: 99px; transition: width .8s cubic-bezier(.2, .8, .2, 1);
-    background: linear-gradient(90deg, var(--violet-deep), var(--violet), var(--cyan)); box-shadow: 0 0 12px rgba(167, 139, 250, .7); }
+    background: linear-gradient(90deg, #b0601a, var(--amber), #ffe2a8); box-shadow: 0 0 12px rgba(255, 196, 105, .75); }
   .bar-note { margin-top: 7px; display: flex; justify-content: space-between; font-size: 13px; color: var(--dim); }
   .chips { margin-top: 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .chip { padding: 10px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--card-line); }
+  .chip { padding: 10px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--card-line); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
   .chip b { display: block; font-size: 20px; font-weight: 650; }
   .chip span { font-size: 12px; color: var(--dim); }
 
   /* ---------- карточка игры ---------- */
   .game-card { margin-top: 22px; padding: 18px; border-radius: 20px; position: relative; overflow: hidden;
-    background: linear-gradient(140deg, rgba(109, 75, 216, .35), rgba(14, 90, 122, .22)); border: 1px solid rgba(167, 139, 250, .3); }
+    background: linear-gradient(140deg, rgba(60, 28, 6, .62), rgba(70, 20, 80, .45)); border: 1px solid rgba(255, 196, 105, .32);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
   .game-card h2 { font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
   .game-card p { margin-top: 6px; color: rgba(255, 255, 255, .78); font-size: 14px; max-width: 30em; }
   .game-card .rules { margin-top: 10px; font-size: 12.5px; color: var(--dim); }
   .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 50px; margin-top: 16px;
-    border-radius: 14px; font-weight: 650; font-size: 16px; background: var(--white); color: #120d24;
+    border-radius: 14px; font-weight: 650; font-size: 16px; background: linear-gradient(180deg, #ffe0a3, var(--gold)); color: #2a1406;
+    box-shadow: 0 6px 24px rgba(242, 169, 59, .28);
     transition: transform .12s, opacity .2s; }
   .btn:active { transform: scale(.98); }
-  .btn.ghost { background: transparent; color: var(--white); border: 1px solid var(--faint); }
+  .btn.ghost { background: transparent; color: var(--white); border: 1px solid var(--faint); box-shadow: none; }
   .btn[disabled] { opacity: .45; pointer-events: none; }
 
   /* ---------- лидеры ---------- */
@@ -75,8 +85,9 @@
   .hall-head { display: flex; justify-content: space-between; align-items: center; }
   .seg { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--card); }
   .seg button { padding: 6px 10px; border-radius: 8px; font-size: 12.5px; color: var(--dim); }
-  .seg button[aria-pressed="true"] { background: rgba(255, 255, 255, .12); color: var(--white); }
-  .list { margin-top: 10px; list-style: none; border-top: 1px solid var(--card-line); }
+  .seg button[aria-pressed="true"] { background: rgba(255, 196, 105, .18); color: var(--white); }
+  .list { margin-top: 10px; list-style: none; border-top: 1px solid var(--card-line); border-radius: 14px; background: rgba(22, 11, 4, .5);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); padding: 0 12px; }
   .list li { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 11px 2px;
     border-bottom: 1px solid var(--card-line); font-size: 15px; }
   .list .n { font-family: var(--mono); font-size: 12px; color: var(--dim); }
@@ -91,8 +102,8 @@
   .streak.on { opacity: 1; }
   .orb-wrap { position: relative; width: 210px; height: 210px; margin: 26px auto 10px; }
   .orb { position: absolute; inset: 22px; border-radius: 50%;
-    background: radial-gradient(circle at 38% 32%, #ddd6fe 0%, #8b5cf6 28%, #3b1f8a 62%, #120a33 100%);
-    box-shadow: 0 0 40px rgba(139, 92, 246, .55), inset 0 0 30px rgba(255, 255, 255, .15); transition: transform .3s; }
+    background: radial-gradient(circle at 38% 32%, #fff6df 0%, #ffd27a 22%, #e08a2a 50%, #6b2f0c 78%, #2a1206 100%);
+    box-shadow: 0 0 50px rgba(255, 180, 80, .55), 0 0 120px rgba(242, 169, 59, .25), inset 0 0 30px rgba(255, 255, 255, .18); transition: transform .3s; }
   .orb.playing { animation: pulse 1.6s ease-in-out infinite; }
   .orb.right { background: radial-gradient(circle at 38% 32%, #ccfbf1, #2dd4bf 30%, #0f5e57 70%, #062b29); box-shadow: 0 0 46px rgba(94, 234, 212, .6); }
   .orb.wrong { background: radial-gradient(circle at 38% 32%, #ffe4e6, #f43f5e 30%, #6b1023 70%, #2a0610); box-shadow: 0 0 40px rgba(251, 113, 133, .5); }
@@ -100,9 +111,9 @@
   .ring { position: absolute; inset: 0; transform: rotate(-90deg); }
   .ring circle { fill: none; stroke-width: 3; }
   .ring .track { stroke: var(--faint); }
-  .ring .left { stroke: var(--cyan); stroke-linecap: round; filter: drop-shadow(0 0 4px rgba(125, 211, 252, .8)); }
+  .ring .left { stroke: var(--gold); stroke-linecap: round; filter: drop-shadow(0 0 5px rgba(255, 196, 105, .9)); }
   .orb-text { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; }
-  .orb-text b { font-size: 44px; font-weight: 700; letter-spacing: -.03em; text-shadow: 0 0 18px rgba(0, 0, 0, .4); }
+  .orb-text b { font-size: 44px; font-weight: 700; letter-spacing: -.03em; color: #fffaf0; text-shadow: 0 1px 14px rgba(80, 30, 0, .6); }
   .orb-text small { display: block; font-size: 12px; color: rgba(255, 255, 255, .8); margin-top: -4px; }
   .gain { position: absolute; left: 50%; top: 20%; transform: translateX(-50%); font-size: 30px; font-weight: 750; color: var(--good);
     opacity: 0; pointer-events: none; text-shadow: 0 0 16px rgba(94, 234, 212, .8); }
@@ -110,7 +121,8 @@
   @keyframes fly { 0% { opacity: 0; transform: translate(-50%, 10px); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50px); } }
   .status { text-align: center; color: var(--dim); font-size: 14px; min-height: 21px; }
   .options { margin-top: 16px; display: grid; gap: 9px; }
-  .opt { text-align: left; padding: 14px 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--card-line);
+  .opt { text-align: left; padding: 14px 16px; border-radius: 14px; background: rgba(30, 18, 10, .55); border: 1px solid var(--card-line);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
     font-size: 16px; font-weight: 550; transition: background .2s, border-color .2s, transform .12s, opacity .3s; }
   .opt:active { transform: scale(.985); }
   .opt.right { background: rgba(94, 234, 212, .16); border-color: var(--good); }
@@ -123,8 +135,7 @@
 </style>
 </head>
 <body>
-<canvas id="sky"></canvas>
-<div class="nebula a"></div><div class="nebula b"></div>
+<div class="bg" aria-hidden="true"><canvas class="sparks" id="sparks"></canvas></div>
 <main>
   <!-- главная: профиль, игра, лидеры -->
   <section class="screen" id="home" hidden>
@@ -191,30 +202,10 @@
   var initData = (tg && tg.initData) || (local && new URLSearchParams(location.search).get("init")) || "";
   if (tg) {
     tg.ready(); tg.expand();
-    try { tg.setHeaderColor("#07060f"); tg.setBackgroundColor("#07060f"); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
+    try { tg.setHeaderColor("#120a05"); tg.setBackgroundColor("#120a05"); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
   }
   var haptic = function (kind) { try { tg && tg.HapticFeedback && (kind === "light" ? tg.HapticFeedback.impactOccurred("light") : tg.HapticFeedback.notificationOccurred(kind)); } catch (e) {} };
   var $ = function (id) { return document.getElementById(id); };
-
-  // ---------- звёздное небо ----------
-  var sky = $("sky"), ctx = sky.getContext("2d"), stars = [];
-  function sizeSky() {
-    var r = Math.min(devicePixelRatio || 1, 2);
-    sky.width = innerWidth * r; sky.height = innerHeight * r; ctx.setTransform(r, 0, 0, r, 0, 0);
-    stars = [];
-    for (var i = 0; i < Math.round(innerWidth * innerHeight / 2600); i++)
-      stars.push({ x: Math.random() * innerWidth, y: Math.random() * innerHeight, r: Math.random() * 1.2 + .2, p: Math.random() * 6.28, s: .4 + Math.random() * 1.4 });
-  }
-  function drawSky(t) {
-    ctx.clearRect(0, 0, innerWidth, innerHeight);
-    for (var i = 0; i < stars.length; i++) {
-      var s = stars[i], a = .35 + .65 * (.5 + .5 * Math.sin(s.p + t / 1000 * s.s));
-      ctx.globalAlpha = a; ctx.fillStyle = i % 9 ? "#fff" : "#c4b5fd";
-      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.283); ctx.fill();
-    }
-    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) requestAnimationFrame(drawSky);
-  }
-  sizeSky(); requestAnimationFrame(drawSky); addEventListener("resize", sizeSky);
 
   // ---------- сервер ----------
   function call(path, body) {
@@ -353,5 +344,6 @@
   else home().catch(function (e) { nope(e.message === "Открой игру из Телеграма" ? "Открой игру из Телеграма — через бота StarGuardian." : "Не получилось связаться с сервером игр."); });
 })();
 </script>
+<script src="../sparks.js?v=5"></script>
 </body>
 </html>
