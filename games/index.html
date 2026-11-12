@@ -7,6 +7,23 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#120a05">
 <link rel="stylesheet" href="../fonts.css">
+<script>
+  // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
+  // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
+  (function () {
+    var BUILD = "202611130220";
+    try {
+      fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
+        v = (v || "").trim();
+        if (v && v !== BUILD && sessionStorage.getItem("games-reload") !== v) {
+          sessionStorage.setItem("games-reload", v);                       // не больше одной перезагрузки на версию
+          var q = new URLSearchParams(location.search); q.set("v", v);
+          location.replace(location.pathname + "?" + q.toString() + location.hash);
+        }
+      }).catch(function () {});
+    } catch (e) {}
+  })();
+</script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
