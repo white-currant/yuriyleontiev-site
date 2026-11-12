@@ -195,7 +195,7 @@
   (function () {
     "use strict";
     /* Адрес сервера голосов. Пусто — черновик: оценки выдуманные, голоса хранятся только в этом браузере. */
-    var API = "https://yulion--bd1a6fdada1f11f1b9781607ee4eb77e.web.val.run"; // val «w47-rating» на Val Town (аккаунт yulion), код — scripts/rating-val.ts
+    var API = "https://w47-rating.whitecurrant.workers.dev"; // Cloudflare Worker «w47-rating» (до 13.11.2026 — Val Town), код — workers/rating
 
     var T = window.W47 || [], byId = {};
     T.forEach(function (t) { byId[t.id] = t; });

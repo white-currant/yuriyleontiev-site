@@ -211,7 +211,7 @@
 <script>
 (function () {
   // адрес сервера игр (Val Town); на локальной проверке можно передать ?api=
-  var API = "https://yulion--ecad0a12dedb11f18cd51607ee4eb77e.web.val.run";
+  var API = "https://starguardian-games.whitecurrant.workers.dev";   // Cloudflare Worker, код — workers/games
   var local = /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
   if (local && new URLSearchParams(location.search).get("api")) API = new URLSearchParams(location.search).get("api");
 

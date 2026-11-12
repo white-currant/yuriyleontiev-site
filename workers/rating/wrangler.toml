@@ -1,0 +1,10 @@
+name = "w47-rating"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+workers_dev = true
+preview_urls = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "w47-rating"
+database_id = "2af97636-2908-4fcb-9f87-60691789375d"

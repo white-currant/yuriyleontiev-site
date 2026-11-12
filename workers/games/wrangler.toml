@@ -1,0 +1,10 @@
+name = "starguardian-games"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+workers_dev = true
+preview_urls = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "starguardian-games"
+database_id = "15a68468-7fce-4f69-99b5-29f7ff5ef41c"
