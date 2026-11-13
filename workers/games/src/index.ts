@@ -16,9 +16,23 @@ const SCORED_PER_DAY = 12; // раундов в день, за которые д
 const ROUND_SECONDS = 20;
 const TZ_SHIFT = 3 * 3600; // «день» считаем по Минску
 
-// [id Apple Music, том, номер, название] — «Мастерская 47», Vol. 1–3
+// «Угадай трек» играет по всем трекам каталога games/vinyls.json (тот же, что у пластинок фермы).
+// У «Мастерской 47» — свои отрывки на сайте (ниже: id Apple Music, том, номер, название); у остальных — превью Apple.
 const TRACKS: [string, number, number, string][] = [["1853557590",1,1,"Climb of the Formics"],["1853557803",1,2,"Thoughtform"],["1853557806",1,3,"Can You Be a Hero?"],["1853557810",1,4,"Digital Wind"],["1853557812",1,5,"Garden of Eidos"],["1853557817",1,6,"Tiny Companions"],["1853557823",1,7,"Electric Petal"],["1853557825",1,8,"Under the Living Sky"],["1853557829",1,9,"Voice Above the World"],["1853557831",1,10,"Together Always"],["1853557985",1,11,"Synthetic Flora"],["1853557988",1,12,"Where Life Begins"],["1853557991",1,13,"Subtle Forms"],["1853557994",1,14,"Inside the Stem"],["1853557998",1,15,"Falling Giants"],["1853557999",1,16,"Revelation"],["1853558003",1,17,"The First Danger"],["1853558005",1,18,"The Formics' song"],["1888776832",2,1,"External Control"],["1888776836",2,2,"New Territories"],["1888776837",2,3,"Chuck"],["1888776838",2,4,"Amarin"],["1888776839",2,5,"Mad Organ Grinder"],["1888776840",2,6,"Nothing Is the Same Anymore"],["1888776843",2,7,"Ivett"],["1888776844",2,8,"Cyber Intrusion"],["1888776849",2,9,"Vakhub"],["1888776851",2,10,"Friends"],["1888776852",2,11,"Something Is Wrong"],["1888776949",2,12,"Iliar"],["1888776951",2,13,"Reality Layer Compromised"],["1888776953",2,14,"White Void"],["1888776954",2,15,"Ascension"],["1888776955",2,16,"Wild Barrel Organ Melody"],["6830543169",3,1,"Hidden in the Nuances"],["6830543190",3,2,"Luma (feat. The Veresk)"],["6830543196",3,3,"Neitz Canyon"],["6830543360",3,4,"Canyon Run"],["6830543371",3,5,"The Warmth of a Mother"],["6830543503",3,6,"Cyberattack, Again"],["6830543513",3,7,"Under the Desert Sun"],["6830543747",3,8,"The Dark Forest"],["6830543766",3,9,"The Exalted Kingdom"],["6830543882",3,10,"Still Waters"],["6830543994",3,11,"Glassy Waters"],["6830544006",3,12,"Grevsburg"],["6830544187",3,13,"The Dark Side of the City"],["6830544237",3,14,"In the Shadows"],["6830544247",3,15,"Truth"],["6830544254",3,16,"One Spark"]];
 const BY_ID = new Map(TRACKS.map((t) => [t[0], t]));
+type Song = { id: string; title: string; album: string; n: number; preview: string };
+let songs: Song[] = [], songsAt = 0;
+async function songList(): Promise<Song[]> {
+  if (songs.length && now() - songsAt < 3600) return songs;
+  try {
+    const d: any = await (await fetch(`${SITE}/games/vinyls.json?v=2`, { cf: { cacheTtl: 3600 } } as any)).json();   // ?v — новый ключ кэша после смены формата
+    const list = d.tracks.map((t: any) => ({ id: String(t.id), title: String(t.title), album: String(t.album || ""), n: Number(t.n || 0), preview: String(t.preview || "") }))
+      .filter((t: Song) => t.title && (t.preview || BY_ID.has(t.id)));
+    if (list.length >= 4) { songs = list; songsAt = now(); }
+  } catch { /* сайт недоступен — играем по запасному списку */ }
+  if (!songs.length) songs = TRACKS.map((t) => ({ id: t[0], title: t[3], album: `Workshop 47, Vol. ${t[1]}`, n: t[2], preview: "" }));
+  return songs;
+}
 
 const RANKS: [number, string][] = [[0, "Ученик звёзд"], [30, "Ловец комет"], [100, "Чтец созвездий"], [250, "Заклинатель"],
   [500, "Звездочёт"], [1000, "Маг туманностей"], [2000, "Хранитель сфер"], [4000, "Верховный маг"], [8000, "Звёздный оракул"]];
@@ -147,18 +161,19 @@ function pick<T>(arr: T[], n: number): T[] {
 
 async function newRound(u: any) {
   const g = await player(u);
-  const fresh = TRACKS.filter((t) => !g.recent.includes(t[0]));
-  const track = pick(fresh.length ? fresh : TRACKS, 1)[0];
-  const others = pick(TRACKS.filter((t) => t[0] !== track[0]), 3);
-  const options = pick([track, ...others], 4).map((t) => t[0]);
+  const all = await songList(), titleOf = new Map(all.map((t) => [t.id, t.title]));
+  const fresh = all.filter((t) => !g.recent.includes(t.id));
+  const track = pick(fresh.length ? fresh : all, 1)[0];
+  const others = pick(all.filter((t) => t.id !== track.id && t.title !== track.title), 3);
+  const options = pick([track, ...others], 4).map((t) => t.id);
   const id = [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await DB.batch([                                     // три записи — одним обращением к базе
-    DB.prepare("INSERT INTO g_rounds (id, user, track, options, started) VALUES (?, ?, ?, ?, ?)").bind(id, u.id, track[0], JSON.stringify(options), now()),
-    DB.prepare("UPDATE g_users SET recent = ? WHERE user = ?").bind(JSON.stringify([track[0], ...g.recent].slice(0, 20)), u.id),
+    DB.prepare("INSERT INTO g_rounds (id, user, track, options, started) VALUES (?, ?, ?, ?, ?)").bind(id, u.id, track.id, JSON.stringify(options), now()),
+    DB.prepare("UPDATE g_users SET recent = ? WHERE user = ?").bind(JSON.stringify([track.id, ...g.recent].slice(0, 40)), u.id),
     DB.prepare("DELETE FROM g_rounds WHERE started < ?").bind(now() - 86400),
   ]);
   return { round: id, audio: `/audio/${id}`, seconds: ROUND_SECONDS,
-           options: options.map((tid) => ({ id: tid, title: BY_ID.get(tid)![3] })),
+           options: options.map((tid) => ({ id: tid, title: titleOf.get(tid) || "" })),
            practice: g.scored >= SCORED_PER_DAY };
 }
 
@@ -192,9 +207,9 @@ async function answer(u: any, round: string, choice: string) {
   await DB.batch(writes);                               // все записи — одним обращением к базе
   const g2 = { ...g, streak, best: Math.max(g.best, streak), played: g.played + 1, correct: g.correct + (right ? 1 : 0),
                scored: g.scored + (scoring ? 1 : 0), earned: g.earned + points + bonus };
-  const t = BY_ID.get(r[1])!;
+  const t = (await songList()).find((x) => x.id === r[1]) || { id: r[1], title: "", album: "", n: 0 };
   return { right, late, points, bonus, streak, practice: !scoring,
-           answer: { id: t[0], title: t[3], vol: t[1], n: t[2] }, me: await profile(u, g2) };
+           answer: { id: t.id, title: t.title, album: t.album, n: t.n }, me: await profile(u, g2) };
 }
 
 // кого не показывать в «Звёздном зале» (хозяин, анонимные администраторы) — список присылает бот
@@ -255,10 +270,18 @@ async function handle(req: Request): Promise<Response> {
   // отрывок для раунда — по номеру раунда, имя файла наружу не уходит
   if (req.method === "GET" && url.pathname.startsWith("/audio/")) {
     const [r] = await q("SELECT track FROM g_rounds WHERE id = ?", [url.pathname.slice(7)]);
-    const t = r && BY_ID.get(r[0]);
-    if (!t) return new Response("not found", { status: 404, headers: cors });
-    const file = `${testing.audioBase}/rating/previews/v${t[1]}-${String(t[2]).padStart(2, "0")}.m4a`;
-    const res = await fetch(file);
+    if (!r) return new Response("not found", { status: 404, headers: cors });
+    const own = BY_ID.get(r[0]);                                  // свой отрывок на сайте — у «Мастерской 47»
+    const song = own ? null : (await songList()).find((x) => x.id === r[0]);
+    const file = own ? `${testing.audioBase}/rating/previews/v${own[1]}-${String(own[2]).padStart(2, "0")}.m4a`
+      : song && /^https:\/\/audio-ssl\.itunes\.apple\.com\//.test(song.preview) ? song.preview : "";
+    if (!file) return new Response("not found", { status: 404, headers: cors });
+    // отрывок не должен «висеть»: 8 секунд на попытку, одна повторная
+    let res: Response | null = null;
+    for (let attempt = 0; attempt < 2 && !(res && res.ok); attempt++) {
+      try { res = await fetch(file, { signal: AbortSignal.timeout(8000) }); } catch { res = null; }
+    }
+    if (!res) return new Response("audio unavailable", { status: 502, headers: cors });
     return new Response(res.body, { status: res.status, headers: { ...cors, "Content-Type": "audio/mp4", "Cache-Control": "private, max-age=600" } });
   }
 

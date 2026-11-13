@@ -2,7 +2,8 @@
 """Каталог пластинок «Лунной фермы»: одна пластинка — один трек Yuriy Leontiev.
 
 Берёт альбомы из releases.js (их уже собирает update_releases.py) и треки каждого — из открытого каталога
-Apple Music (iTunes lookup, без ключей). Пишет games/vinyls.json.
+Apple Music (iTunes lookup, без ключей). Пишет games/vinyls.json. Этот же каталог — список треков игры «Угадай трек»
+(поле preview — отрывок Apple; у «Мастерской 47» игра берёт свои отрывки с сайта).
 
 У трека нет своей редкости: у каждой пластинки есть все варианты, редкость (обычная / редкая / эпическая /
 легендарная) и отделку (обычная / фольгированная / звёздная) сервер выбирает при каждой находке.
@@ -42,7 +43,8 @@ def main():
         for s in sorted(songs, key=lambda s: (s.get("discNumber", 1), s.get("trackNumber", 0))):
             tid = str(s["trackId"])
             tracks.append({"id": tid, "title": s["trackName"], "release": str(rel["id"]), "n": s.get("trackNumber"),
-                           "date": rel.get("date") or rel.get("year") or "",
+                           "album": rel.get("title") or "", "date": rel.get("date") or rel.get("year") or "",
+                           "preview": s.get("previewUrl", ""),          # 30-секундный отрывок Apple — для игры «Угадай трек»
                            "url": s.get("trackViewUrl", "").split("&uo=")[0]})
         print(f"{rel['title']}: {len(songs)}", file=sys.stderr)
         time.sleep(0.4)

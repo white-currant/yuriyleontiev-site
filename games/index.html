@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131224";
+    var BUILD = "202611131236";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -57,7 +57,7 @@
 
   /* фон — искры рилса «Мастерской 47», Vol. 3 (../sparks.js, как на первом экране сайта): тёмный янтарь, расфокус, туман */
   .bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; isolation: isolate; background: var(--bg); pointer-events: none; }
-  /* искры рилса — только в «Угадай трек из Мастерской 47»; в гильдии — Великий аттрактор */
+  /* искры рилса — только в «Угадай трек»; в гильдии — Великий аттрактор */
   body:not([data-screen="game"]) .bg { display: none; }
   body[data-screen="game"] .attractor, body[data-screen^="farm"] .attractor { display: none; }
   body[data-screen^="farm"] { background: #0b0a1c; }
@@ -492,8 +492,8 @@
       <div class="game-card art-card guess-card">
         <canvas class="art" id="guessart" aria-hidden="true"></canvas>
         <div class="art-body">
-          <h2>Угадай трек из Мастерской&nbsp;47</h2>
-          <p>Звучит отрывок — узнай трек, пока кольцо звёздной пыли не рассеялось.</p>
+          <h2>Угадай трек</h2>
+          <p>Звучит отрывок из любого альбома — узнай трек, пока кольцо звёздной пыли не рассеялось.</p>
           <button class="btn" id="play">Играть</button>
         </div>
       </div>
@@ -818,7 +818,7 @@
       if (gained) { $("gain").textContent = "+" + gained; $("gain").className = "gain"; void $("gain").offsetWidth; $("gain").className = "gain fly"; }
       $("sec").textContent = a.right ? "✓" : "✕"; $("secnote").textContent = "";
       $("status").textContent = a.right ? (a.late ? "Верно, но время вышло" : "Верно!") : (id ? "Мимо" : "Время вышло");
-      $("result").textContent = a.answer.title + " · Vol. " + a.answer.vol + ", трек " + a.answer.n;
+      $("result").textContent = a.answer.title + (a.answer.album ? " · " + a.answer.album : "");
       $("pointsline").textContent = gained ? "+" + gained + " " + plural(gained, "очко", "очка", "очков") + (a.bonus ? " (из них +" + a.bonus + " за серию)" : "")
         : a.right && a.practice ? "Тренировка — без очков" : a.right && a.late ? "Время вышло — без очков" : "";
       $("streak").textContent = a.streak > 1 ? "серия " + a.streak : ""; $("streak").className = "streak" + (a.streak > 1 ? " on" : "");
@@ -2032,7 +2032,7 @@
     c.fillStyle = sh; c.beginPath(); c.arc(0, 0, R, 0, 6.2832); c.fill();
     var lab = c.createRadialGradient(-R * .1, -R * .1, 0, 0, 0, R * .32); lab.addColorStop(0, "#ffe2a8"); lab.addColorStop(.6, "#ffc469"); lab.addColorStop(1, "#b0601a");
     c.fillStyle = lab; c.beginPath(); c.arc(0, 0, R * .3, 0, 6.2832); c.fill();
-    c.fillStyle = "#2a1406"; c.font = "700 " + Math.round(R * .17) + "px Inter Tight, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("47", 0, 1);
+    c.fillStyle = "#2a1406"; c.font = "700 " + Math.round(R * .17) + "px Inter Tight, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("♪", 0, 1);
     c.restore();
     c.globalCompositeOperation = "lighter";                            // кольцо звёздной пыли
     for (var k = 0; k < 520; k++) {
