@@ -34,6 +34,7 @@ const STARTER: [string, number][] = [["moss", 5], ["berry", 2]];   // старт
 const GIFT_DUST = 5, GIFTS_PER_DAY = 5;
 const CAN_MAX = 5;                           // лейка: поливов до следующего похода к колодцу
 const DRY_LIMIT = 8 * 3600;                  // столько сухое растение ждёт полива, потом засыхает
+const SEEDS_MIN = 2, SEEDS_EXTRA = 0.35;     // семян с урожая: 2, с шансом 35% — 3
 const CROSS_CHANCE = 0.4;                    // шанс семени-гибрида, если рядом созрел другой сорт
 const SITE = "https://yuriyleontiev.music";
 
@@ -261,9 +262,9 @@ export async function harvest(u: any, idx: number) {
   const writes = [DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(dust, u.id)];
   if (points > 0) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)")
     .bind(u.id, nameOf(u), points, "Лунная ферма", t));
-  // с урожаем возвращаются семена той же культуры (в среднем чуть больше одного) — хозяйство себя воспроизводит,
-  // а удачный гибрид можно размножить и продать
-  const seeds = (Math.random() < 0.75 ? 1 : 0) + (Math.random() < 0.35 ? 1 : 0) + (s.bonus === "seedy" ? 1 : 0);
+  // с урожаем возвращаются семена той же культуры: не меньше 2 (посадил одно — получил больше), обычно 2, иногда 3;
+  // «плодовитый» сорт даёт ещё одно. Так хозяйство растёт, а удачный гибрид можно размножить и продать.
+  const seeds = SEEDS_MIN + (Math.random() < SEEDS_EXTRA ? 1 : 0) + (s.bonus === "seedy" ? 1 : 0);
   if (seeds) writes.push(DB.prepare(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)
                                      ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.id, seeds));
   await DB.batch(writes);

@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131137";
+    var BUILD = "202611131141";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1608,7 +1608,7 @@
       line("Урожай", "✦ " + st.dust + " пыли и " + st.points + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
       line("Полив", "одного хватает на " + fmtLeft(st.thirst * 60));
       line("Шанс пластинки", Math.round(st.vinyl * 100) + "% с урожая");
-      line("Семена с урожая", "обычно 1, иногда 2" + (st.bonus === "seedy" ? " (+1 — плодовитый)" : ""));
+      line("Семена с урожая", (st.bonus === "seedy" ? "3–4 (плодовитый)" : "2–3") + " за грядку");
       if (st.bonus) line("Особое свойство", bonuses[st.bonus] || "");
       line(st.base ? "Цена у станции" : "Цена в лавке", "✦ " + (st.base ? st.cost : st.price) + " за семя");
       sh.appendChild(props);
@@ -1728,7 +1728,7 @@
     var h = function (t) { var x = el("div", "mono", t); x.style.marginTop = "22px"; box.appendChild(x); };
     if (F.shopTab === "buy") {
       h("Станция");
-      box.appendChild(el("div", "farm-note left", "Купленные семена попадают в твой инвентарь. С урожая обычно возвращается семечко, так что покупать нужно, чтобы начать новую культуру или если семена кончились."));
+      box.appendChild(el("div", "farm-note left", "Купленные семена попадают в твой инвентарь. Каждый урожай возвращает 2–3 семени той же культуры, так что покупать нужно, только чтобы начать новую."));
       ["moss", "berry", "crystal"].forEach(function (k) {
         var st = s.strains[k], have = bagOf(k);
         box.appendChild(seedRow(st, "", function () { seedSheet(st); }));
