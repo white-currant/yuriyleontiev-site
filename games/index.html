@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131057";
+    var BUILD = "202611131115";
     try {
       fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
         v = (v || "").trim();
@@ -1345,7 +1345,7 @@
       return farmCall("/api/farm/harvest", { idx: pl.idx }).then(function (r) {
         if (r.error) return;
         if (r.double) floatText(pl.idx, "×2 щедрый урожай!", "big");
-        if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в мешок", "seedf"); }, 350);
+        if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в инвентарь", "seedf"); }, 350);
         if (r.vinyl) F.items = null;
         var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl); };
         if (r.hybrid) setTimeout(function () { showHybrid(r.hybrid, next); }, 500); else if (r.vinyl) setTimeout(next, 500);
@@ -1378,9 +1378,9 @@
   function plantSheet(pl) {
     var s = F.state;
     sheet(function (sh, close) {
-      sh.appendChild(el("h3", "", "Что посадить?")); sh.appendChild(el("div", "sub", "Семена из твоего мешка. После посадки грядку нужно полить."));
+      sh.appendChild(el("h3", "", "Что посадить?")); sh.appendChild(el("div", "sub", "Семена из твоего инвентаря. После посадки грядку нужно полить."));
       var mine = s.inv.filter(function (it) { return it.count - it.listed > 0 && s.strains[it.strain]; });
-      if (!mine.length) sh.appendChild(el("div", "sub", "Мешок пуст — купи семена в лавке станции."));
+      if (!mine.length) sh.appendChild(el("div", "sub", "Семян нет — купи их в лавке."));
       mine.forEach(function (it) {
         var st = s.strains[it.strain];
         sh.appendChild(seedRow(st, "×" + (it.count - it.listed), function () { close(); F.sel = st.id; plantNow(pl, st, it); }));
@@ -1415,7 +1415,7 @@
       line(st.base ? "Цена у станции" : "Цена в лавке", "✦ " + (st.base ? st.cost : st.price) + " за семя");
       sh.appendChild(props);
       var mine = s && !opt.foreign ? bagOf(st.id) : null;
-      if (mine) sh.appendChild(el("div", "sub", "В мешке: " + mine.count));
+      if (mine) sh.appendChild(el("div", "sub", "У тебя: " + mine.count));
       if (mine && !st.base) {                                                       // продажа: сколько семян лежит в твоей лавке
         var h = el("div", "mono", "Твоя лавка"); h.style.marginTop = "18px"; sh.appendChild(h);
         sh.appendChild(el("div", "sub", "Соседи, которые зайдут к тебе в гости, смогут купить выставленные семена по ✦ " + st.price +
@@ -1530,11 +1530,11 @@
     var h = function (t) { var x = el("div", "mono", t); x.style.marginTop = "22px"; box.appendChild(x); };
     if (F.shopTab === "buy") {
       h("Станция");
-      box.appendChild(el("div", "farm-note left", "Семена кладутся в мешок. С урожая обычно возвращается семечко, так что покупать нужно, чтобы начать новую культуру или если семена кончились."));
+      box.appendChild(el("div", "farm-note left", "Купленные семена попадают в твой инвентарь. С урожая обычно возвращается семечко, так что покупать нужно, чтобы начать новую культуру или если семена кончились."));
       ["moss", "berry", "crystal"].forEach(function (k) {
         var st = s.strains[k], have = bagOf(k);
         box.appendChild(seedRow(st, "", function () { seedSheet(st); }));
-        var acts = el("div", "invacts"), info = el("span", "invcount", "в мешке " + (have ? have.count : 0));
+        var acts = el("div", "invacts"), info = el("span", "invcount", "у тебя " + (have ? have.count : 0));
         [1, 5].forEach(function (n) {
           acts.appendChild(btn(n + " шт · ✦ " + st.cost * n, n === 1 ? "" : "ghost", function () {
             if (s.dust < st.cost * n) { haptic("error"); return toast("Не хватает звёздной пыли"); }
@@ -1556,7 +1556,7 @@
           haptic("light"); b.disabled = true; b.textContent = "Покупаю…";
           call("/api/farm/buy", { pub: o.pub, strain: st.id }).then(function (r) {
             if (r.error) { toast(r.error); return openShop("buy"); }
-            haptic("success"); toast("Куплено: " + st.name + " — семя в мешке"); setFarm(r.farm); openShop("buy");
+            haptic("success"); toast("Куплено: " + st.name + " — семя в инвентаре"); setFarm(r.farm); openShop("buy");
           }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; });
         };
         box.appendChild(seedRow(st, "×" + o.count, function () { seedSheet(st, { foreign: true, bonuses: m.bonuses, buy: buy }); }));

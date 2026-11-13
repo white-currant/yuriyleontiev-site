@@ -207,7 +207,7 @@ export async function plant(u: any, idx: number, crop: string) {
   const t = now();
   // сажаем всегда из мешка; выставленные в лавку не трогаем
   const ok = await q("UPDATE f_inv SET count = count - 1 WHERE user = ? AND strain = ? AND count - listed > 0 RETURNING 1", [u.id, crop]);
-  if (!ok.length) return { error: "Таких семян в мешке нет" };
+  if (!ok.length) return { error: "Таких семян у тебя нет" };
   // посадили сухим — сразу после посадки нужно полить
   await q(`INSERT INTO f_plots (user, ${PLOT_COLS}) VALUES (?, ?, ?, ?, 0, ?, ?)`, [u.id, idx, crop, t, t, t]);
   return { farm: await farmState(u) };
