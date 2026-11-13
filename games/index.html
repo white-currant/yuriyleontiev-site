@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131640";
+    var BUILD = "202611131646";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -421,6 +421,8 @@
   body[data-screen^="farm"] .plot.well.house .lbl { left: 8px; transform: translate(0, -105%); }
   body[data-screen^="farm"] .plot:active { background: rgba(255, 255, 255, .18); }
   body[data-screen^="farm"] .float { font-family: var(--pix); }
+  body[data-screen^="farm"] .exit, body[data-screen^="farm"] .dust-pill { white-space: nowrap; }
+  body[data-screen^="farm"] .dust-pill.rainpill { min-width: 40px; justify-content: center; font-size: 17px; }
   body[data-screen^="farm"] .dust-pill.rainpill.calm { background: var(--wood2); color: var(--cream); animation: none; box-shadow: var(--frame), inset 0 2px 0 var(--wood3); }
   body[data-screen^="farm"] .dust-pill.rainpill { color: #2b1a0e; background: linear-gradient(180deg, #ffe08f, #f2b950); font-weight: 800; font-size: 13.5px; padding: 0 8px;
     box-shadow: var(--frame), 0 0 12px rgba(255, 208, 120, .6); animation: wglow 2.6s ease-in-out infinite; }
@@ -507,6 +509,15 @@
   .facts div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .facts i { font-style: normal; display: inline-block; width: 20px; text-align: center; margin-right: 3px; }
   .book .bbonus { margin-top: 4px; color: #9a5a12; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .book .bdim { margin-top: 4px; color: #7a5c38; font-size: 12.5px; }
+  .book .wtable { margin-top: 8px; display: grid; gap: 4px; }
+  .book .wrow { padding: 4px 8px 5px; background: rgba(120, 80, 30, .08); }
+  .book .wrow.now { background: rgba(240, 185, 80, .45); box-shadow: 0 -2px 0 #5a3820, 0 2px 0 #5a3820, -2px 0 0 #5a3820, 2px 0 0 #5a3820; }
+  .book .wname { display: flex; align-items: center; gap: 6px; font-size: 13.5px; line-height: 1.25; color: #2b1a0e; }
+  .book .wname i { font-style: normal; width: 22px; text-align: center; }
+  .book .wname b { flex: 1; }
+  .book .wchance { font-size: 12.5px; font-weight: 700; color: #7a5c38; }
+  .book .weff { margin: 0 0 0 28px; font-size: 12px; line-height: 1.25; color: #5a3f22; }
+  .book .wfoot { margin-top: 6px; text-align: center; font-size: 12px; line-height: 1.3; }
   .book .bnav { margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 18px; }
   .book .bbtn { width: 46px; height: 38px; font-size: 26px; line-height: 1; font-weight: 700; color: #3b2614; background: rgba(120, 80, 30, .16); padding-bottom: 4px; }
   .book .bbtn[disabled] { opacity: .3; }
@@ -1578,7 +1589,8 @@
     var wz = $("weather"), wt = s.weather && s.weather.today, wn = s.weather && s.weather.tomorrow;   // погода дня — значком в шапке
     wz.hidden = !wt;
     if (wt) {
-      wz.textContent = wt.icon + (wt.id === "clear" ? "" : " " + wt.name.split(" ")[0]);
+      wz.textContent = wt.icon;                                 // в шапке только значок; название и смысл — по нажатию
+      wz.setAttribute("aria-label", wt.name);
       wz.classList.toggle("calm", wt.id === "clear");
       wz.onclick = function () { haptic("light"); toast(wt.icon + " " + wt.name + ": " + wt.effect + ". Ещё " + fmtLeft(wt.until - farmNow()) + ". Завтра: " + wn.icon + " " + wn.name.toLowerCase() + "."); };
     }
@@ -1900,9 +1912,17 @@
           var wv = (F.state && F.state.weather) || {};
           page.appendChild(el("h3", "", "Погода"));
           page.appendChild(el("div", "bsub", wv.today ? "Сегодня: " + wv.today.icon + " " + wv.today.name + " · завтра: " + wv.tomorrow.icon + " " + wv.tomorrow.name : "Каждый день — своя погода"));
-          [["☾ Ясная ночь", "обычный день."], ["✨ Звёздный дождь", "урожай звёздной пыли ×2."], ["🌧 Лунный ливень", "поливать не нужно — грядки политы весь день."],
-           ["☀ Засуха", "полива хватает вдвое меньше."], ["🌬 Солнечный ветер", "гибриды выпадают вдвое чаще."], ["🌕 Полнолуние", "артефакты выпадают вдвое чаще."]]
-            .forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1].replace(/^./, function (ch) { return ch.toUpperCase(); })); page.appendChild(d); });
+          var tb = el("div", "wtable"), today = wv.today && wv.today.id;          // таблица погоды: как часто и что делает
+          [["clear", "☾", "Ясная ночь", "40%", "обычный день"], ["stardust", "✨", "Звёздный дождь", "15%", "урожай пыли ×2"],
+           ["shower", "🌧", "Лунный ливень", "15%", "поливать не нужно"], ["drought", "☀", "Засуха", "12%", "полива хватает вдвое меньше"],
+           ["wind", "🌬", "Солнечный ветер", "10%", "гибриды вдвое чаще"], ["fullmoon", "🌕", "Полнолуние", "8%", "артефакты вдвое чаще"]]
+            .forEach(function (x) {
+              var r = el("div", "wrow" + (x[0] === today ? " now" : "")), n = el("div", "wname");
+              n.appendChild(el("i", "", x[1])); n.appendChild(el("b", "", x[2])); n.appendChild(el("span", "wchance", x[3]));
+              r.appendChild(n); r.appendChild(el("div", "weff", x[4])); tb.appendChild(r);
+            });
+          page.appendChild(tb);
+          page.appendChild(el("div", "bdim wfoot", "Погода одна на всех и меняется в полночь. Особая погода не повторяется два дня подряд."));
         } else {
           page.appendChild(el("h3", "", "Особые свойства"));
           page.appendChild(el("div", "bsub", "Бывают у гибридов и передаются потомкам."));
