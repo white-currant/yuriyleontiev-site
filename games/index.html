@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611140214";
+    var BUILD = "202611140219";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1660,7 +1660,7 @@
       else if (!inf) lbl.textContent = "…";
       else if (inf.dead) { lbl.textContent = own ? "убрать" : "засохло"; lbl.classList.add("dead"); }
       else if (inf.ripe) { lbl.textContent = own ? "собрать!" : "созрело"; lbl.classList.add("ready"); }
-      else if (!inf.wet) { lbl.textContent = own ? (inf.dryFor > dryLim / 2 ? "сохнет!" : "полить!") : "сухо"; lbl.classList.add("water"); }
+      else if (!inf.wet) { lbl.textContent = own ? (inf.dryFor > dryLim / 2 ? "сохнет!" : "полить!") : "ждёт полива";   // «сухо» у соседей читалось как «засохло» lbl.classList.add("water"); }
       else lbl.textContent = fmtShort(inf.left);
       b.appendChild(lbl);
       if (own) b.onclick = function () { plotTap(pl); };
