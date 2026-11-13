@@ -9,7 +9,7 @@
 // Сорта хранятся в f_strains (общие для всех), семена — в инвентаре f_inv; часть можно выставить в свою лавку,
 // соседи покупают их за пыль по цене, которую считает игра по свойствам (решение пользователя: цена фиксированная).
 // Изредка при сборе выпадает пластинка — один трек Yuriy Leontiev; редкость и отделка — у находки.
-// Дождь звёздной пыли (после нового поста в канале, его включает бот) удваивает урожай.
+// Погода — событие дня (weatherOn): звёздный дождь, лунный ливень, засуха, солнечный ветер, полнолуние или ясно.
 // Соседи: можно заглянуть на чужой участок, оставить подарок (5 пыли, раз в день) и купить семена в его лавке.
 
 type Strain = { id: string; name: string; shape: string; color: string; minutes: number; dust: number; vinyl: number;
@@ -158,12 +158,60 @@ async function breed(a: Strain, b: Strain): Promise<Strain> {
   return { ...view({ id, name, ...g }), mutation };
 }
 
+// ---------- погода: событие дня, одна на всех ----------
+// Каждые сутки (по Минску) — своя погода. Выбирается детерминированно из даты, поэтому её не надо хранить
+// и можно показать прогноз на завтра. Особая погода не повторяется два дня подряд.
+export const WEATHER: Record<string, { name: string; icon: string; effect: string; w: number }> = {
+  clear:    { name: "Ясная ночь",      icon: "☾",  effect: "обычный день",                         w: 40 },
+  stardust: { name: "Звёздный дождь",  icon: "✨", effect: "урожай звёздной пыли ×2",               w: 15 },
+  shower:   { name: "Лунный ливень",   icon: "🌧", effect: "поливать не нужно — грядки политы сами", w: 15 },
+  drought:  { name: "Засуха",          icon: "☀",  effect: "полива хватает вдвое меньше",           w: 12 },
+  wind:     { name: "Солнечный ветер", icon: "🌬", effect: "ветер разносит пыльцу — гибриды вдвое чаще", w: 10 },
+  fullmoon: { name: "Полнолуние",      icon: "🌕", effect: "артефакты выпадают вдвое чаще",          w: 8 },
+};
+const TZ = 3 * 3600, DAY = 86400;
+const dayStart = (t: number) => Math.floor((t + TZ) / DAY) * DAY - TZ;     // начало суток по Минску
+function rawWeather(d: number, salt: string) {
+  let h = 2166136261;
+  for (const ch of `moonfarm:${salt}:${d}`) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  let x = (h % 1000) / 1000 * Object.values(WEATHER).reduce((a, w) => a + w.w, 0);
+  for (const [k, w] of Object.entries(WEATHER)) { x -= w.w; if (x < 0) return k; }
+  return "clear";
+}
+function dayWeather(d: number, depth = 0): string {         // особая погода не повторяется два дня подряд
+  const prev = depth < 3 ? dayWeather(d - 1, depth + 1) : rawWeather(d - 1, "a");
+  for (const salt of ["a", "b", "c", "d"]) { const w = rawWeather(d, salt); if (w === "clear" || w !== prev) return w; }
+  return "clear";
+}
+export const WTEST = { force: "" };                        // только для проверки у себя: принудительная погода
+export function weatherOn(t: number) { return WTEST.force || dayWeather(Math.floor((t + TZ) / DAY)); }   // погода на сутки момента t
+export function weatherView(t: number) {
+  const id = weatherOn(t), next = weatherOn(t + DAY), from = dayStart(t);
+  return { today: { id, ...WEATHER[id], from, until: from + DAY }, tomorrow: { id: next, ...WEATHER[next] } };
+}
+function showersIn(a: number, b: number) {                 // интервалы лунного ливня внутри [a, b)
+  const out: [number, number][] = [];
+  for (let d = dayStart(a), n = 0; d < b && n < 30; d += DAY, n++) if (weatherOn(d + 1) === "shower") out.push([Math.max(a, d), Math.min(b, d + DAY)]);
+  return out;
+}
+
 // ---------- рост и полив ----------
 // p = [idx, crop, planted, grown, wet_from, water_until]
-function growth(p: any[], t: number) { return Number(p[3]) + Math.max(0, Math.min(t, Number(p[5])) - Number(p[4])); }
+// Растёт, пока полито: окно полива [wet_from, water_until) плюс дни лунного ливня (после wet_from).
+function growth(p: any[], t: number) {
+  const a = Number(p[4]), w = Math.min(t, Number(p[5]));
+  let wet = Math.max(0, w - a);
+  for (const [s0, s1] of showersIn(a, t)) wet += Math.max(0, s1 - Math.max(s0, w > a ? w : a));   // ливень вне окна полива
+  return Number(p[3]) + wet;
+}
+function lastWet(p: any[], t: number) {                   // когда грядка последний раз была влажной
+  let x = Math.max(Number(p[5]), Number(p[2]));
+  for (const [, s1] of showersIn(Number(p[2]), t)) x = Math.max(x, s1);
+  return x;
+}
 function stateOf(p: any[], s: Strain, t: number) {
   const ripe = growth(p, t) >= s.minutes * 60;
-  const dryFor = t - Math.max(Number(p[5]), Number(p[2]));
+  const dryFor = weatherOn(t) === "shower" ? 0 : t - lastWet(p, t);
   return { ripe, dead: !ripe && s.bonus !== "hardy" && dryFor > DRY_LIMIT };
 }
 const PLOT_COLS = "idx, crop, planted, grown, wet_from, water_until";
@@ -175,8 +223,9 @@ async function ensureFarm(u: any) {
   if (fresh.length) await DB.batch(STARTER.map(([k, n]) =>                 // новичку — стартовый мешок семян
     DB.prepare("INSERT OR IGNORE INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)").bind(u.id, k, n)));
 }
-async function rainUntil() {
-  return Number((await q("SELECT value FROM g_meta WHERE key = 'rain_until'"))[0]?.[0] || 0);
+async function rainUntil() {                              // звёздный дождь — теперь просто погода дня
+  const w = weatherView(now()).today;
+  return w.id === "stardust" ? w.until : 0;
 }
 function plotView(p: any[] | undefined, idx: number, unlocked: number) {
   if (idx >= unlocked) return { idx, locked: true, price: PLOT_PRICE[idx] };
@@ -198,7 +247,7 @@ export async function farmState(u: any) {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked))),
     strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1])]),
-    bonuses: BONUSES, rain_until: await rainUntil(), now: now(),
+    bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY),
     vinyls, inv, gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })),
   };
@@ -246,6 +295,7 @@ export async function water(u: any, idx: number) {
   const s = (await strains([p[1]]))[p[1]], t = now(), st = stateOf(p, s, t);
   if (st.dead) return { error: "Растение засохло — его можно только убрать" };
   if (st.ripe) return { error: "Уже созрело — собирай" };
+  if (weatherOn(t) === "shower") return { error: "Сегодня лунный ливень — грядки политы сами" };
   // поливается только сухая грядка: иначе лейкой можно было бы «накликивать» очки
   if (t < Number(p[5])) return { error: "Грядка ещё влажная" };
   if (!(await q("UPDATE f_farms SET water = water - 1 WHERE user = ? AND water > 0 RETURNING 1", [u.id])).length)
@@ -253,7 +303,7 @@ export async function water(u: any, idx: number) {
   // накопленный рост фиксируем и открываем новое окно полива
   // окно полива открывает ровно один запрос (условие water_until <= сейчас) — двойное нажатие не даст очки дважды
   const done = await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ? AND water_until <= ? RETURNING 1",
-                       [growth(p, t), t, t + s.thirst * 60, u.id, idx, t]);
+                       [growth(p, t), t, t + s.thirst * 60 * (weatherOn(t) === "drought" ? 0.5 : 1), u.id, idx, t]);
   if (!done.length) { await q("UPDATE f_farms SET water = water + 1 WHERE user = ?", [u.id]); return { error: "Грядка ещё влажная" }; }
   await q("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)", [u.id, nameOf(u), POINTS_WATER, "Лунная ферма", t]);
   return { points: POINTS_WATER, farm: await farmState(u) };
@@ -288,14 +338,14 @@ export async function harvest(u: any, idx: number) {
     const i = Number(x[0]), r = Math.floor(i / 3), c = i % 3;
     return i !== idx && Math.abs(r - r0) + Math.abs(c - c0) === 1 && x[1] !== p[1] && ss[x[1]] && stateOf(x, ss[x[1]], t).ripe;
   });
-  if (near.length && Math.random() < CROSS_CHANCE) {
+  if (near.length && Math.random() < CROSS_CHANCE * (weatherOn(t) === "wind" ? 2 : 1)) {
     const other = ss[near[Math.floor(Math.random() * near.length)][1]];
     const h = await breed(s, other);
     const [[had]] = await q("SELECT COUNT(*) FROM f_inv WHERE user = ? AND strain = ?", [u.id, h.id]);
     await q(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1`, [u.id, h.id]);
     hybrid = { ...h, parents: [s.name, other.name], fresh: !Number(had) };
   }
-  const vinyl = await dropVinyl(u.id, s.vinyl * (s.bonus === "lucky" ? 2 : 1));
+  const vinyl = await dropVinyl(u.id, s.vinyl * (s.bonus === "lucky" ? 2 : 1) * (weatherOn(t) === "fullmoon" ? 2 : 1));
   return { dust, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
 }
 
@@ -347,7 +397,7 @@ export async function visit(u: any, pub: string) {
   const shop = await q("SELECT strain, listed FROM f_inv WHERE user = ? AND listed > 0", [f[0]]);
   return { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given,
            plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(f[1]))), now: now(),
-           rain_until: await rainUntil(), dry_limit: DRY_LIMIT, gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY,
+           rain_until: await rainUntil(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY), dry_limit: DRY_LIMIT, gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY,
            shop: shop.map(([strain, n]) => ({ strain, count: Number(n) })),
            strains: await strains([...plots.map((p) => p[1]), ...shop.map((x) => x[0])]), bonuses: BONUSES };
 }
@@ -419,10 +469,8 @@ export async function gift(u: any, pub: string, myName: string) {
   return { ok: true, dust: GIFT_DUST, gifts_left: await giftsLeft(u.id) };
 }
 
-export async function setRain(hours: number) {
-  const until = now() + Math.max(1, Math.min(72, hours)) * 3600;
-  await q("INSERT INTO g_meta (key, value) VALUES ('rain_until', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(until)]);
-  return { rain_until: until };
+export async function setRain(_hours: number) {           // посты канала больше не включают дождь (решение 2026-11-13) — погода случайная
+  return { weather: weatherView(now()) };
 }
 
 export async function forgetFarm(uid: number) {

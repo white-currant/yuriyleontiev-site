@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131625";
+    var BUILD = "202611131639";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -418,6 +418,7 @@
   body[data-screen^="farm"] .plot.well.house .lbl { left: 8px; transform: translate(0, -105%); }
   body[data-screen^="farm"] .plot:active { background: rgba(255, 255, 255, .18); }
   body[data-screen^="farm"] .float { font-family: var(--pix); }
+  body[data-screen^="farm"] .dust-pill.rainpill.calm { background: var(--wood2); color: var(--cream); animation: none; box-shadow: var(--frame), inset 0 2px 0 var(--wood3); }
   body[data-screen^="farm"] .dust-pill.rainpill { color: #2b1a0e; background: linear-gradient(180deg, #ffe08f, #f2b950); font-weight: 800; font-size: 13.5px; padding: 0 8px;
     box-shadow: var(--frame), 0 0 12px rgba(255, 208, 120, .6); animation: wglow 2.6s ease-in-out infinite; }
   @keyframes wglow { 50% { filter: brightness(1.12); } }
@@ -1305,12 +1306,20 @@
     }
   }
   // рост: растёт только пока полито; сухое дольше dry_limit — засыхает (кроме «стойких»)
+  // погода общая для всех: дни лунного ливня поливают грядки сами (интервалы присылает сервер)
+  function showers() { return (F.state && F.state.showers) || (F.visiting && F.visiting.showers) || []; }
+  function weatherNow() { var w = (F.state && F.state.weather) || (F.visiting && F.visiting.weather); return w && w.today; }
   function plotInfo(pl, t, ss, dryLim) {
     var s = ss && ss[pl.crop]; if (!s) return null;
-    var need = s.minutes * 60, g = pl.grown + Math.max(0, Math.min(t, pl.water_until) - pl.wet_from), ripe = g >= need;
-    var dryFor = t - Math.max(pl.water_until, pl.planted);
-    return { s: s, need: need, g: g, f: Math.min(1, g / need), ripe: ripe, wet: !ripe && t < pl.water_until,
-             dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: need - g, wetLeft: pl.water_until - t };
+    var a = pl.wet_from, w = Math.min(t, pl.water_until), wetT = Math.max(0, w - a), lastWet = Math.max(pl.water_until, pl.planted), raining = false;
+    showers().forEach(function (iv) {
+      var s0 = Math.max(iv[0], a), s1 = Math.min(iv[1], t);
+      if (s1 > s0) { wetT += Math.max(0, s1 - Math.max(s0, w > a ? w : a)); lastWet = Math.max(lastWet, s1); }
+      if (iv[0] <= t && t < iv[1]) raining = true;
+    });
+    var need = s.minutes * 60, g = pl.grown + wetT, ripe = g >= need, dryFor = raining ? 0 : t - lastWet;
+    return { s: s, need: need, g: g, f: Math.min(1, g / need), ripe: ripe, wet: !ripe && (raining || t < pl.water_until), shower: raining,
+             dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: need - g, wetLeft: raining ? 1e9 : pl.water_until - t };
   }
   function strainCode(s) { return s.base ? "" : "сорт " + s.id.slice(1, 5).toUpperCase(); }
   function describe(s) {                                    // коротко, значками: рост · пыль · полив · шанс артефакта (коллекционного предмета; сейчас это пластинки)
@@ -1406,6 +1415,20 @@
       if ((Math.floor(t / 140) + i) % 2) { px(c, bx - 1, by, 1, 1, colr); px(c, bx + 1, by, 1, 1, colr); }
       else { px(c, bx - 1, by - 1, 1, 2, colr); px(c, bx + 1, by - 1, 1, 2, colr); }
       px(c, bx, by, 1, 1, "#3a2a1a");
+    }
+    var wid = (weatherNow() || {}).id;
+    if (wid === "shower") {                                                        // лунный ливень: косые голубые струи
+      c.fillStyle = "rgba(60,90,160,.10)"; c.fillRect(0, 0, FW, FH);
+      for (i = 0; i < 70; i++) { var sy = ((t / 9 + i * 53) % (FH + 16)) - 16, sx = (i * 29 + sy * .25) % FW; seg(c, sx, sy, sx + 1, sy + 4, i % 4 ? "rgba(160,205,255,.75)" : "#ffffff"); }
+    } else if (wid === "drought") {                                                // засуха: тёплое марево
+      c.fillStyle = "rgba(255,170,60,.10)"; c.fillRect(0, 0, FW, FH);
+      for (i = 0; i < 6; i++) { var hy = 60 + i * 22 + Math.round(Math.sin(t / 700 + i) * 2); px(c, 0, hy, FW, 1, "rgba(255,220,150,.10)"); }
+    } else if (wid === "wind") {                                                   // солнечный ветер: летящие штрихи и пыльца
+      for (i = 0; i < 26; i++) { var wy = (i * 37) % (FH - 40) + 30, wx = ((t / 6 + i * 71) % (FW + 30)) - 30;
+        if (i % 3) seg(c, wx, wy, wx + 8, wy - 1, "rgba(255,255,230,.45)"); else px(c, wx | 0, wy | 0, 1, 1, C.flowers[i % 6]); }
+    } else if (wid === "fullmoon") {                                               // полнолуние: большая луна и серебристый свет
+      disc(c, 96, 14, 12, "rgba(235,240,255,.18)"); disc(c, 96, 14, 9, "#f4f1e4"); disc(c, 93, 11, 2, "#dcd6c2"); disc(c, 100, 17, 2, "#dcd6c2"); px(c, 98, 9, 2, 2, "#e4dfcc");
+      c.fillStyle = "rgba(200,215,255,.06)"; c.fillRect(0, 0, FW, FH);
     }
     if (rain) {                                                                    // дождь звёздной пыли
       c.fillStyle = "rgba(255,214,140,.07)"; c.fillRect(0, 0, FW, FH);
@@ -1549,11 +1572,12 @@
     $("dustpill").textContent = "✦ " + s.dust;
     $("waterpill").textContent = "💧 " + s.water + "/" + s.can_max;
     var ban = $("farmbanners"); ban.innerHTML = "";
-    var wz = $("weather"), raining = s.rain_until > now;        // погода — табличкой на небе, чтобы её не искать
-    wz.hidden = !raining;
-    if (raining) {                                               // маленький значок в шапке; по нажатию — что это
-      wz.textContent = "☄ ×2";
-      wz.onclick = function () { toast("Дождь звёздной пыли: урожай ×2 ещё " + fmtLeft(s.rain_until - now)); };
+    var wz = $("weather"), wt = s.weather && s.weather.today, wn = s.weather && s.weather.tomorrow;   // погода дня — значком в шапке
+    wz.hidden = !wt;
+    if (wt) {
+      wz.textContent = wt.icon + (wt.id === "clear" ? "" : " " + wt.name.split(" ")[0]);
+      wz.classList.toggle("calm", wt.id === "clear");
+      wz.onclick = function () { haptic("light"); toast(wt.icon + " " + wt.name + ": " + wt.effect + ". Ещё " + fmtLeft(wt.until - farmNow()) + ". Завтра: " + wn.icon + " " + wn.name.toLowerCase() + "."); };
     }
     if (s.gifts.length) {
       var g = el("div", "banner gift"); var names = s.gifts.map(function (x) { return x.from; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
@@ -1630,7 +1654,7 @@
     if (!inf.wet) {                                                                 // сухо — полить
       if (s.water <= 0) { haptic("error"); return toast("Лейка пуста — нажми на колодец, чтобы набрать воды"); }
       haptic("light"); addFx("water", pl.idx, inf.s);
-      pl.grown = inf.g; pl.wet_from = now; pl.water_until = now + inf.s.thirst * 60; s.water--; renderFarm();
+      pl.grown = inf.g; pl.wet_from = now; pl.water_until = now + inf.s.thirst * 60 * ((weatherNow() || {}).id === "drought" ? .5 : 1); s.water--; renderFarm();
       floatText(pl.idx, "+1 очко", "pts");
       return farmCall("/api/farm/water", { idx: pl.idx }).catch(function () {});
     }
@@ -1818,7 +1842,7 @@
   var COLORS = [["moss", ["Лунный", "Лунные", "Лунная"]], ["berry", ["Звёздный", "Звёздные", "Звёздная"]], ["crystal", ["Кометный", "Кометные", "Кометная"]],
                 ["sun", ["Солнечный", "Солнечные", "Солнечная"]], ["nebula", ["Туманный", "Туманные", "Туманная"]], ["ember", ["Огненный", "Огненные", "Огненная"]],
                 ["frost", ["Ледяной", "Ледяные", "Ледяная"]], ["night", ["Полуночный", "Полуночные", "Полуночная"]], ["aurora", ["Сияющий", "Сияющие", "Сияющая"]]];
-  var BONUS_SHORT = { rain: "в дождь урожай ×3", lucky: "артефакты вдвое чаще", hardy: "не засыхает без воды", rich: "иногда двойной урожай", seedy: "даёт больше семян" };
+  var BONUS_SHORT = { rain: "в звёздный дождь урожай ×3", lucky: "артефакты вдвое чаще", hardy: "не засыхает без воды", rich: "иногда двойной урожай", seedy: "даёт больше семян" };
   var BONUS_NAME = { rain: "Дождевой", lucky: "Счастливый", hardy: "Стойкий", rich: "Щедрый", seedy: "Плодовитый" };
   F.bookPage = 0;
   function bookIcon(cv, s) {                                  // значок в справочнике: холст одного размера у всех форм, растение по центру внизу
@@ -1836,7 +1860,7 @@
         var m = {}; data.strains.forEach(function (st) { var k = st.shape + "/" + st.color, e = m[k] = m[k] || { best: null, n: 0 }; e.n++; if (!e.best || (st.price || 0) > (e.best.price || 0)) e.best = st; });
         return m;
       };
-      var N = SHAPES.length + 2;
+      var N = SHAPES.length + 3;
       var draw = function (dir) {
         var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage));
         page.innerHTML = ""; page.className = "bpage" + (dir ? (dir > 0 ? " fwd" : " back") : "");
@@ -1844,7 +1868,7 @@
         if (p === 0) {
           page.appendChild(el("h3", "", "Справочник лунного садовода"));
           page.appendChild(el("div", "bsub", "Найдено видов: " + Object.keys(kn).length + " из " + SHAPES.length * COLORS.length));
-          [["Рост", "Растение растёт, только пока грядка полита. Без воды оно просто ждёт. Но если не поливать больше 8 часов — засохнет."],
+          [["Рост", "Растение растёт, только пока грядка полита. Без воды оно просто ждёт. Но если не поливать больше 8 часов — засохнет. В лунный ливень поливает небо."],
            ["Урожай", "С каждой грядки получаешь звёздную пыль, очки для звания и пару семян на следующую посадку."],
            ["Скрещивание", "Когда рядом созрели два разных сорта, при сборе может выпасть семя-гибрид."],
            ["Мутации", "Иногда гибрид выходит совсем не похожим на родителей: с новой формой или новым цветом. Так находятся звездоцветы, грибы, тыквы, кактусы и редкие расцветки."]]
@@ -1869,6 +1893,13 @@
             grid.appendChild(cell);
           });
           page.appendChild(grid); page.appendChild(info);
+        } else if (p === SHAPES.length + 1) {
+          var wv = (F.state && F.state.weather) || {};
+          page.appendChild(el("h3", "", "Погода"));
+          page.appendChild(el("div", "bsub", wv.today ? "Сегодня: " + wv.today.icon + " " + wv.today.name + " · завтра: " + wv.tomorrow.icon + " " + wv.tomorrow.name : "Каждый день — своя погода"));
+          [["☾ Ясная ночь", "обычный день."], ["✨ Звёздный дождь", "урожай звёздной пыли ×2."], ["🌧 Лунный ливень", "поливать не нужно — грядки политы весь день."],
+           ["☀ Засуха", "полива хватает вдвое меньше."], ["🌬 Солнечный ветер", "гибриды выпадают вдвое чаще."], ["🌕 Полнолуние", "артефакты выпадают вдвое чаще."]]
+            .forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1].replace(/^./, function (ch) { return ch.toUpperCase(); })); page.appendChild(d); });
         } else {
           page.appendChild(el("h3", "", "Особые свойства"));
           page.appendChild(el("div", "bsub", "Бывают у гибридов и передаются потомкам."));
@@ -2178,7 +2209,7 @@
     call("/api/farm/visit", { pub: pub }).then(function (v) {
       if (v.error) return toast(v.error);
       F.visiting = { pub: pub, seed: parseInt(pub.slice(0, 6), 16), rain_until: v.rain_until, plots: v.plots, now: v.now, fetched: Date.now(),
-                     strains: v.strains, dry_limit: v.dry_limit };
+                     strains: v.strains, dry_limit: v.dry_limit, weather: v.weather, showers: v.showers };
       show("farm-visit"); $("vtitle").textContent = v.name;
       drawFarm($("visitcv"), F.visiting.seed, v.plots, v.now, Date.now(), v.rain_until > v.now, v.strains, v.dry_limit, false); farmAnim();
       renderPlots($("visitplots"), v.plots, v.now, false, v.strains, v.dry_limit);

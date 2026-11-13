@@ -338,6 +338,7 @@ async function handle(req: Request): Promise<Response> {
       await DB.prepare("INSERT OR REPLACE INTO g_avatars (key, data) VALUES (?, ?)").bind(b.key, bytes.buffer).run();
       return json({ ok: true });
     }
+    if (req.method === "GET" && url.pathname === "/bot/weather") return json(farm.weatherView(now()));   // для объявлений бота в чате
     if (req.method === "POST" && url.pathname === "/bot/rain") {   // новый пост в канале — дождь звёздной пыли
       return json(await farm.setRain(Number((await req.json()).hours || 24)));
     }
