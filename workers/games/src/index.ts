@@ -225,7 +225,15 @@ export default {
   async fetch(req: Request, env: any): Promise<Response> {
     DB = env.DB; ENV = env;
     farm.setup({ q, DB, now, today, nameOf });
-    return handle(req);
+    try {
+      return await handle(req);
+    } catch (e) {
+      // упали — отвечаем ошибкой с CORS, иначе браузер покажет «нет связи» вместо причины
+      console.error(e);
+      const origin = req.headers.get("origin") || "";
+      return new Response(JSON.stringify({ error: "Сервер игр споткнулся — попробуй ещё раз" }), { status: 500,
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": ORIGINS.includes(origin) ? origin : ORIGINS[0], "Vary": "Origin" } });
+    }
   },
 };
 
@@ -340,6 +348,14 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/gifts": return json(await farm.openGifts(user));
     case "/api/farm/neighbors": return json(await farm.neighbors(user, await hiddenIds()));
     case "/api/farm/visit": return json(await farm.visit(user, String(body.pub || "")));
+    case "/api/farm/water": return json(await farm.water(user, Number(body.idx)));
+    case "/api/farm/fill": return json(await farm.fill(user));
+    case "/api/farm/list": return json(await farm.list(user, String(body.strain || ""), Number(body.delta || 0)));
+    case "/api/farm/sales/seen": return json(await farm.salesSeen(user));
+    case "/api/farm/buy": {
+      const [p] = await q("SELECT name FROM g_profiles WHERE user = ?", [user.id]);
+      return json(await farm.buy(user, String(body.pub || ""), String(body.strain || ""), p?.[0] || "Сосед"));
+    }
     case "/api/farm/gift": {
       // в подарке — публичное имя (как в «Звёздном зале»), а не имя из Телеграма
       const [p] = await q("SELECT name FROM g_profiles WHERE user = ?", [user.id]);
