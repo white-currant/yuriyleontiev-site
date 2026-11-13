@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131341";
+    var BUILD = "202611131359";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -447,7 +447,7 @@
   /* строки семян и соседей — дощечки; значок — в ячейке */
   body[data-screen^="farm"] .seed { border-radius: 0; background: var(--wood); box-shadow: var(--frame), inset 0 3px 0 var(--wood3); margin: 14px 3px 0; width: calc(100% - 6px); color: var(--cream); font-family: var(--pix); }
   body[data-screen^="farm"] .seed b { font-size: 16px; font-weight: 700; }
-  body[data-screen^="farm"] .seed small { font-size: 13px; color: var(--cream2); }
+  body[data-screen^="farm"] .seed small { font-size: 13px; color: var(--cream2); white-space: pre-wrap; }
   body[data-screen^="farm"] .seed .code2 { color: #c9ab78; }
   body[data-screen^="farm"] .seed canvas { background: #47290f; box-shadow: 0 -2px 0 var(--ink), 0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink); padding: 3px; box-sizing: content-box; }
   body[data-screen^="farm"] .seed .cost { font-family: var(--pix); font-size: 15px; color: var(--pgold); }
@@ -498,8 +498,11 @@
   .book .bcell.unknown { background: rgba(120, 80, 30, .04); } .book .bcell.unknown span { color: #b39a70; }
   .book .bcell.on { background: rgba(240, 185, 80, .45); box-shadow: 0 -2px 0 #5a3820, 0 2px 0 #5a3820, -2px 0 0 #5a3820, 2px 0 0 #5a3820; }
   .book .binfo { margin-top: 10px; height: 96px; overflow: hidden; padding: 8px 12px; font-size: 13px; line-height: 1.35; background: rgba(120, 80, 30, .1); color: #3b2614; }
-  .book .binfo b { display: block; font-size: 15px; margin-bottom: 2px; }
-  .book .bbonus { color: #9a5a12; font-weight: 700; } .book .bdim { margin-top: 4px; color: #7a5c38; font-size: 12.5px; }
+  .book .binfo b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; font-size: 13px; font-weight: 600; }
+  .facts div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .facts i { font-style: normal; display: inline-block; width: 20px; text-align: center; margin-right: 3px; }
+  .book .bbonus { margin-top: 4px; color: #9a5a12; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .book .bdim { margin-top: 4px; color: #7a5c38; font-size: 12.5px; }
   .book .bnav { margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 18px; }
   .book .bbtn { width: 46px; height: 38px; font-size: 26px; line-height: 1; font-weight: 700; color: #3b2614; background: rgba(120, 80, 30, .16); padding-bottom: 4px; }
   .book .bbtn[disabled] { opacity: .3; }
@@ -1310,9 +1313,14 @@
              dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: need - g, wetLeft: pl.water_until - t };
   }
   function strainCode(s) { return s.base ? "" : "сорт " + s.id.slice(1, 5).toUpperCase(); }
-  function describe(s) {
-    return "растёт " + fmtLeft(s.minutes * 60) + " · урожай ✦ " + s.dust + " · полив раз в " + fmtLeft(s.thirst * 60) +
-      " · пластинка " + Math.round(s.vinyl * 100) + "%";
+  function describe(s) {                                    // коротко, значками: рост · пыль · полив · шанс пластинки
+    return "⏱ " + fmtLeft(s.minutes * 60) + "  ✦ " + s.dust + "  💧 " + fmtLeft(s.thirst * 60) + "  💿 " + Math.round(s.vinyl * 100) + "%";
+  }
+  function factGrid(s) {                                    // то же, но с подписями — для справочника
+    var g = el("div", "facts");
+    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "даёт " + s.dust + " пыли"], ["💧", "полив раз в " + fmtLeft(s.thirst * 60)], ["💿", "пластинка " + Math.round(s.vinyl * 100) + "%"]]
+      .forEach(function (x) { var d = el("div"); d.appendChild(el("i", "", x[0])); d.append(x[1]); g.appendChild(d); });
+    return g;
   }
 
   // пять растений на грядке — от дальних к ближним (так рисуются без «просвечивания»)
@@ -1810,6 +1818,7 @@
   var COLORS = [["moss", ["Лунный", "Лунные", "Лунная"]], ["berry", ["Звёздный", "Звёздные", "Звёздная"]], ["crystal", ["Кометный", "Кометные", "Кометная"]],
                 ["sun", ["Солнечный", "Солнечные", "Солнечная"]], ["nebula", ["Туманный", "Туманные", "Туманная"]], ["ember", ["Огненный", "Огненные", "Огненная"]],
                 ["frost", ["Ледяной", "Ледяные", "Ледяная"]], ["night", ["Полуночный", "Полуночные", "Полуночная"]], ["aurora", ["Сияющий", "Сияющие", "Сияющая"]]];
+  var BONUS_SHORT = { rain: "в дождь урожай ×3", lucky: "пластинки вдвое чаще", hardy: "не засыхает без воды", rich: "иногда двойной урожай", seedy: "даёт больше семян" };
   var BONUS_NAME = { rain: "Дождевой", lucky: "Счастливый", hardy: "Стойкий", rich: "Щедрый", seedy: "Плодовитый" };
   F.bookPage = 0;
   function bookIcon(cv, s) {                                  // значок в справочнике: холст одного размера у всех форм, растение по центру внизу
@@ -1835,16 +1844,16 @@
         if (p === 0) {
           page.appendChild(el("h3", "", "Справочник лунного садовода"));
           page.appendChild(el("div", "bsub", "Найдено видов: " + Object.keys(kn).length + " из " + SHAPES.length * COLORS.length));
-          [["Рост", "Растение растёт, только пока грядка полита. Без воды рост стоит на паузе; сухое дольше 8 часов засыхает."],
-           ["Урожай", "Каждая собранная грядка даёт звёздную пыль, очки в звание и 2–3 семени той же культуры."],
-           ["Скрещивание", "Когда рядом созрели два разных сорта, при сборе может выпасть семя-гибрид: форма — от собранного растения, цвет — от соседа, свойства — среднее от обоих."],
-           ["Мутации", "Изредка гибрид получает новую форму или новый цвет, которых нет у родителей. Так открываются звездоцветы, грибы, тыквы, кактусы и редкие расцветки."]]
+          [["Рост", "Растение растёт, только пока грядка полита. Без воды оно просто ждёт. Но если не поливать больше 8 часов — засохнет."],
+           ["Урожай", "С каждой грядки получаешь звёздную пыль, очки для звания и пару семян на следующую посадку."],
+           ["Скрещивание", "Когда рядом созрели два разных сорта, при сборе может выпасть семя-гибрид."],
+           ["Мутации", "Иногда гибрид выходит совсем не похожим на родителей: с новой формой или новым цветом. Так находятся звездоцветы, грибы, тыквы, кактусы и редкие расцветки."]]
             .forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); });
         } else if (p <= SHAPES.length) {
           var sh2 = SHAPES[p - 1], found = COLORS.filter(function (c) { return kn[sh2[0] + "/" + c[0]]; }).length;
           page.appendChild(el("h3", "", sh2[1]));
           page.appendChild(el("div", "bsub", "Найдено расцветок: " + found + " из " + COLORS.length + (p > 3 ? " · только мутацией" : "")));
-          var grid = el("div", "bgrid"), info = el("div", "binfo", "Нажми на найденный вид, чтобы увидеть лучший сорт.");
+          var grid = el("div", "bgrid"), info = el("div", "binfo", "Нажми на растение, чтобы узнать о нём.");
           COLORS.forEach(function (c) {
             var e = kn[sh2[0] + "/" + c[0]], cell = el("button", "bcell" + (e ? "" : " unknown")); cell.type = "button";
             var cv = el("canvas", "pix"); bookIcon(cv, { shape: sh2[0], color: e ? c[0] : "_sil" }); cell.appendChild(cv);
@@ -1853,10 +1862,9 @@
             if (e) cell.onclick = function () {
               grid.querySelectorAll(".bcell").forEach(function (x) { x.classList.remove("on"); }); cell.classList.add("on"); haptic("light");
               var st = e.best; info.innerHTML = "";
-              info.appendChild(el("b", "", st.name + (st.base ? "" : " · " + strainCode(st))));
-              info.appendChild(el("div", "", describe(st)));
-              if (st.bonus) info.appendChild(el("div", "bbonus", "★ " + (data.bonuses[st.bonus] || "")));
-              info.appendChild(el("div", "bdim", e.n > 1 ? "Это лучший из " + e.n + " найденных сортов этого вида." : st.base ? "Сорт станции: семена продаются в лавке." : "Пока единственный найденный сорт этого вида."));
+              info.appendChild(el("b", "", st.name));
+              info.appendChild(factGrid(st));
+              if (st.bonus) info.appendChild(el("div", "bbonus", "★ " + (BONUS_SHORT[st.bonus] || "")));
             };
             grid.appendChild(cell);
           });
