@@ -363,6 +363,17 @@ export async function buy(u: any, pub: string, strain: string, myName: string) {
   return { ok: true, price, ...(await visit(u, pub)), farm: await farmState(u) };
 }
 
+// рынок: все семена, выставленные игроками (кроме своих). Наружу — публичное имя продавца и номер участка (pub), не аккаунт.
+export async function market(u: any, hidden: number[]) {
+  const rows = await q(`SELECT i.user, f.pub, i.strain, i.listed, p.name FROM f_inv i JOIN f_farms f ON f.user = i.user
+                        LEFT JOIN g_profiles p ON p.user = i.user WHERE i.listed > 0 AND i.user != ? LIMIT 200`, [u.id]);
+  const ss = await strains(rows.map((r) => r[2]));
+  const offers = rows.map(([uid, pub, strain, n, name]) => ({ pub, strain, count: Number(n),
+                                                               seller: hidden.includes(Number(uid)) ? "Сосед" : name || "Сосед" }))
+    .filter((o) => ss[o.strain]).sort((a, b) => (ss[b.strain].price || 0) - (ss[a.strain].price || 0));
+  return { offers, strains: ss, bonuses: BONUSES };
+}
+
 export async function salesSeen(u: any) {
   await q("UPDATE f_sales SET seen = 1 WHERE seller = ? AND seen = 0", [u.id]);
   return { farm: await farmState(u) };
