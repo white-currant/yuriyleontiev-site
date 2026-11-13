@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131134";
+    var BUILD = "202611131135";
     try {
       fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
         v = (v || "").trim();
@@ -380,6 +380,8 @@
   body[data-screen^="farm"] .plot .lbl.water { color: #9ddcff; }
   body[data-screen^="farm"] .plot .lbl.dead { color: #e0b48a; }
   body[data-screen^="farm"] .plot.well .lbl { bottom: auto; top: 0; transform: translate(-50%, -105%); color: var(--cream); }
+  body[data-screen^="farm"] .plot.well:not(.house) .lbl { left: auto; right: 6px; transform: translate(0, -105%); }   /* колодец у края кадра — подпись не вылезает */
+  body[data-screen^="farm"] .plot.well.house .lbl { left: 8px; transform: translate(0, -105%); }
   body[data-screen^="farm"] .plot:active { background: rgba(255, 255, 255, .18); }
   body[data-screen^="farm"] .float { font-family: var(--pix); }
   /* ячейки инвентаря: тёмное дерево, выбранная — светлая с уголками */
