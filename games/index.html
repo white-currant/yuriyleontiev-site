@@ -11,17 +11,22 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131135";
-    try {
-      fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
-        v = (v || "").trim();
-        if (v && v !== BUILD && sessionStorage.getItem("games-reload") !== v) {
-          sessionStorage.setItem("games-reload", v);                       // не больше одной перезагрузки на версию
-          var q = new URLSearchParams(location.search); q.set("v", v);
-          location.replace(location.pathname + "?" + q.toString() + location.hash);
-        }
-      }).catch(function () {});
-    } catch (e) {}
+    var BUILD = "202611131136";
+    function check() {
+      try {
+        fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
+          v = (v || "").trim();
+          if (v && v !== BUILD && sessionStorage.getItem("games-reload") !== v) {
+            sessionStorage.setItem("games-reload", v);                       // не больше одной перезагрузки на версию
+            var q = new URLSearchParams(location.search); q.set("v", v);
+            location.replace(location.pathname + "?" + q.toString() + location.hash);
+          }
+        }).catch(function () {});
+      } catch (e) {}
+    }
+    check();
+    window.checkGamesVersion = check;                                         // ещё раз — при возврате в приложение и при входе в гильдию
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) check(); });
   })();
 </script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -700,7 +705,7 @@
   }
   document.querySelectorAll("#tabs button").forEach(function (b) { b.onclick = function () { haptic("light"); setTab(b.dataset.tab); }; });
   function home() {
-    show("home");
+    show("home"); if (window.checkGamesVersion) window.checkGamesVersion();
     if (tg && tg.BackButton) tg.BackButton.hide();
     round = null; busy = false; clearInterval(timer); stopAudio(false);
     loadItems();                                             // коллекция не задерживает гильдию
@@ -1310,7 +1315,7 @@
     var c = cv.getContext("2d"), i, L = staticLayer(seed);
     c.drawImage(L.back, 0, 0);
     var nextLock = -1; (plots || []).forEach(function (pl, k) { if (pl.locked && nextLock < 0) nextLock = k; });
-    BORDER.forEach(function (k) { if (plots && plots[k]) drawBed(c, plots[k], k, now, t, ss, dryLim, own, k === nextLock); });   // дальние грядки — раньше
+    BORDER.forEach(function (k) { if (plots && plots[k] && BC[k]) drawBed(c, plots[k], k, now, t, ss, dryLim, own, k === nextLock); });   // дальние грядки — раньше
     c.drawImage(L.front, 0, 0);
     if (own) drawFx(c, t);
     for (i = 0; i < 4; i++) {                                                      // дым из трубы
@@ -1436,6 +1441,7 @@
   function renderPlots(box, plots, now, own, ss, dryLim) {
     box.innerHTML = "";
     plots.forEach(function (pl, i) {
+      if (!BC[i]) return;
       var b = document.createElement("button"); b.type = "button"; b.className = "plot";
       b.style.left = (BC[i][0] - HW) / FW * 100 + "%"; b.style.top = (BC[i][1] - HH - 8) / FH * 100 + "%";
       b.style.width = HW * 2 / FW * 100 + "%"; b.style.height = (HH * 2 + 11) / FH * 100 + "%";
