@@ -3,7 +3,7 @@
 // Рост считается по часам, а не моделируется. Растёт растение, только пока полито: на грядке хранится,
 // сколько оно уже выросло (grown), и окно полива [wet_from, water_until). Не полил — рост на паузе;
 // сухое дольше DRY_LIMIT — засыхает (кроме сортов со свойством «стойкий»). Лейку наполняют в колодце.
-// Урожай даёт звёздную пыль и очки в звание (дневного предела нет — решение 2026-11-13).
+// Очки в звание: за посадку и за полив — по 1, за урожай — по культуре (дневного предела нет — решение 2026-11-13).
 // Скрещивание: если при сборе рядом (слева/справа/сверху/снизу) созрел другой сорт — иногда выпадает семя-гибрид:
 // форма от собираемого, цвет от соседа, свойства — среднее родителей с мутацией, иногда особое свойство.
 // Сорта хранятся в f_strains (общие для всех), семена — в инвентаре f_inv; часть можно выставить в свою лавку,
@@ -34,6 +34,7 @@ const STARTER: [string, number][] = [["moss", 5], ["berry", 2]];   // старт
 const GIFT_DUST = 5, GIFTS_PER_DAY = 5;
 const CAN_MAX = 5;                           // лейка: поливов до следующего похода к колодцу
 const DRY_LIMIT = 8 * 3600;                  // столько сухое растение ждёт полива, потом засыхает
+const POINTS_PLANT = 1, POINTS_WATER = 1;    // очки в звание за посадку и за полив сухой грядки (награда за саму игру, решение 2026-11-13)
 const SEEDS_MIN = 2, SEEDS_EXTRA = 0.35;     // семян с урожая: 2, с шансом 35% — 3
 const CROSS_CHANCE = 0.4;                    // шанс семени-гибрида, если рядом созрел другой сорт
 const SITE = "https://yuriyleontiev.music";
@@ -210,8 +211,11 @@ export async function plant(u: any, idx: number, crop: string) {
   const ok = await q("UPDATE f_inv SET count = count - 1 WHERE user = ? AND strain = ? AND count - listed > 0 RETURNING 1", [u.id, crop]);
   if (!ok.length) return { error: "Таких семян у тебя нет" };
   // посадили сухим — сразу после посадки нужно полить
-  await q(`INSERT INTO f_plots (user, ${PLOT_COLS}) VALUES (?, ?, ?, ?, 0, ?, ?)`, [u.id, idx, crop, t, t, t]);
-  return { farm: await farmState(u) };
+  await DB.batch([
+    DB.prepare(`INSERT INTO f_plots (user, ${PLOT_COLS}) VALUES (?, ?, ?, ?, 0, ?, ?)`).bind(u.id, idx, crop, t, t, t),
+    DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)").bind(u.id, nameOf(u), POINTS_PLANT, "Лунная ферма", t),
+  ]);
+  return { points: POINTS_PLANT, farm: await farmState(u) };
 }
 
 // «Семенная лавка станции»: базовые семена в мешок за пыль
@@ -238,12 +242,17 @@ export async function water(u: any, idx: number) {
   const s = (await strains([p[1]]))[p[1]], t = now(), st = stateOf(p, s, t);
   if (st.dead) return { error: "Растение засохло — его можно только убрать" };
   if (st.ripe) return { error: "Уже созрело — собирай" };
+  // поливается только сухая грядка: иначе лейкой можно было бы «накликивать» очки
+  if (t < Number(p[5])) return { error: "Грядка ещё влажная" };
   if (!(await q("UPDATE f_farms SET water = water - 1 WHERE user = ? AND water > 0 RETURNING 1", [u.id])).length)
     return { error: "Лейка пуста — набери воды в колодце" };
   // накопленный рост фиксируем и открываем новое окно полива
-  await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ?",
-          [growth(p, t), t, t + s.thirst * 60, u.id, idx]);
-  return { farm: await farmState(u) };
+  // окно полива открывает ровно один запрос (условие water_until <= сейчас) — двойное нажатие не даст очки дважды
+  const done = await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ? AND water_until <= ? RETURNING 1",
+                       [growth(p, t), t, t + s.thirst * 60, u.id, idx, t]);
+  if (!done.length) { await q("UPDATE f_farms SET water = water + 1 WHERE user = ?", [u.id]); return { error: "Грядка ещё влажная" }; }
+  await q("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)", [u.id, nameOf(u), POINTS_WATER, "Лунная ферма", t]);
+  return { points: POINTS_WATER, farm: await farmState(u) };
 }
 
 export async function harvest(u: any, idx: number) {

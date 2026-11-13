@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131141";
+    var BUILD = "202611131148";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -324,6 +324,7 @@
   .plot.well .lbl { bottom: auto; top: 0; transform: translate(-50%, -110%); color: #d9f1ff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
   .float.blue { color: #d9f1ff; text-shadow: 0 1px 0 #1d5f9e, 0 0 10px rgba(120, 200, 255, .8); }
   .float.big { font-size: 15px; }
+  .float.pts { font-size: 14px; }
   .float.seedf { font-size: 14px; color: #c9ffd9; text-shadow: 0 1px 0 #1f6b3a, 0 0 8px rgba(120, 255, 170, .6); }
   .seed .code2 { display: inline; font-weight: 500; color: var(--dim); font-size: 11px; }
   .seed .bonus, .sub.bonus { color: #ffd88a; }
@@ -1538,7 +1539,7 @@
     }
     if (inf.ripe) {                                                                 // созрело — собрать сразу, без вопросов
       var gain = inf.s.dust * (s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1);
-      haptic("success"); addFx("harvest", pl.idx, inf.s); floatText(pl.idx, "+" + gain + " ✦");
+      haptic("success"); addFx("harvest", pl.idx, inf.s); floatText(pl.idx, "+" + gain + " ✦ · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков"));
       s.plots[pl.idx] = { idx: pl.idx, crop: null }; s.dust += gain; renderFarm();   // сразу, не дожидаясь сервера
       return farmCall("/api/farm/harvest", { idx: pl.idx }).then(function (r) {
         if (r.error) return;
@@ -1553,6 +1554,7 @@
       if (s.water <= 0) { haptic("error"); return toast("Лейка пуста — нажми на колодец, чтобы набрать воды"); }
       haptic("light"); addFx("water", pl.idx, inf.s);
       pl.grown = inf.g; pl.wet_from = now; pl.water_until = now + inf.s.thirst * 60; s.water--; renderFarm();
+      floatText(pl.idx, "+1 очко", "pts");
       return farmCall("/api/farm/water", { idx: pl.idx }).catch(function () {});
     }
     toast(inf.s.name + ": созреет через " + fmtLeft(inf.left) + (inf.wetLeft < inf.left ? " · воды хватит на " + fmtLeft(inf.wetLeft) : ""));
@@ -1587,7 +1589,7 @@
     });
   }
   function plantNow(pl, st, it) {
-    var s = F.state; haptic("light"); addFx("plant", pl.idx, st);
+    var s = F.state; haptic("light"); addFx("plant", pl.idx, st); floatText(pl.idx, "+1 очко", "pts");
     var t0 = farmNow(); it.count--;
     s.plots[pl.idx] = { idx: pl.idx, crop: st.id, planted: t0, grown: 0, wet_from: t0, water_until: t0 }; renderFarm();
     farmCall("/api/farm/plant", { idx: pl.idx, crop: st.id }).catch(function () {});
@@ -1709,7 +1711,7 @@
     sheet(function (sh, close) {
       var cv = el("canvas", "pix bigseed"); canIcon(cv); sh.appendChild(cv);
       sh.appendChild(el("h3", "", "Лейка"));
-      sh.appendChild(el("div", "sub", "Воды на " + s.water + " из " + s.can_max + " поливов. Набрать — нажми на колодец. Растение растёт, только пока полито; без воды рост на паузе, а сухое дольше 8 часов засыхает."));
+      sh.appendChild(el("div", "sub", "Воды на " + s.water + " из " + s.can_max + " поливов. Набрать — нажми на колодец. Растение растёт, только пока полито; без воды рост на паузе, а сухое дольше 8 часов засыхает. За каждый полив сухой грядки и за каждую посадку — +1 очко в звание."));
       sh.appendChild(btn("Понятно", "ghost", close));
     });
   }
