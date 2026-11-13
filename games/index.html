@@ -363,11 +363,13 @@
   /* ======= «Лунная ферма»: пиксельный интерфейс — дерево, пергамент, шрифт Pixelify Sans (референсы пользователя 2026-11-13) =======
      Всё ниже действует только на экранах фермы. Рамка «лесенкой» — четыре тени без размытия. */
   body[data-screen^="farm"] { --ink: #2b1a0e; --wood: #7a4e2c; --wood2: #5a3820; --wood3: #9a683c; --wood4: #b9824e; --cream: #f6e7c1; --cream2: #e3cfa0;
-    --pgold: #f2b950; --pgold2: #c4892c; --pix: "Pixelify Sans", var(--sans);
+    --pgold: #f2b950; --pgold2: #c4892c; --pix: var(--sans);   /* пиксельный Pixelify Sans оказался неразборчивым в кириллице (2026-11-13) — текст обычным шрифтом */
     --frame: 0 -3px 0 var(--ink), 0 3px 0 var(--ink), -3px 0 0 var(--ink), 3px 0 0 var(--ink);
     font-family: var(--pix); color: var(--cream); background: var(--wood2) !important; }
   body[data-screen^="farm"] main { padding-bottom: calc(34px + env(safe-area-inset-bottom)); }
-  body[data-screen^="farm"] .mono { font-family: var(--pix); font-size: 13px; letter-spacing: .08em; color: var(--cream2); }
+  body[data-screen^="farm"] .mono { font-family: var(--pix); font-size: 12px; font-weight: 700; letter-spacing: .1em; color: var(--cream2); }
+  body[data-screen^="farm"] .exit, body[data-screen^="farm"] .dust-pill, body[data-screen^="farm"] .selnote, body[data-screen^="farm"] .farm-note { font-weight: 600; }
+  body[data-screen^="farm"] .seed small, body[data-screen^="farm"] .sheet .sub, body[data-screen^="farm"] .invline { font-weight: 500; }
   body[data-screen^="farm"] h2, body[data-screen^="farm"] h3 { font-family: var(--pix); font-weight: 700; letter-spacing: 0; color: var(--cream); }
   body[data-screen^="farm"] .farm-note, body[data-screen^="farm"] .selnote { font-family: var(--pix); font-size: 14px; color: var(--cream2); }
   /* шапка: дощечки */
