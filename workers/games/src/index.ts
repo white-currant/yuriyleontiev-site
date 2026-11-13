@@ -174,8 +174,10 @@ async function answer(u: any, round: string, choice: string) {
   const streak = right && !late ? g.streak + 1 : 0;
   const scoring = g.scored < SCORED_PER_DAY;
   if (right && !late && scoring) {
-    points = elapsed <= 8 ? 10 : elapsed <= 15 ? 7 : 5;
-    if (streak % 5 === 0) bonus = 5; // каждые 5 угаданных подряд
+    // баланс с фермой (2026-11-13): было 10 / 7 / 5 и +5 за серию — за 2 минуты игры выходило до 130 очков в день,
+    // вдвое-втрое больше, чем за день на ферме. Теперь до 66 в день.
+    points = elapsed <= 8 ? 5 : elapsed <= 15 ? 4 : 3;
+    if (streak % 5 === 0) bonus = 3; // каждые 5 угаданных подряд
   }
   const writes = [
     DB.prepare("UPDATE g_rounds SET done = 1 WHERE id = ?").bind(round),
