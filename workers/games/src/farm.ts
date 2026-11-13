@@ -6,7 +6,7 @@
 // Очки в звание: за посадку и за полив — по 1, за урожай — по культуре (дневного предела нет — решение 2026-11-13).
 // Скрещивание: если при сборе рядом (слева/справа/сверху/снизу) созрел другой сорт — иногда выпадает семя-гибрид:
 // форма от собираемого, цвет от соседа, свойства — среднее родителей с мутацией, иногда особое свойство.
-// Урожай кладётся в амбар (f_barn): продать станции по цене сорта или (дальше) пустить на кухню.
+// Урожай кладётся в амбар (f_barn): превратить в звёздную пыль или (дальше) пустить на кухню.
 // Сорта хранятся в f_strains (общие для всех), семена — в инвентаре f_inv; часть можно выставить в свою лавку,
 // соседи покупают их за пыль по цене, которую считает игра по свойствам (решение пользователя: цена фиксированная).
 // Изредка при сборе выпадает пластинка — один трек Yuriy Leontiev; редкость и отделка — у находки.
@@ -326,7 +326,7 @@ export async function harvest(u: any, idx: number) {
   if (st.dead) return { withered: true, farm: await farmState(u) };       // засохшее — просто убрали
   const rain = (await rainUntil()) > t;
   const double = s.bonus === "rich" && Math.random() < 0.25;
-  // урожай идёт в амбар (решение 2026-11-14): продать станции по цене сорта или пустить на кухню
+  // урожай идёт в амбар (решение 2026-11-14): превратить в звёздную пыль (по цене сорта) или пустить на кухню
   const crop = (rain ? (s.bonus === "rain" ? 3 : 2) : 1) * (double ? 2 : 1);
   const points = s.points;
   const writes = [DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?)
@@ -357,7 +357,7 @@ export async function harvest(u: any, idx: number) {
   return { crop, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
 }
 
-// амбар → станция: урожай продаётся по цене сорта (s.dust за штуку). strain = "*" — продать всё.
+// амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
 export async function sellCrop(u: any, strain: string, n: number) {
   await ensureFarm(u);
   const rows = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);

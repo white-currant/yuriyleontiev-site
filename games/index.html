@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611140153";
+    var BUILD = "202611140157";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1399,7 +1399,7 @@
   }
   function factGrid(s) {                                    // то же, но с подписями — для справочника
     var g = el("div", "facts");
-    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "станция даёт " + s.dust], ["💧", "полив раз в " + fmtLeft(s.thirst * 60)], ["🏺", "артефакт " + Math.round(s.vinyl * 100) + "%"]]
+    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "в пыль: " + s.dust], ["💧", "полив раз в " + fmtLeft(s.thirst * 60)], ["🏺", "артефакт " + Math.round(s.vinyl * 100) + "%"]]
       .forEach(function (x) { var d = el("div"); d.appendChild(el("i", "", x[0])); d.append(x[1]); g.appendChild(d); });
     return g;
   }
@@ -1712,7 +1712,7 @@
       return farmCall("/api/farm/harvest", { idx: pl.idx }).catch(function () {});
     }
     if (inf.ripe) {                                                                 // созрело — собрать сразу, без вопросов
-      var gain = s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1;          // урожай — в амбар (продать станции или на кухню)
+      var gain = s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1;          // урожай — в амбар (в звёздную пыль или на кухню)
       haptic("success"); addFx("harvest", pl.idx, inf.s); floatText(pl.idx, "+" + gain + " в амбар · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков"));
       s.plots[pl.idx] = { idx: pl.idx, crop: null }; barnAdd(inf.s.id, gain); renderFarm();   // сразу, не дожидаясь сервера
       return farmCall("/api/farm/harvest", { idx: pl.idx }).then(function (r) {
@@ -1747,6 +1747,12 @@
   }
   function barnOf(id) { var r = null; (F.state.barn || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
   function barnAdd(id, n) { F.state.barn = F.state.barn || []; var it = barnOf(id); if (it) it.count += n; else F.state.barn.push({ strain: id, count: n }); }
+  function toDust(strain, n, gain) {                           // урожай из амбара → звёздная пыль (сразу, сервер подтвердит)
+    var cur = F.state; haptic("success");
+    if (strain === "*") cur.barn = []; else barnOf(strain).count -= n;
+    cur.dust += gain; renderFarm(); toast("+✦ " + gain + " звёздной пыли");
+    farmCall("/api/farm/sell", { strain: strain, n: n || 0 }).catch(function () {});
+  }
   function barnItems() { var s = F.state; return (s.barn || []).filter(function (it) { return it.count > 0 && s.strains[it.strain]; }); }
   function bagOf(id) { var r = null; (F.state.inv || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
   function addToBag(id, n) { var it = bagOf(id); if (it) it.count += n; else F.state.inv.push({ strain: id, count: n, listed: 0 }); }
@@ -1784,7 +1790,7 @@
       var props = el("div", "variants");
       var line = function (k, v) { var r = el("div"); r.appendChild(el("b", "", k)); r.appendChild(el("span", "", v)); props.appendChild(r); };
       line("Растёт", fmtLeft(st.minutes * 60) + " под поливом");
-      line("Урожай", "в амбар; станция берёт по ✦ " + st.dust + ". За сбор " + st.points + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
+      line("Урожай", "в амбар; одна штука — ✦ " + st.dust + " пыли. За сбор " + st.points + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
       line("Полив", "одного хватает на " + fmtLeft(st.thirst * 60));
       line("Шанс артефакта", Math.round(st.vinyl * 100) + "% с урожая");
       line("Семена с урожая", (st.bonus === "seedy" ? "3–4 (плодовитый)" : "2–3") + " за грядку");
@@ -1945,7 +1951,7 @@
           page.appendChild(el("h3", "", "Справочник лунного садовода"));
           page.appendChild(el("div", "bsub", "Найдено видов: " + Object.keys(kn).length + " из " + SHAPES.length * COLORS.length));
           [["Рост", "Растение растёт, только пока грядка полита. Без воды оно просто ждёт. Засыхает, только если не поливать двое суток — за ночь ничего не пропадёт. В лунный ливень поливает небо."],
-           ["Урожай", "Собранное ложится в амбар, его можно продать станции за звёздную пыль. За сбор — очки для звания и пара семян на следующую посадку."],
+           ["Урожай", "Собранное ложится в амбар, там его можно превратить в звёздную пыль. За сбор — очки для звания и пара семян на следующую посадку."],
            ["Зерно", "Пшеница, просо и рожь. Сами по себе стоят недорого — зерно пойдёт на мельницу, в муку."],
            ["Скрещивание", "Когда рядом созрели два разных сорта, при сборе может выпасть семя-гибрид."],
            ["Мутации", "Иногда гибрид выходит совсем не похожим на родителей: с новой формой или новым цветом. Так находятся звездоцветы, грибы, тыквы, кактусы и редкие расцветки."]]
@@ -2022,17 +2028,37 @@
       };
       draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
       sh.appendChild(el("div", "sub", "Перетащи семена, чтобы расставить по порядку: первые три после лейки видны в полоске под фермой."));
+      // амбар: урожай превращается в звёздную пыль прямо здесь (его правка 2026-11-14: «не продать станции, а превратить в пыль»)
       var bh = el("div", "mono", "Амбар"); bh.style.marginTop = "20px"; sh.appendChild(bh);
-      var barn = barnItems(), bgrid = el("div", "invgrid");
-      barn.forEach(function (it) {
-        var st = s.strains[it.strain], b = el("button", "slot"); b.type = "button"; b.setAttribute("aria-label", st.name);
-        var cv = el("canvas", "pix"); cropIcon(cv, st, true); b.appendChild(cv); b.appendChild(el("span", "n", it.count));
-        b.onclick = function () { haptic("light"); close(); openShop("sell"); };
-        bgrid.appendChild(b);
-      });
-      for (var k = barn.length; k < 5; k++) bgrid.appendChild(el("div", "slot empty"));
-      sh.appendChild(bgrid);
-      sh.appendChild(el("div", "sub", barn.length ? "Собранный урожай. Продать его станции можно в лавке, на вкладке «Продать»." : "Здесь копится собранный урожай. Продать его станции можно в лавке."));
+      var barnBox = el("div"); sh.appendChild(barnBox);
+      var drawBarn = function () {
+        var cur = F.state, barn = barnItems(), bgrid = el("div", "invgrid"), total = 0;
+        barnBox.innerHTML = "";
+        if (F.barnSel && !barnOf(F.barnSel)) F.barnSel = null;
+        if (F.barnSel && barnOf(F.barnSel).count <= 0) F.barnSel = null;
+        barn.forEach(function (it) {
+          var st = cur.strains[it.strain], b = el("button", "slot" + (F.barnSel === it.strain ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
+          total += it.count * st.dust;
+          var cv = el("canvas", "pix"); cropIcon(cv, st, true); b.appendChild(cv); b.appendChild(el("span", "n", it.count));
+          b.onclick = function () { haptic("light"); F.barnSel = F.barnSel === it.strain ? null : it.strain; drawBarn(); };
+          bgrid.appendChild(b);
+        });
+        for (var k = barn.length; k < 5; k++) bgrid.appendChild(el("div", "slot empty"));
+        barnBox.appendChild(bgrid);
+        if (!barn.length) { barnBox.appendChild(el("div", "sub", "Здесь копится собранный урожай. Его можно превратить в звёздную пыль.")); return; }
+        var sel = F.barnSel && barnOf(F.barnSel), acts = el("div", "invacts");
+        if (sel) {
+          var st = cur.strains[sel.strain];
+          barnBox.appendChild(el("div", "sub", st.name + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли."));
+          acts.appendChild(btn("1 в пыль · ✦ " + st.dust, "ghost", function () { toDust(st.id, 1, st.dust); drawBarn(); }));
+          if (sel.count > 1) acts.appendChild(btn("все " + sel.count + " · ✦ " + st.dust * sel.count, "", function () { toDust(st.id, sel.count, st.dust * sel.count); drawBarn(); }));
+        } else {
+          barnBox.appendChild(el("div", "sub", "Собранный урожай. Нажми на ячейку, чтобы превратить его в звёздную пыль."));
+          acts.appendChild(btn("Весь урожай в пыль · ✦ " + total, "", function () { toDust("*", 0, total); drawBarn(); }));
+        }
+        barnBox.appendChild(acts);
+      };
+      drawBarn();
       var listed = s.inv.filter(function (it) { return it.listed > 0; });
       if (listed.length) sh.appendChild(el("div", "sub", "На продаже в лавке: " + listed.map(function (it) { return (s.strains[it.strain] || {}).name + " ×" + it.listed; }).join(", ") + "."));
       var acts = el("div", "salebtns");
@@ -2122,31 +2148,7 @@
       });
       return;
     }
-    // продать: урожай из амбара — станции; свои сорта — игрокам
-    h("Продать урожай станции");
-    var barn = barnItems(), total = 0;
-    barn.forEach(function (it) { total += it.count * s.strains[it.strain].dust; });
-    if (!barn.length) box.appendChild(el("div", "farm-note left", "Амбар пуст. Собранный урожай попадает сюда, станция покупает его сразу."));
-    else {
-      var sellNow = function (node, strain, n, gain) {
-        var cur = F.state;
-        haptic("success"); buyFx(node, "+✦ " + gain, n ? "−" + n + " шт" : "амбар пуст");
-        if (strain === "*") cur.barn = []; else barnOf(strain).count -= n;
-        cur.dust += gain; renderFarm(); renderShopTab();
-        farmCall("/api/farm/sell", { strain: strain, n: n || 0 }).catch(function () {});
-      };
-      var all = el("div", "invacts"), allb = btn("Продать весь урожай · ✦ " + total, "", function (ev) { sellNow(ev.currentTarget, "*", 0, total); });
-      all.appendChild(allb); box.appendChild(all);
-      barn.forEach(function (it) {
-        var st = s.strains[it.strain];
-        box.appendChild(seedRow(st, "×" + it.count, function () { seedSheet(st); }));
-        var acts = el("div", "invacts");
-        acts.appendChild(btn("1 шт · ✦ " + st.dust, "ghost", function (ev) { sellNow(ev.currentTarget, st.id, 1, st.dust); }));
-        if (it.count > 1) acts.appendChild(btn("все " + it.count + " · ✦ " + st.dust * it.count, "", function (ev) { sellNow(ev.currentTarget, st.id, it.count, st.dust * it.count); }));
-        box.appendChild(acts);
-      });
-    }
-    h("Свои сорта — игрокам");
+    // продать: свои сорта — игрокам (урожай превращается в пыль в амбаре, в инвентаре)
     box.appendChild(el("div", "farm-note left", "Здесь выставляются на продажу выведенные тобой сорта. Их увидят все игроки во вкладке «Купить» и соседи у тебя в гостях. Цену считает игра по свойствам сорта, пыль приходит тебе сразу. Выставленные семена не посадить, пока не уберёшь их с продажи."));
     var mine = s.inv.filter(function (it) { return it.count > 0 && s.strains[it.strain] && !s.strains[it.strain].base; });
     if (!mine.length) { box.appendChild(el("div", "farm-note left", "Своих сортов пока нет. Посади разные культуры на соседние грядки — когда созреют обе, при сборе может выпасть семя-гибрид.")); return; }
