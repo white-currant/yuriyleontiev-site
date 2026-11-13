@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611140159";
+    var BUILD = "202611140205";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1569,6 +1569,15 @@
     cv.width = w; cv.height = h; c.clearRect(0, 0, w, h); if (!bare) { px(c, 1, h - 2, w - 2, 2, C.so); px(c, 1, h - 2, w - 2, 1, C.sol); }
     sprS(c, 2, h - 2, rows, s);
   }
+  // урожай в амбаре — в плетёной корзинке (чтобы не путать с семенами, которые рисуются на земле)
+  function produceIcon(cv, s) {
+    var rows = (CROP[s.shape] || CROP.moss)[3], w = rows[0].length + 4, h = 15, c = cv.getContext("2d");
+    cv.width = w; cv.height = h; c.clearRect(0, 0, w, h);
+    sprS(c, 2, h - 4, rows.slice(0, -1), s);                                      // плоды без земли, выглядывают из корзины
+    px(c, 1, h - 5, w - 2, 1, C.wdl); px(c, 0, h - 5, 1, 1, C.wdd); px(c, w - 1, h - 5, 1, 1, C.wdd);   // край корзины
+    for (var y = h - 4; y < h - 1; y++) for (var x = 1; x < w - 1; x++) px(c, x, y, 1, 1, (x + y) % 2 ? C.wd : C.wdd);   // плетение
+    px(c, 2, h - 1, w - 4, 1, C.wdd);
+  }
   function canIcon(cv) { var c = cv.getContext("2d"); cv.width = 12; cv.height = 9; c.clearRect(0, 0, 12, 9); spr(c, 1, 8, CAN); }
   function farmNow() { return F.state ? F.state.now + (Date.now() - F.fetched) / 1000 : Date.now() / 1000; }
   function farmAnim() {
@@ -2017,6 +2026,7 @@
     var s = F.state; if (!s) return;
     sheet(function (sh, close) {
       sh.appendChild(el("h3", "", "Инвентарь"));
+      sh.appendChild(el("div", "mono", "Семена — их сажают"));
       var note = el("div", "selnote"), grid = el("div", "invgrid");
       var draw = function () {
         grid.innerHTML = "";
@@ -2029,7 +2039,7 @@
       draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
       sh.appendChild(el("div", "sub", "Перетащи семена, чтобы расставить по порядку: первые три после лейки видны в полоске под фермой."));
       // амбар: урожай превращается в звёздную пыль прямо здесь (его правка 2026-11-14: «не продать станции, а превратить в пыль»)
-      var bh = el("div", "mono", "Амбар"); bh.style.marginTop = "20px"; sh.appendChild(bh);
+      var bh = el("div", "mono", "Амбар — собранный урожай"); bh.style.marginTop = "20px"; sh.appendChild(bh);
       var barnBox = el("div"); sh.appendChild(barnBox);
       var drawBarn = function () {
         var cur = F.state, barn = barnItems(), bgrid = el("div", "invgrid"), total = 0;
@@ -2039,7 +2049,7 @@
         barn.forEach(function (it) {
           var st = cur.strains[it.strain], b = el("button", "slot" + (F.barnSel === it.strain ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
           total += it.count * st.dust;
-          var cv = el("canvas", "pix"); cropIcon(cv, st, true); b.appendChild(cv); b.appendChild(el("span", "n", it.count));
+          var cv = el("canvas", "pix"); produceIcon(cv, st); b.appendChild(cv); b.appendChild(el("span", "n", it.count));
           b.onclick = function () { haptic("light"); F.barnSel = F.barnSel === it.strain ? null : it.strain; drawBarn(); };
           bgrid.appendChild(b);
         });
