@@ -220,16 +220,43 @@ async function hiddenIds(): Promise<number[]> {
 async function top() {
   const h = await hiddenIds();
   const not = h.length ? ` AND user NOT IN (${h.map(() => "?").join(",")})` : "";
-  const all = await q(`SELECT name, points, title, avatar FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 500`, h);   // все игроки (потолок — от случайной лавины)
+  const all = await q(`SELECT name, points, title, avatar, user FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 500`, h);   // все игроки (потолок — от случайной лавины)
   // имя — как его прислал бот (хозяин — названием канала), а не из Телеграма при входе в игру
   // «Сегодня» — все очки за сутки (по Минску) из всех игр: начисления g_events, а не только раунды «Угадай трек»
   const notE = h.length ? ` AND e.user NOT IN (${h.map(() => "?").join(",")})` : "";
   const from = Math.floor((now() + TZ_SHIFT) / 86400) * 86400 - TZ_SHIFT;
-  const day = await q(`SELECT COALESCE(p.name, MAX(e.name)), SUM(e.delta) AS pts, p.avatar, p.title FROM g_events e LEFT JOIN g_profiles p ON p.user = e.user
+  const day = await q(`SELECT COALESCE(p.name, MAX(e.name)), SUM(e.delta) AS pts, p.avatar, p.title, e.user FROM g_events e LEFT JOIN g_profiles p ON p.user = e.user
                        WHERE e.at >= ? AND e.delta > 0${notE} GROUP BY e.user HAVING pts > 0 ORDER BY pts DESC LIMIT 500`, [from, ...h]);
   const av = (k: any) => (k ? `/avatar/${k}` : null);
-  return { all: all.map(([name, points, title, a]) => ({ name, points: Number(points), title, avatar: av(a) })),
-           today: day.map(([name, points, a, title]) => ({ name, points: Number(points), avatar: av(a), title: title || "Ученик звёзд" })) };
+  const ids = [...new Set([...all.map((r) => Number(r[4])), ...day.map((r) => Number(r[4]))])], refs = new Map<number, string>();
+  for (const id of ids) refs.set(id, await refOf(id));
+  if (ids.length) await DB.batch(ids.map((id) => DB.prepare("INSERT OR IGNORE INTO g_refs (ref, user) VALUES (?, ?)").bind(refs.get(id), id)));
+  return { all: all.map(([name, points, title, a, id]) => ({ name, points: Number(points), title, avatar: av(a), ref: refs.get(Number(id)) })),
+           today: day.map(([name, points, a, title, id]) => ({ name, points: Number(points), avatar: av(a), title: title || "Ученик звёзд", ref: refs.get(Number(id)) })) };
+}
+
+// метка игрока: хеш номера с секретом сервера — по ней профиль открывается, а номер аккаунта наружу не уходит
+async function refOf(id: number) {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`ref:${ENV.GAMES_KEY || "x"}:${id}`)));
+  return [...d.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// профиль игрока для «Звёздного зала»: звание, очки, ферма и коллекция. Скрытых (хозяин без канала и т. п.) не отдаём.
+async function playerCard(ref: string) {
+  const [r] = await q("SELECT user FROM g_refs WHERE ref = ?", [ref]);
+  if (!r) return { error: "Игрок не найден" };
+  const uid = Number(r[0]);
+  if ((await hiddenIds()).includes(uid)) return { error: "Игрок не найден" };
+  const [p] = await q("SELECT name, points, karma, title, place, avatar FROM g_profiles WHERE user = ?", [uid]);
+  if (!p) return { error: "Игрок не найден" };
+  const [fm] = await q("SELECT pub, unlocked FROM f_farms WHERE user = ?", [uid]);
+  const kinds = fm ? (await q(`SELECT i.strain, s.genes FROM f_inv i LEFT JOIN f_strains s ON s.id = i.strain WHERE i.user = ?`, [uid])) : [];
+  const seen = new Set<string>();
+  for (const [st, genes] of kinds) { const g = genes ? JSON.parse(genes) : { shape: st, color: st }; seen.add(`${g.shape}/${g.color}`); }
+  const it = await q("SELECT game, kind, item, tier, finish, count, first_at FROM g_items WHERE user = ? ORDER BY first_at DESC", [uid]);
+  return { name: p[0], points: Number(p[1]), karma: Number(p[2] || 0), title: p[3], place: Number(p[4] || 0), avatar: p[5] ? `/avatar/${p[5]}` : null,
+           farm: fm ? { pub: fm[0], beds: Number(fm[1]), species: seen.size } : null,
+           items: it.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
 }
 
 // коллекция: предметы всех игр, которые выпали игроку (профиль гильдии показывает их вместе)
@@ -366,6 +393,7 @@ async function handle(req: Request): Promise<Response> {
     case "/api/answer": return json(await answer(user, String(body.round || ""), String(body.choice || "")));
     case "/api/top": return json(await top());
     case "/api/items": return json(await items(user));
+    case "/api/player": return json(await playerCard(String(body.ref || "")));
     case "/api/link/start": return json(await linkStart(user));
     case "/api/link/remove": return json(await linkRemove(user));
     // «Лунная ферма»

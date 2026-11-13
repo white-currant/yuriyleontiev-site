@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131704";
+    var BUILD = "202611131717";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -357,6 +357,17 @@
   .selnote { margin-top: 8px; min-height: 2.8em; font-size: 12.5px; line-height: 1.4; color: rgba(255, 255, 255, .82); }
   .sheet .selnote { color: var(--dim); }
   .salecount2 { color: var(--white); font-weight: 600; }
+  .list li.tappable { cursor: pointer; border-radius: 12px; transition: background .15s; }
+  .list li.tappable:active { background: rgba(255, 255, 255, .07); }
+  .pcard .phead { display: flex; align-items: center; gap: 14px; }
+  .pcard .phead .sigil { width: 56px; height: 56px; font-size: 22px; }
+  .pcard .pstats { margin-top: 16px; display: flex; gap: 26px; }
+  .pcard .pstats b { display: block; font-size: 22px; font-weight: 700; }
+  .pcard .pstats span { font-size: 12.5px; color: var(--dim); }
+  .pcard .pfarm { margin-top: 16px; font-size: 14px; color: var(--dim); }
+  .pcard .pfarm b { display: block; color: var(--white); font-size: 15px; margin-bottom: 2px; }
+  .pcard .btn { margin-top: 12px; }
+  .pcard .pbody { margin-top: 4px; }
   /* подсказка: по центру и выплывает сверху вниз (раньше анимация сбивала центрирование — плашка ехала справа) */
   .toast { animation: toastin .22s ease-out !important; }
   @keyframes toastin { from { opacity: 0; transform: translate(-50%, -14px); } to { opacity: 1; transform: translate(-50%, 0); } }
@@ -763,7 +774,43 @@
       li.querySelector(".nm").textContent = r.name; li.querySelector(".t").textContent = r.title || "";
       li.querySelector(".av").textContent = initial(r.name);
       setPhoto(li.querySelector(".av"), r.avatar);
+      if (r.ref) { li.className = "tappable"; li.onclick = function () { haptic("light"); playerSheet(r); }; }
       list.appendChild(li);
+    });
+  }
+  // профиль игрока из «Звёздного зала»: звание, очки, ферма и коллекция
+  function playerSheet(r) {
+    sheet(function (sh, close) {
+      sh.classList.add("pcard");
+      var head = el("div", "phead"), av = el("div", "sigil"); av.textContent = initial(r.name); setPhoto(av, r.avatar);
+      var t = el("div"); t.appendChild(el("h3", "", r.name)); t.appendChild(el("div", "sub", r.title || "")); head.appendChild(av); head.appendChild(t); sh.appendChild(head);
+      var body = el("div", "pbody", "Загружаю…"); sh.appendChild(body);
+      Promise.all([call("/api/player", { ref: r.ref }), loadReleases()]).then(function (res) {
+        var p = res[0]; body.innerHTML = "";
+        if (p.error) { body.textContent = p.error; return; }
+        var st = el("div", "pstats");
+        [["очков", p.points], ["место", p.place || "—"], ["карма", p.karma]].forEach(function (x) { var d = el("div"); d.appendChild(el("b", "", String(x[1]))); d.appendChild(el("span", "", x[0])); st.appendChild(d); });
+        body.appendChild(st);
+        if (p.farm) {
+          var fm = el("div", "pfarm"); fm.appendChild(el("b", "", "🌙 Лунная ферма"));
+          fm.appendChild(el("div", "", "Грядок: " + p.farm.beds + " из 9 · найдено видов растений: " + p.farm.species + " из 63"));
+          body.appendChild(fm);
+          if (p.farm.pub) body.appendChild(btn("В гости на ферму", "ghost", function () { close(); visit(p.farm.pub); }));
+        }
+        var vs = (p.items || []).filter(function (x) { return x.game === "farm" && x.kind === "vinyl"; })
+          .sort(function (a, b) { return TRANK[b.tier] - TRANK[a.tier] || FRANK[b.finish] - FRANK[a.finish] || b.at - a.at; });
+        var h = el("div", "mono", "Коллекция · " + vs.length); h.style.marginTop = "18px"; body.appendChild(h);
+        if (!vs.length) { body.appendChild(el("div", "sub", "Пока ничего не выпало.")); return; }
+        var g = el("div", "vgrid");
+        vs.forEach(function (v) {
+          var tr = F.trackById[v.id]; if (!tr) return;
+          var cell = el("div", "vrec" + finCls(v.finish)), cv = el("canvas", "pix"); cell.appendChild(cv); drawVinyl(cv, tr, 40, v.tier, v.finish);
+          cell.appendChild(el("span", "", tr.title));
+          var tl = el("span", "tier", (TIER[v.tier] || TIER.common)[0] + (v.finish !== "plain" ? ", " + FINISH[v.finish] : "") + (v.count > 1 ? " ×" + v.count : ""));
+          tl.style.color = (TIER[v.tier] || TIER.common)[1]; cell.appendChild(tl); g.appendChild(cell);
+        });
+        body.appendChild(g);
+      }).catch(function (e) { body.textContent = "Не получилось: " + e.message; });
     });
   }
   document.querySelectorAll("#tab-hall .seg button").forEach(function (b) {

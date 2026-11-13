@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS g_profiles (user INTEGER PRIMARY KEY, name TEXT, poin
 CREATE TABLE IF NOT EXISTS g_meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS g_links (user INTEGER PRIMARY KEY, code TEXT, expires INTEGER, title TEXT, state TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS g_avatars (key TEXT PRIMARY KEY, data BLOB NOT NULL);
+-- метка игрока для профиля в «Звёздном зале»: наружу уходит она, а не номер аккаунта
+CREATE TABLE IF NOT EXISTS g_refs (ref TEXT PRIMARY KEY, user INTEGER NOT NULL);
 -- «Лунная ферма»
 -- water — сколько поливов осталось в лейке; на грядке grown — сколько уже выросло (сек), [wet_from, water_until) — окно полива
 -- (колонки water, grown, wet_from, water_until добавлены 2026-11-13 разовым ALTER на рабочей базе)
