@@ -15,9 +15,12 @@ CREATE TABLE IF NOT EXISTS f_farms (user INTEGER PRIMARY KEY, pub TEXT UNIQUE NO
   unlocked INTEGER NOT NULL DEFAULT 4, created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS f_plots (user INTEGER NOT NULL, idx INTEGER NOT NULL, crop TEXT NOT NULL, planted INTEGER NOT NULL,
   PRIMARY KEY (user, idx));
--- пластинка = трек; finish — отделка находки: plain / foil (фольгированная) / star (звёздная)
-CREATE TABLE IF NOT EXISTS f_vinyls (user INTEGER NOT NULL, track TEXT NOT NULL, finish TEXT NOT NULL DEFAULT 'plain',
-  count INTEGER NOT NULL DEFAULT 1, first_at INTEGER NOT NULL, PRIMARY KEY (user, track, finish));
+-- коллекционные предметы всех игр (показываются и в игре, и в профиле гильдии).
+-- «Лунная ферма»: kind = vinyl, item = трек; у любого трека любая редкость (tier) и отделка (finish: plain / foil / star)
+CREATE TABLE IF NOT EXISTS g_items (user INTEGER NOT NULL, game TEXT NOT NULL, kind TEXT NOT NULL, item TEXT NOT NULL,
+  tier TEXT NOT NULL, finish TEXT NOT NULL DEFAULT 'plain', count INTEGER NOT NULL DEFAULT 1, first_at INTEGER NOT NULL,
+  PRIMARY KEY (user, game, kind, item, tier, finish));
+DROP TABLE IF EXISTS f_vinyls;
 CREATE TABLE IF NOT EXISTS f_gifts (id INTEGER PRIMARY KEY AUTOINCREMENT, to_user INTEGER NOT NULL, from_name TEXT,
   dust INTEGER NOT NULL, at INTEGER NOT NULL, opened INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS f_gifts_to ON f_gifts (to_user, opened);

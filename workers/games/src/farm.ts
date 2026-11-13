@@ -2,7 +2,7 @@
 //
 // Рост считается по часам, а не моделируется: на грядке хранится «что и когда посажено», созрело ли — видно по времени.
 // Урожай даёт звёздную пыль (валюта фермы) и очки в звание — не больше FARM_POINTS_PER_DAY в день.
-// Изредка при сборе выпадает пластинка — один трек Yuriy Leontiev (каталог games/vinyls.json): разной редкости и отделки.
+// Изредка при сборе выпадает пластинка — один трек Yuriy Leontiev (каталог games/vinyls.json); редкость и отделка — у находки.
 // Дождь звёздной пыли (после нового поста в канале, его включает бот) удваивает урожай.
 // Соседи: можно заглянуть на чужой участок и оставить подарок — 5 пыли, одному соседу раз в день, не больше 5 в день.
 
@@ -23,16 +23,17 @@ let now: () => number, today: () => string, nameOf: (u: any) => string;
 export function setup(deps: any) { ({ q, DB, now, today, nameOf } = deps); }
 
 // ---------- пластинки: одна пластинка — один трек (каталог games/vinyls.json сайта, кэш на час) ----------
-// Редкость у трека постоянная (её задаёт каталог); отделка выпадает при каждой находке.
+// У любого трека есть все варианты: редкость и отделка выпадают при каждой находке, а не закреплены за треком.
+// Находки лежат в общей таблице предметов g_items (game = farm, kind = vinyl) — их показывает и профиль гильдии.
 const TIER_ODDS: [string, number][] = [["common", 62], ["rare", 25], ["epic", 10], ["legendary", 3]];
 const FINISH_ODDS: [string, number][] = [["plain", 85], ["foil", 12], ["star", 3]];
 const DUP_DUST: Record<string, number> = { common: 5, rare: 10, epic: 25, legendary: 60 };
-let catalog: { id: string; tier: string; date: string }[] = [], catalogAt = 0;
+let catalog: { id: string; date: string }[] = [], catalogAt = 0;
 async function catalogList() {
   if (catalog.length && now() - catalogAt < 3600) return catalog;
   try {
     const d: any = await (await fetch(`${SITE}/games/vinyls.json`, { cf: { cacheTtl: 3600 } } as any)).json();
-    catalog = d.tracks.map((t: any) => ({ id: String(t.id), tier: t.tier || "common", date: String(t.date || "") }));
+    catalog = d.tracks.map((t: any) => ({ id: String(t.id), date: String(t.date || "") }));
     catalogAt = now();
   } catch { /* сайт недоступен — пластинки в этот раз не выпадут */ }
   return catalog;
@@ -46,20 +47,19 @@ async function dropVinyl(user: number, chance: number) {
   if (Math.random() >= chance) return null;
   const list = await catalogList();
   if (!list.length) return null;
-  let tier = roll(TIER_ODDS), pool = list.filter((t) => t.tier === tier);
-  if (!pool.length) { pool = list; tier = "common"; }
   // треки новых релизов (до 60 дней) выпадают втрое чаще — так продвигаются свежие релизы
   const fresh = (t: any) => (Date.now() - Date.parse(t.date)) / 86400000 < 60;
-  const weights = pool.map((t) => (fresh(t) ? 3 : 1));
-  let x = Math.random() * weights.reduce((a, b) => a + b, 0), pick = pool[0];
-  for (let i = 0; i < pool.length; i++) { x -= weights[i]; if (x <= 0) { pick = pool[i]; break; } }
-  const finish = roll(FINISH_ODDS);
-  const [row] = await q(`INSERT INTO f_vinyls (user, track, finish, count, first_at) VALUES (?, ?, ?, 1, ?)
-                         ON CONFLICT(user, track, finish) DO UPDATE SET count = count + 1 RETURNING count`, [user, pick.id, finish, now()]);
+  const weights = list.map((t) => (fresh(t) ? 3 : 1));
+  let x = Math.random() * weights.reduce((a, b) => a + b, 0), pick = list[0];
+  for (let i = 0; i < list.length; i++) { x -= weights[i]; if (x <= 0) { pick = list[i]; break; } }
+  const tier = roll(TIER_ODDS), finish = roll(FINISH_ODDS);
+  const [row] = await q(`INSERT INTO g_items (user, game, kind, item, tier, finish, count, first_at) VALUES (?, 'farm', 'vinyl', ?, ?, ?, 1, ?)
+                         ON CONFLICT(user, game, kind, item, tier, finish) DO UPDATE SET count = count + 1 RETURNING count`,
+                        [user, pick.id, tier, finish, now()]);
   const dup = Number(row[0]) > 1;
-  const bonus = dup ? DUP_DUST[pick.tier] * (finish === "plain" ? 1 : 2) : 0;
-  if (bonus) await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [bonus, user]);   // повтор — в пыль
-  return { id: pick.id, tier: pick.tier, finish, duplicate: dup, dust: bonus };
+  const bonus = dup ? DUP_DUST[tier] * (finish === "plain" ? 1 : 2) : 0;
+  if (bonus) await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [bonus, user]);   // точный повтор — в пыль
+  return { id: pick.id, tier, finish, duplicate: dup, dust: bonus };
 }
 
 // ---------- участок ----------
@@ -81,7 +81,8 @@ export async function farmState(u: any) {
   const [[dust, unlocked, pub]] = await q("SELECT dust, unlocked, pub FROM f_farms WHERE user = ?", [u.id]);
   const plots = await q("SELECT idx, crop, planted FROM f_plots WHERE user = ?", [u.id]);
   const by = new Map(plots.map((p) => [Number(p[0]), p]));
-  const vinyls = (await q("SELECT track, finish, count FROM f_vinyls WHERE user = ?", [u.id])).map((v) => ({ id: v[0], finish: v[1], count: Number(v[2]) }));
+  const vinyls = (await q("SELECT item, tier, finish, count FROM g_items WHERE user = ? AND game = 'farm' AND kind = 'vinyl'", [u.id]))
+    .map((v) => ({ id: v[0], tier: v[1], finish: v[2], count: Number(v[3]) }));
   const gifts = await q("SELECT from_name, dust FROM f_gifts WHERE to_user = ? AND opened = 0 ORDER BY id LIMIT 20", [u.id]);
   const pts = Number((await q("SELECT points FROM f_daily WHERE user = ? AND day = ?", [u.id, today()]))[0]?.[0] || 0);
   return {
@@ -166,7 +167,7 @@ export async function visit(u: any, pub: string) {
   if (!f || Number(f[0]) === u.id) return { error: "Участок не найден" };
   const plots = await q("SELECT idx, crop, planted FROM f_plots WHERE user = ?", [f[0]]);
   const by = new Map(plots.map((p) => [Number(p[0]), p]));
-  const vin = Number((await q("SELECT COUNT(DISTINCT track) FROM f_vinyls WHERE user = ?", [f[0]]))[0][0]);
+  const vin = Number((await q("SELECT COUNT(DISTINCT item) FROM g_items WHERE user = ? AND game = 'farm' ", [f[0]]))[0][0]);
   const given = (await q("SELECT 1 FROM f_given WHERE from_user = ? AND to_user = ? AND day = ?", [u.id, f[0], today()])).length > 0;
   return { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given,
            plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(f[1]))), now: now(),
@@ -191,7 +192,7 @@ export async function setRain(hours: number) {
 }
 
 export async function forgetFarm(uid: number) {
-  for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM f_vinyls WHERE user = ?",
+  for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM g_items WHERE user = ? AND game = 'farm'",
                      "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?"]) await q(sql, [uid]);
   await q("DELETE FROM f_given WHERE from_user = ? OR to_user = ?", [uid, uid]);
 }

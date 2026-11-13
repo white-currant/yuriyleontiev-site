@@ -4,7 +4,7 @@
 // Таблицы — schema.sql (wrangler d1 execute). Аватарки — в таблице g_avatars (вместо Blob Storage Val Town).
 //
 // Игроков проверяем по подписи Телеграма (Ed25519, открытый ключ Телеграма) — токен бота здесь не нужен.
-// Игрок:  POST /api/me | /api/round | /api/answer | /api/top | /api/link/start | /api/link/remove (заголовок X-Init-Data)
+// Игрок:  POST /api/me | /api/round | /api/answer | /api/top | /api/items | /api/link/start | /api/link/remove (заголовок X-Init-Data)
 //         GET  /audio/<раунд> | /avatar/<ключ>
 // Бот:    GET  /bot/events?after=N | POST /bot/profiles | /bot/link | /bot/forget | /bot/avatar   (заголовок X-Games-Key)
 
@@ -213,6 +213,12 @@ async function top() {
            today: day.map(([name, points, a, title]) => ({ name, points: Number(points), avatar: av(a), title: title || "Ученик звёзд" })) };
 }
 
+// коллекция: предметы всех игр, которые выпали игроку (профиль гильдии показывает их вместе)
+async function items(u: any) {
+  const rows = await q("SELECT game, kind, item, tier, finish, count, first_at FROM g_items WHERE user = ? ORDER BY first_at DESC", [u.id]);
+  return { items: rows.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
+}
+
 // ---------- HTTP ----------
 
 export default {
@@ -304,7 +310,7 @@ async function handle(req: Request): Promise<Response> {
     }
     if (req.method === "POST" && url.pathname === "/bot/forget") {
       const uid = Number((await req.json()).user);
-      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
+      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
       await farm.forgetFarm(uid);
       return json({ ok: true });
     }
@@ -323,6 +329,7 @@ async function handle(req: Request): Promise<Response> {
     case "/api/round": return json(await newRound(user));
     case "/api/answer": return json(await answer(user, String(body.round || ""), String(body.choice || "")));
     case "/api/top": return json(await top());
+    case "/api/items": return json(await items(user));
     case "/api/link/start": return json(await linkStart(user));
     case "/api/link/remove": return json(await linkRemove(user));
     // «Лунная ферма»
