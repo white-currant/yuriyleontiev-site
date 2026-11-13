@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131148";
+    var BUILD = "202611131224";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -346,6 +346,16 @@
   .selnote { margin-top: 8px; min-height: 2.8em; font-size: 12.5px; line-height: 1.4; color: rgba(255, 255, 255, .82); }
   .sheet .selnote { color: var(--dim); }
   .salecount2 { color: var(--white); font-weight: 600; }
+  .fly { position: fixed; z-index: 50; transform: translate(-50%, 0); pointer-events: none; white-space: nowrap; font-size: 15px; font-weight: 800;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, .7), 0 0 8px rgba(0, 0, 0, .4); animation: flyup 1s ease-out forwards; }
+  .fly.gain { color: #b9f58a; }
+  .fly.spent { color: #ffd08a; animation-name: flydown; }
+  @keyframes flyup { 0% { opacity: 0; transform: translate(-50%, 6px) scale(.8); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -38px); } }
+  @keyframes flydown { 0% { opacity: 0; transform: translate(-50%, -4px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, 22px); } }
+  #shopdust.bump { animation: dustbump .4s ease-out; }
+  #shopdust.bad { animation: dustbad .4s ease-out; }
+  @keyframes dustbump { 30% { transform: scale(1.25); filter: brightness(1.4); } }
+  @keyframes dustbad { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
   /* лавка: шапка с балансом остаётся наверху при прокрутке */
   #farm-shop .farm-top { position: sticky; top: 0; z-index: 6; margin: calc(-18px - var(--top)) -16px 0; padding: calc(var(--top) + 12px) 16px 10px;
     background: rgba(29, 22, 56, .92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
@@ -1503,7 +1513,10 @@
     renderPlots($("plots"), s.plots, now, true, s.strains, s.dry_limit);
     renderHotbar();
   }
-  function setFarm(st) { F.state = st; F.fetched = Date.now(); renderFarm(); }
+  function setFarm(st) {
+    F.state = st; F.fetched = Date.now(); renderFarm();
+    if (!$("farm-shop").hidden) { $("shopdust").textContent = "✦ " + st.dust; if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
+  }
   function farmLoop() {
     clearInterval(F.tick);
     F.tick = setInterval(function () { if (F.state && !$("farm").hidden) renderFarm(); }, 1000);   // подписи «сколько осталось»
@@ -1716,6 +1729,22 @@
     });
   }
 
+  // анимация покупки: от кнопки взлетает «+1 семя», у баланса — «−✦ 2», сам баланс подпрыгивает
+  function flyText(x, y, text, cls) {
+    var f = el("div", "fly " + (cls || ""), text); f.style.left = x + "px"; f.style.top = y + "px";
+    document.body.appendChild(f); setTimeout(function () { f.remove(); }, 1000);
+  }
+  function bumpDust(bad) {
+    var p = $("shopdust"); p.classList.remove("bump", "bad"); void p.offsetWidth; p.classList.add(bad ? "bad" : "bump");
+    setTimeout(function () { p.classList.remove("bump", "bad"); }, 450);
+  }
+  function buyFx(node, gain, spent) {
+    var r = node.getBoundingClientRect(), d = $("shopdust").getBoundingClientRect();
+    flyText(r.left + r.width / 2, r.top - 4, gain, "gain");
+    flyText(d.left + d.width / 2, d.bottom + 2, spent, "spent");
+    setTimeout(bumpDust, 0);                                   // после перерисовки лавки
+  }
+
   // ---------- лавка: купить (станция и игроки) / продать (свои выведенные сорта) ----------
   F.shopTab = "buy";
   function openShop(tab) {
@@ -1736,9 +1765,11 @@
         box.appendChild(seedRow(st, "", function () { seedSheet(st); }));
         var acts = el("div", "invacts"), info = el("span", "invcount", "у тебя " + (have ? have.count : 0));
         [1, 5].forEach(function (n) {
-          acts.appendChild(btn(n + " шт · ✦ " + st.cost * n, n === 1 ? "" : "ghost", function () {
-            if (s.dust < st.cost * n) { haptic("error"); return toast("Не хватает звёздной пыли"); }
-            haptic("light"); s.dust -= st.cost * n; addToBag(k, n); renderFarm(); renderShopTab();
+          acts.appendChild(btn(n + " шт · ✦ " + st.cost * n, n === 1 ? "" : "ghost", function (ev) {
+            var cur = F.state, cost = st.cost * n;                 // состояние берём свежее: после ответа сервера оно заменяется
+            if (cur.dust < cost) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
+            haptic("success"); buyFx(ev.currentTarget, "+" + n + " " + plural(n, "семя", "семени", "семян"), "−✦ " + cost);
+            cur.dust -= cost; addToBag(k, n); renderFarm(); renderShopTab();
             farmCall("/api/farm/seeds", { crop: k, n: n }).catch(function () {});
           }));
         });
@@ -1752,11 +1783,14 @@
         var st = m.strains[o.strain]; if (!st) return;
         var b;
         var buy = function () {
-          if (s.dust < st.price) { haptic("error"); return toast("Не хватает звёздной пыли"); }
-          haptic("light"); b.disabled = true; b.textContent = "Покупаю…";
+          var cur = F.state;
+          if (cur.dust < st.price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
+          haptic("success"); buyFx(b, "+1 семя", "−✦ " + st.price);
+          cur.dust -= st.price; $("shopdust").textContent = "✦ " + cur.dust;     // баланс — сразу; сервер подтвердит
+          b.disabled = true; b.textContent = "Покупаю…";
           call("/api/farm/buy", { pub: o.pub, strain: st.id }).then(function (r) {
-            if (r.error) { toast(r.error); return openShop("buy"); }
-            haptic("success"); toast("Куплено: " + st.name + " — семя в инвентаре"); setFarm(r.farm); openShop("buy");
+            if (r.error) { toast(r.error); call("/api/farm").then(setFarm); return openShop("buy"); }
+            toast("Куплено: " + st.name + " — семя в инвентаре"); setFarm(r.farm); openShop("buy");
           }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; });
         };
         box.appendChild(seedRow(st, "×" + o.count, function () { seedSheet(st, { foreign: true, bonuses: m.bonuses, buy: buy }); }));
