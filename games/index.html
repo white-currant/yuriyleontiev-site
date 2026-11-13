@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131236";
+    var BUILD = "202611131308";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -360,7 +360,12 @@
   #farm-shop .farm-top { position: sticky; top: 0; z-index: 6; margin: calc(-18px - var(--top)) -16px 0; padding: calc(var(--top) + 12px) 16px 10px;
     background: rgba(29, 22, 56, .92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
   .invcount { align-self: center; font-size: 12.5px; color: var(--dim); }
-  .sheet { max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .sheet { max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  html.locked, html.locked body { overflow: hidden; }
+  .invgrid .slot { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .slot.ghost { position: fixed; z-index: 60; transform: translate(-50%, -60%) scale(1.12); pointer-events: none; opacity: .95; margin: 0; }
+  .slot.lifted { opacity: .35; }
+  body[data-screen^="farm"] .invgrid .slot.drop { background: #8a6a3a; box-shadow: 0 -3px 0 var(--pgold), 0 3px 0 var(--pgold), -3px 0 0 var(--pgold), 3px 0 0 var(--pgold); opacity: 1; }
   .salecount { margin-top: 10px; font-size: 16px; font-weight: 650; }
   .salebtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
   .salebtns .btn { margin-top: 0; min-height: 44px; font-size: 13.5px; padding: 0 8px; }
@@ -606,6 +611,7 @@
   function show(id) {
     ["home", "game", "nope", "farm", "farm-shop", "farm-neighbors", "farm-visit"].forEach(function (s) { $(s).hidden = s !== id; });
     var was = document.body.dataset.screen; document.body.dataset.screen = id; scrollTo(0, 0);
+    if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked");
     // ферма: сверху закатное небо сцены, снизу трава; остальные экраны фермы — ночное небо
     var outdoors = id === "farm" || id === "farm-visit", bgc = id.indexOf("farm") === 0 ? "#5a3820" : "#120a05";   // ферма — «деревянная» панель
     document.documentElement.style.background = bgc === "#120a05" ? "" : bgc;
@@ -1447,7 +1453,12 @@
   function toast(text) { var t = document.createElement("div"); t.className = "toast"; t.textContent = text; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2600); }
   function sheet(build) {
     var w = document.createElement("div"); w.className = "sheet-wrap"; var sh = document.createElement("div"); sh.className = "sheet";
-    w.appendChild(sh); w.onclick = function (e) { if (e.target === w) w.remove(); }; build(sh, function () { w.remove(); }); document.body.appendChild(w); return w;
+    var shut = function () { w.remove(); if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked"); };
+    w.appendChild(sh); w.onclick = function (e) { if (e.target === w) shut(); }; build(sh, shut);
+    // палец по окну не должен прокручивать страницу под ним: гасим жест, кроме прокрутки самого окна, если оно длинное
+    w.addEventListener("touchmove", function (e) { if (!sh.contains(e.target) || sh.scrollHeight <= sh.clientHeight + 1) e.preventDefault(); }, { passive: false });
+    document.documentElement.classList.add("locked");
+    document.body.appendChild(w); return w;
   }
 
   // прозрачные кнопки поверх грядок (и колодца) + подписи на дорожке под ними
@@ -1665,13 +1676,62 @@
   // Выбранный предмет подсвечен. Выбрал семена — тап по пустой грядке сажает их. Повторный тап по выбранной ячейке — свойства.
   F.sel = "can";
   function freeOf(it) { return it.count - it.listed; }
-  function seedItems() { var s = F.state; return s.inv.filter(function (it) { return freeOf(it) > 0 && s.strains[it.strain]; }); }
+  function seedOrder() { try { return JSON.parse(localStorage.getItem("farm-order") || "[]"); } catch (e) { return []; } }
+  function seedItems() {                                    // в порядке, который расставил игрок; новые — в конец
+    var s = F.state, ord = seedOrder(), pos = function (it) { var i = ord.indexOf(it.strain); return i < 0 ? 1e6 : i; };
+    return s.inv.filter(function (it) { return freeOf(it) > 0 && s.strains[it.strain]; })
+      .map(function (it, i) { return [it, pos(it), i]; }).sort(function (a, b) { return a[1] - b[1] || a[2] - b[2]; }).map(function (x) { return x[0]; });
+  }
+  function moveSeed(key, beforeKey) {                       // перетащили семя: встаёт перед beforeKey (или в конец)
+    var keys = seedItems().map(function (it) { return it.strain; }).filter(function (k) { return k !== key; });
+    var at = beforeKey ? keys.indexOf(beforeKey) : -1;
+    if (at < 0) keys.push(key); else keys.splice(at, 0, key);
+    try { localStorage.setItem("farm-order", JSON.stringify(keys)); } catch (e) {}
+  }
+  // перетаскивание ячеек в большом инвентаре: потянул семя — оно едет за пальцем, отпустил над другой ячейкой — встало туда
+  function dragSetup(grid, redraw) {
+    var d = null;
+    var slotAt = function (x, y) { var n = document.elementFromPoint(x, y); n = n && n.closest ? n.closest(".slot") : null; return n && grid.contains(n) ? n : null; };
+    grid.onpointerdown = function (e) {
+      var sl = e.target.closest(".slot"); if (!sl || !sl.dataset.key || sl.dataset.key === "can") return;
+      d = { key: sl.dataset.key, x: e.clientX, y: e.clientY, on: false, node: sl, ghost: null, id: e.pointerId, over: null };
+    };
+    grid.onpointermove = function (e) {
+      if (!d || e.pointerId !== d.id) return;
+      if (!d.on) {
+        if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 8) return;
+        d.on = true; haptic("light"); try { grid.setPointerCapture(d.id); } catch (er) {}
+        var r = d.node.getBoundingClientRect(); d.ghost = d.node.cloneNode(true);
+        var src = d.node.querySelector("canvas"), dst = d.ghost.querySelector("canvas");
+        if (src && dst) { dst.width = src.width; dst.height = src.height; dst.getContext("2d").drawImage(src, 0, 0); }
+        d.ghost.className = "slot ghost"; d.ghost.style.width = r.width + "px"; d.ghost.style.height = r.height + "px";
+        document.body.appendChild(d.ghost); d.node.classList.add("lifted");
+      }
+      d.ghost.style.left = e.clientX + "px"; d.ghost.style.top = e.clientY + "px";
+      var over = slotAt(e.clientX, e.clientY);
+      if (over !== d.over) { if (d.over) d.over.classList.remove("drop"); d.over = over && over !== d.node ? over : null; if (d.over) d.over.classList.add("drop"); }
+      e.preventDefault();
+    };
+    grid.onpointerup = grid.onpointercancel = function (e) {
+      if (!d || e.pointerId !== d.id) return;
+      var was = d; d = null;
+      if (!was.on) return;
+      if (was.ghost) was.ghost.remove();
+      F.dragged = Date.now();                                 // чтобы отпускание не сочлось нажатием
+      if (e.type === "pointerup" && was.over) {
+        var k = was.over.dataset.key;
+        moveSeed(was.key, k === "can" ? (seedItems()[0] || {}).strain : k || null); haptic("success");
+      }
+      redraw(); renderHotbar();
+    };
+  }
   function makeSlot(key, onPick) {
-    var s = F.state, b = el("button", "slot" + (F.sel === key ? " on" : "")); b.type = "button";
+    var s = F.state, b = el("button", "slot" + (F.sel === key ? " on" : "")); b.type = "button"; b.dataset.key = key;
     var cv = el("canvas", "pix");
     if (key === "can") { canIcon(cv); b.setAttribute("aria-label", "Лейка"); b.appendChild(cv); b.appendChild(el("span", "n", s.water + "/" + s.can_max)); }
     else { var st = s.strains[key], it = bagOf(key); cropIcon(cv, st); b.setAttribute("aria-label", st.name); b.appendChild(cv); b.appendChild(el("span", "n", freeOf(it))); }
     b.onclick = function () {
+      if (F.dragged && Date.now() - F.dragged < 400) return;      // только что перетаскивали
       if (F.sel === key) return key === "can" ? canSheet() : seedSheet(s.strains[key]);
       haptic("light"); F.sel = key; renderHotbar(); if (onPick) onPick();
     };
@@ -1710,7 +1770,8 @@
         for (var k = seeds.length + 1; k < Math.max(15, Math.ceil((seeds.length + 1) / 5) * 5); k++) grid.appendChild(el("div", "slot empty"));
         note.textContent = selText();
       };
-      draw(); sh.appendChild(grid); sh.appendChild(note);
+      draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
+      sh.appendChild(el("div", "sub", "Перетащи семена, чтобы расставить по порядку: первые три после лейки видны в полоске под фермой."));
       var listed = s.inv.filter(function (it) { return it.listed > 0; });
       if (listed.length) sh.appendChild(el("div", "sub", "На продаже в лавке: " + listed.map(function (it) { return (s.strains[it.strain] || {}).name + " ×" + it.listed; }).join(", ") + "."));
       var acts = el("div", "salebtns");
