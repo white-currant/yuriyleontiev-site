@@ -17,9 +17,9 @@ type Strain = { id: string; name: string; shape: string; color: string; minutes:
 // базовые сорта: семена покупаются в «Семенной лавке станции» (cost — цена одного), дальше возвращаются с урожаем;
 // thirst — на сколько минут хватает одного полива
 export const CROPS: Record<string, Strain> = {
-  moss:    { id: "moss",    name: "Лунный мох",        shape: "moss",    color: "moss",    minutes: 10,  dust: 4,  vinyl: 0.03, thirst: 15, points: 1, bonus: null, gen: 0, cost: 2,  base: true },
-  berry:   { id: "berry",   name: "Звёздные ягоды",    shape: "berry",   color: "berry",   minutes: 60,  dust: 16, vinyl: 0.10, thirst: 30, points: 3, bonus: null, gen: 0, cost: 6,  base: true },
-  crystal: { id: "crystal", name: "Кометный хрусталь", shape: "crystal", color: "crystal", minutes: 240, dust: 70, vinyl: 0.25, thirst: 90, points: 6, bonus: null, gen: 0, cost: 25, base: true },
+  moss:    { id: "moss",    name: "Лунный мох",        shape: "moss",    color: "moss",    minutes: 10,  dust: 4,  vinyl: 0.03, thirst: 15, points: 2, bonus: null, gen: 0, cost: 2,  base: true },
+  berry:   { id: "berry",   name: "Звёздные ягоды",    shape: "berry",   color: "berry",   minutes: 60,  dust: 16, vinyl: 0.10, thirst: 30, points: 4, bonus: null, gen: 0, cost: 6,  base: true },
+  crystal: { id: "crystal", name: "Кометный хрусталь", shape: "crystal", color: "crystal", minutes: 240, dust: 70, vinyl: 0.25, thirst: 90, points: 8, bonus: null, gen: 0, cost: 25, base: true },
 };
 export const BONUSES: Record<string, string> = {
   rain: "в дождь звёздной пыли урожай ×3, а не ×2",
@@ -34,6 +34,7 @@ const STARTER: [string, number][] = [["moss", 5], ["berry", 2]];   // старт
 const GIFT_DUST = 5, GIFTS_PER_DAY = 5;
 const CAN_MAX = 5;                           // лейка: поливов до следующего похода к колодцу
 const DRY_LIMIT = 8 * 3600;                  // столько сухое растение ждёт полива, потом засыхает
+const POINTS_HARVEST_MIN = 2;                // сбор — всегда больше, чем действие
 const POINTS_PLANT = 1, POINTS_WATER = 1;    // очки в звание за посадку и за полив сухой грядки (награда за саму игру, решение 2026-11-13)
 const SEEDS_MIN = 2, SEEDS_EXTRA = 0.35;     // семян с урожая: 2, с шансом 35% — 3
 const CROSS_CHANCE = 0.4;                    // шанс семени-гибрида, если рядом созрел другой сорт
@@ -88,7 +89,8 @@ async function dropVinyl(user: number, chance: number) {
 // Цена в лавке и «редкость» сорта считаются по свойствам: урожай, шанс пластинки, особое свойство, поколение.
 function priceOf(s: Strain) { return Math.max(3, Math.round(s.dust * 0.5 + s.vinyl * 120 + (s.bonus ? 15 : 0) + s.gen * 2)); }
 function tierOf(p: number) { return p >= 70 ? "legendary" : p >= 40 ? "epic" : p >= 20 ? "rare" : "common"; }
-function view(s: Strain): Strain { const price = priceOf(s); return { ...s, price, tier: tierOf(price) }; }
+// за сбор всегда больше, чем за действие (посадка, полив — по 1): не меньше POINTS_HARVEST_MIN, в т.ч. у старых сортов
+function view(s: Strain): Strain { const price = priceOf(s); return { ...s, points: Math.max(POINTS_HARVEST_MIN, s.points), price, tier: tierOf(price) }; }
 // формы растений и раскраски. Базовые — у сортов станции; остальные появляются только мутацией при скрещивании.
 // Прилагательные: [мужской, множественное, женский]; у существительного — какая форма ему нужна.
 const ADJ: Record<string, [string, string, string]> = {
@@ -148,7 +150,7 @@ async function breed(a: Strain, b: Strain): Promise<Strain> {
   const inherited = [a.bonus, b.bonus].filter(Boolean) as string[];
   if (inherited.length && r() < 0.6) g.bonus = inherited[Math.floor(r() * inherited.length)];
   else if (r() < 0.15) { const all = Object.keys(BONUSES); g.bonus = all[Math.floor(r() * all.length)]; }
-  g.points = Math.max(1, Math.round(g.minutes / 40));
+  g.points = Math.max(POINTS_HARVEST_MIN, Math.round(g.minutes / 30));
   const id = await hashId(g), name = nameFor(g);
   await q("INSERT OR IGNORE INTO f_strains (id, name, genes, created) VALUES (?, ?, ?, ?)", [id, name, JSON.stringify(g), now()]);
   return { ...view({ id, name, ...g }), mutation };
