@@ -1,7 +1,7 @@
 // «Лунная ферма» — вторая игра Звёздной гильдии. Подключается из index.ts (setup + маршруты /api/farm/*).
 //
 // Рост считается по часам, а не моделируется: на грядке хранится «что и когда посажено», созрело ли — видно по времени.
-// Урожай даёт звёздную пыль (валюта фермы) и очки в звание — не больше FARM_POINTS_PER_DAY в день.
+// Урожай даёт звёздную пыль (валюта фермы) и очки в звание. Дневного предела нет (решение 2026-11-13): сбор и так требует заходить вовремя.
 // Изредка при сборе выпадает пластинка — один трек Yuriy Leontiev (каталог games/vinyls.json); редкость и отделка — у находки.
 // Дождь звёздной пыли (после нового поста в канале, его включает бот) удваивает урожай.
 // Соседи: можно заглянуть на чужой участок и оставить подарок — 5 пыли, одному соседу раз в день, не больше 5 в день.
@@ -13,7 +13,6 @@ export const CROPS: Record<string, { name: string; minutes: number; cost: number
 };
 export const PLOTS_MAX = 6;
 const PLOT_PRICE = [0, 0, 0, 0, 60, 180];   // 5-я и 6-я грядки покупаются
-export const FARM_POINTS_PER_DAY = 20;
 const GIFT_DUST = 5, GIFTS_PER_DAY = 5;
 const SITE = "https://yuriyleontiev.music";
 
@@ -84,13 +83,11 @@ export async function farmState(u: any) {
   const vinyls = (await q("SELECT item, tier, finish, count FROM g_items WHERE user = ? AND game = 'farm' AND kind = 'vinyl'", [u.id]))
     .map((v) => ({ id: v[0], tier: v[1], finish: v[2], count: Number(v[3]) }));
   const gifts = await q("SELECT from_name, dust FROM f_gifts WHERE to_user = ? AND opened = 0 ORDER BY id LIMIT 20", [u.id]);
-  const pts = Number((await q("SELECT points FROM f_daily WHERE user = ? AND day = ?", [u.id, today()]))[0]?.[0] || 0);
   return {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked))),
     crops: CROPS, rain_until: await rainUntil(), now: now(),
     vinyls, gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
-    today_points: pts, points_cap: FARM_POINTS_PER_DAY,
   };
 }
 
@@ -116,12 +113,10 @@ export async function harvest(u: any, idx: number) {
   if (now() < Number(p[2]) + c.minutes * 60) return { error: "Ещё не созрело" };
   const rain = (await rainUntil()) > now();
   const dust = c.dust * (rain ? 2 : 1);
-  const before = Number((await q("SELECT points FROM f_daily WHERE user = ? AND day = ?", [u.id, today()]))[0]?.[0] || 0);
-  const points = Math.max(0, Math.min(c.points, FARM_POINTS_PER_DAY - before));   // не больше дневного предела
+  const points = c.points;
+  // грядку забирает ровно один запрос: повторное нажатие не заплатит дважды
+  if (!(await q("DELETE FROM f_plots WHERE user = ? AND idx = ? AND planted = ? RETURNING 1", [u.id, idx, p[2]])).length) return { error: "Уже собрано" };
   const writes = [
-    DB.prepare(`INSERT INTO f_daily (user, day, points) VALUES (?, ?, ?)
-                ON CONFLICT(user, day) DO UPDATE SET points = points + excluded.points`).bind(u.id, today(), points),
-    DB.prepare("DELETE FROM f_plots WHERE user = ? AND idx = ?").bind(u.id, idx),
     DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(dust, u.id),
   ];
   if (points > 0) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)")
