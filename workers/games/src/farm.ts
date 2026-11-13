@@ -14,9 +14,10 @@
 
 type Strain = { id: string; name: string; shape: string; color: string; minutes: number; dust: number; vinyl: number;
                 thirst: number; points: number; bonus: string | null; gen: number; cost?: number; base?: boolean; price?: number; tier?: string };
-// базовые сорта — покупаются при посадке; thirst — на сколько минут хватает одного полива
+// базовые сорта: семена покупаются в «Семенной лавке станции» (cost — цена одного), дальше возвращаются с урожаем;
+// thirst — на сколько минут хватает одного полива
 export const CROPS: Record<string, Strain> = {
-  moss:    { id: "moss",    name: "Лунный мох",        shape: "moss",    color: "moss",    minutes: 10,  dust: 4,  vinyl: 0.03, thirst: 15, points: 1, bonus: null, gen: 0, cost: 0,  base: true },
+  moss:    { id: "moss",    name: "Лунный мох",        shape: "moss",    color: "moss",    minutes: 10,  dust: 4,  vinyl: 0.03, thirst: 15, points: 1, bonus: null, gen: 0, cost: 2,  base: true },
   berry:   { id: "berry",   name: "Звёздные ягоды",    shape: "berry",   color: "berry",   minutes: 60,  dust: 16, vinyl: 0.10, thirst: 30, points: 3, bonus: null, gen: 0, cost: 6,  base: true },
   crystal: { id: "crystal", name: "Кометный хрусталь", shape: "crystal", color: "crystal", minutes: 240, dust: 70, vinyl: 0.25, thirst: 90, points: 6, bonus: null, gen: 0, cost: 25, base: true },
 };
@@ -28,7 +29,8 @@ export const BONUSES: Record<string, string> = {
   seedy: "при сборе даёт больше семян",
 };
 export const PLOTS_MAX = 6;
-const PLOT_PRICE = [0, 0, 0, 0, 60, 180];   // 5-я и 6-я грядки покупаются
+const PLOT_PRICE = [0, 0, 0, 30, 90, 200];  // на старте открыты 3 грядки, 4–6-я покупаются
+const STARTER: [string, number][] = [["moss", 5], ["berry", 2]];   // стартовый мешок семян
 const GIFT_DUST = 5, GIFTS_PER_DAY = 5;
 const CAN_MAX = 5;                           // лейка: поливов до следующего похода к колодцу
 const DRY_LIMIT = 8 * 3600;                  // столько сухое растение ждёт полива, потом засыхает
@@ -150,7 +152,9 @@ const PLOT_COLS = "idx, crop, planted, grown, wet_from, water_until";
 // ---------- участок ----------
 async function ensureFarm(u: any) {
   const pub = [...crypto.getRandomValues(new Uint8Array(9))].map((b) => b.toString(16).padStart(2, "0")).join("");
-  await q("INSERT OR IGNORE INTO f_farms (user, pub, created) VALUES (?, ?, ?)", [u.id, pub, now()]);
+  const fresh = await q("INSERT OR IGNORE INTO f_farms (user, pub, created, unlocked) VALUES (?, ?, ?, 3) RETURNING 1", [u.id, pub, now()]);
+  if (fresh.length) await DB.batch(STARTER.map(([k, n]) =>                 // новичку — стартовый мешок семян
+    DB.prepare("INSERT OR IGNORE INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)").bind(u.id, k, n)));
 }
 async function rainUntil() {
   return Number((await q("SELECT value FROM g_meta WHERE key = 'rain_until'"))[0]?.[0] || 0);
@@ -184,21 +188,28 @@ export async function farmState(u: any) {
 export async function plant(u: any, idx: number, crop: string) {
   if (!(idx >= 0 && idx < PLOTS_MAX) || !crop) return { error: "Нет такой грядки или семян" };
   await ensureFarm(u);
-  const [[dust, unlocked]] = await q("SELECT dust, unlocked FROM f_farms WHERE user = ?", [u.id]);
+  const [[unlocked]] = await q("SELECT unlocked FROM f_farms WHERE user = ?", [u.id]);
   if (idx >= Number(unlocked)) return { error: "Грядка ещё закрыта" };
   if ((await q("SELECT 1 FROM f_plots WHERE user = ? AND idx = ?", [u.id, idx])).length) return { error: "Грядка занята" };
-  const t = now(), base = CROPS[crop];
-  if (base) {
-    if (Number(dust) < (base.cost || 0)) return { error: "Не хватает звёздной пыли" };
-    if (base.cost) await q("UPDATE f_farms SET dust = dust - ? WHERE user = ?", [base.cost, u.id]);
-  } else {
-    // своё семя из мешка: выставленные в лавку не трогаем
-    const ok = await q("UPDATE f_inv SET count = count - 1 WHERE user = ? AND strain = ? AND count - listed > 0 RETURNING 1", [u.id, crop]);
-    if (!ok.length) return { error: "Таких семян нет (или все выставлены в лавку)" };
-  }
+  const t = now();
+  // сажаем всегда из мешка; выставленные в лавку не трогаем
+  const ok = await q("UPDATE f_inv SET count = count - 1 WHERE user = ? AND strain = ? AND count - listed > 0 RETURNING 1", [u.id, crop]);
+  if (!ok.length) return { error: "Таких семян в мешке нет" };
   // посадили сухим — сразу после посадки нужно полить
   await q(`INSERT INTO f_plots (user, ${PLOT_COLS}) VALUES (?, ?, ?, ?, 0, ?, ?)`, [u.id, idx, crop, t, t, t]);
   return { farm: await farmState(u) };
+}
+
+// «Семенная лавка станции»: базовые семена в мешок за пыль
+export async function buySeeds(u: any, crop: string, n: number) {
+  const c = CROPS[crop], k = Math.max(1, Math.min(20, Math.round(n) || 1));
+  if (!c) return { error: "Таких семян в лавке станции нет" };
+  await ensureFarm(u);
+  const cost = (c.cost || 0) * k;
+  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [cost, u.id, cost])).length)
+    return { error: "Не хватает звёздной пыли" };
+  await q(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`, [u.id, crop, k]);
+  return { bought: k, farm: await farmState(u) };
 }
 
 export async function fill(u: any) {
@@ -237,9 +248,9 @@ export async function harvest(u: any, idx: number) {
   const writes = [DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(dust, u.id)];
   if (points > 0) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)")
     .bind(u.id, nameOf(u), points, "Лунная ферма", t));
-  // свои сорта возвращают семена — так удачный гибрид можно размножить и продать
-  let seeds = 0;
-  if (!s.base) seeds = (Math.random() < 0.6 ? 1 : 0) + (Math.random() < 0.4 ? 1 : 0) + (s.bonus === "seedy" ? 1 : 0);
+  // с урожаем возвращаются семена той же культуры (в среднем чуть больше одного) — хозяйство себя воспроизводит,
+  // а удачный гибрид можно размножить и продать
+  const seeds = (Math.random() < 0.75 ? 1 : 0) + (Math.random() < 0.35 ? 1 : 0) + (s.bonus === "seedy" ? 1 : 0);
   if (seeds) writes.push(DB.prepare(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)
                                      ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.id, seeds));
   await DB.batch(writes);
@@ -310,7 +321,7 @@ export async function visit(u: any, pub: string) {
 // ---------- лавка ----------
 // delta > 0 — выставить столько семян, < 0 — снять с продажи. Выставить можно не больше, чем есть.
 export async function list(u: any, strain: string, delta: number) {
-  if (CROPS[strain]) return { error: "Покупные семена в лавку не выставить" };
+  if (CROPS[strain]) return { error: "Семена станции не продаются — только выведенные сорта" };
   const d = Math.max(-1000, Math.min(1000, Math.round(delta) || 0));
   await q("UPDATE f_inv SET listed = MAX(0, MIN(count, listed + ?)) WHERE user = ? AND strain = ?", [d, u.id, strain]);
   return { farm: await farmState(u) };

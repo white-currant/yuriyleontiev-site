@@ -350,6 +350,7 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/visit": return json(await farm.visit(user, String(body.pub || "")));
     case "/api/farm/water": return json(await farm.water(user, Number(body.idx)));
     case "/api/farm/fill": return json(await farm.fill(user));
+    case "/api/farm/seeds": return json(await farm.buySeeds(user, String(body.crop || ""), Number(body.n || 1)));
     case "/api/farm/list": return json(await farm.list(user, String(body.strain || ""), Number(body.delta || 0)));
     case "/api/farm/sales/seen": return json(await farm.salesSeen(user));
     case "/api/farm/buy": {
