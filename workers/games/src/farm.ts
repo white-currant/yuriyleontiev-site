@@ -14,17 +14,19 @@
 // Соседи: можно заглянуть на чужой участок, оставить подарок (5 пыли, раз в день) и купить семена в его лавке.
 
 type Strain = { id: string; name: string; shape: string; color: string; minutes: number; dust: number; vinyl: number;
-                thirst: number; points: number; bonus: string | null; gen: number; cost?: number; base?: boolean; price?: number; tier?: string };
+                thirst: number; points: number; bonus: string | null; gen: number; cost?: number; base?: boolean; hidden?: boolean; price?: number; tier?: string };
 // базовые сорта: семена покупаются в «Семенной лавке станции» (cost — цена одного), дальше возвращаются с урожаем;
 // thirst — на сколько минут хватает одного полива
 export const CROPS: Record<string, Strain> = {
   moss:    { id: "moss",    name: "Лунный мох",        shape: "moss",    color: "moss",    minutes: 10,  dust: 4,  vinyl: 0.03, thirst: 15, points: 2, bonus: null, gen: 0, cost: 2,  base: true },
   berry:   { id: "berry",   name: "Звёздные ягоды",    shape: "berry",   color: "berry",   minutes: 60,  dust: 16, vinyl: 0.10, thirst: 30, points: 4, bonus: null, gen: 0, cost: 6,  base: true },
   crystal: { id: "crystal", name: "Кометный хрусталь", shape: "crystal", color: "crystal", minutes: 240, dust: 70, vinyl: 0.25, thirst: 90, points: 8, bonus: null, gen: 0, cost: 25, base: true },
-  // зерно (2026-11-14): само по себе дешёвое, нужно ради муки на мельнице; три вариации с разным характером
+  // зерно (2026-11-14): само по себе дешёвое, нужно ради муки на мельнице. У станции один вид — пшеница;
+  // другие колосья открываются скрещиванием и мутациями, как у остальных растений (его правка 2026-11-14).
   wheat:   { id: "wheat",   name: "Лунная пшеница",    shape: "grain",   color: "sun",     minutes: 20,  dust: 5,  vinyl: 0.04, thirst: 25, points: 2, bonus: null,    gen: 0, cost: 3,  base: true },
-  millet:  { id: "millet",  name: "Огненное просо",    shape: "grain",   color: "ember",   minutes: 45,  dust: 9,  vinyl: 0.06, thirst: 20, points: 2, bonus: "seedy", gen: 0, cost: 5,  base: true },
-  rye:     { id: "rye",     name: "Туманная рожь",     shape: "grain",   color: "nebula",  minutes: 120, dust: 26, vinyl: 0.12, thirst: 60, points: 4, bonus: "hardy", gen: 0, cost: 10, base: true },
+  // сняты с продажи в тот же день (ни у кого не было) — оставлены скрытыми, чтобы старые ссылки не ломались
+  millet:  { hidden: true, id: "millet",  name: "Огненное просо",    shape: "grain",   color: "ember",   minutes: 45,  dust: 9,  vinyl: 0.06, thirst: 20, points: 2, bonus: "seedy", gen: 0, cost: 5,  base: true },
+  rye:     { hidden: true, id: "rye",     name: "Туманная рожь",     shape: "grain",   color: "nebula",  minutes: 120, dust: 26, vinyl: 0.12, thirst: 60, points: 4, bonus: "hardy", gen: 0, cost: 10, base: true },
 };
 export const BONUSES: Record<string, string> = {
   rain: "в звёздный дождь урожай ×3, а не ×2",
@@ -123,7 +125,8 @@ async function hashId(g: any) {
 }
 async function strains(ids: string[]): Promise<Record<string, Strain>> {
   const out: Record<string, Strain> = {};
-  for (const k in CROPS) out[k] = view(CROPS[k]);
+  for (const k in CROPS) if (!CROPS[k].hidden) out[k] = view(CROPS[k]);
+  for (const i of ids) if (CROPS[i]?.hidden) out[i] = view(CROPS[i]);
   const need = [...new Set(ids.filter((i) => i && !CROPS[i]))];
   if (need.length) {
     const rows = await q(`SELECT id, name, genes FROM f_strains WHERE id IN (${need.map(() => "?").join(",")})`, need);
@@ -280,7 +283,7 @@ export async function plant(u: any, idx: number, crop: string) {
 // «Семенная лавка станции»: базовые семена в мешок за пыль
 export async function buySeeds(u: any, crop: string, n: number) {
   const c = CROPS[crop], k = Math.max(1, Math.min(20, Math.round(n) || 1));
-  if (!c) return { error: "Таких семян в лавке станции нет" };
+  if (!c || c.hidden) return { error: "Таких семян в лавке станции нет" };
   await ensureFarm(u);
   const cost = (c.cost || 0) * k;
   if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [cost, u.id, cost])).length)
