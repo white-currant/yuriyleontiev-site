@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131313";
+    var BUILD = "202611131314";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -404,7 +404,7 @@
     -webkit-backdrop-filter: none; backdrop-filter: none; font-family: var(--pix); font-size: 15px; color: var(--cream); padding: 0 10px; min-height: 30px; }
   body[data-screen^="farm"] .dust-pill { color: var(--pgold); display: inline-flex; align-items: center; }
   body[data-screen^="farm"] .dust-pill.blue { color: #9ddcff; }
-  body[data-screen^="farm"] .pills { gap: 12px; }
+  body[data-screen^="farm"] .pills { gap: 10px; }
   /* сцена стоит в деревянной раме, под ней — доска с инвентарём */
   body[data-screen^="farm"] .scene { box-shadow: 0 4px 0 var(--ink); }
   body[data-screen^="farm"] .scene canvas { border-bottom: 4px solid var(--wood4); }
@@ -418,12 +418,9 @@
   body[data-screen^="farm"] .plot.well.house .lbl { left: 8px; transform: translate(0, -105%); }
   body[data-screen^="farm"] .plot:active { background: rgba(255, 255, 255, .18); }
   body[data-screen^="farm"] .float { font-family: var(--pix); }
-  .weather { position: absolute; left: 50%; top: calc(var(--top) + 54px); transform: translateX(-50%); z-index: 2; white-space: nowrap; text-align: center;
-    padding: 6px 14px 7px; background: linear-gradient(180deg, #ffe08f, #f2b950); color: #2b1a0e; pointer-events: none;
-    box-shadow: 0 -3px 0 #2b1a0e, 0 3px 0 #2b1a0e, -3px 0 0 #2b1a0e, 3px 0 0 #2b1a0e, 0 0 22px rgba(255, 208, 120, .75); animation: wglow 2.4s ease-in-out infinite; }
-  .weather b { display: block; font-size: 15px; font-weight: 800; }
-  .weather span { display: block; font-size: 12.5px; font-weight: 700; opacity: .85; }
-  @keyframes wglow { 50% { box-shadow: 0 -3px 0 #2b1a0e, 0 3px 0 #2b1a0e, -3px 0 0 #2b1a0e, 3px 0 0 #2b1a0e, 0 0 34px rgba(255, 224, 150, 1); filter: brightness(1.08); } }
+  body[data-screen^="farm"] .dust-pill.rainpill { color: #2b1a0e; background: linear-gradient(180deg, #ffe08f, #f2b950); font-weight: 800; font-size: 13.5px; padding: 0 8px;
+    box-shadow: var(--frame), 0 0 12px rgba(255, 208, 120, .6); animation: wglow 2.6s ease-in-out infinite; }
+  @keyframes wglow { 50% { filter: brightness(1.12); } }
   /* ячейки инвентаря: тёмное дерево, выбранная — светлая с уголками */
   body[data-screen^="farm"] .hotbar, body[data-screen^="farm"] .invgrid { gap: 12px; margin-top: 18px; padding: 0 3px; }
   body[data-screen^="farm"] .slot, body[data-screen^="farm"] .invgrid .slot { border-radius: 0; background: #47290f; box-shadow: var(--frame), inset 3px 3px 0 #33200f, inset -3px -3px 0 #6b4428; }
@@ -558,9 +555,8 @@
   <!-- «Лунная ферма»: свой участок, гости, пластинки -->
   <section class="screen" id="farm" hidden>
     <div class="scene">
-      <div class="farm-top"><button class="exit" type="button" data-go="home">← В гильдию</button><div class="pills"><div class="dust-pill blue" id="waterpill">💧 5</div><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
+      <div class="farm-top"><button class="exit" type="button" data-go="home">← Гильдия</button><div class="pills"><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill blue" id="waterpill">💧 5</div><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
       <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div>
-      <div class="weather" id="weather" hidden></div>
     </div>
     <div id="farmbanners"></div>
     <div class="hotbar" id="hotbar"></div>
@@ -1520,7 +1516,10 @@
     var ban = $("farmbanners"); ban.innerHTML = "";
     var wz = $("weather"), raining = s.rain_until > now;        // погода — табличкой на небе, чтобы её не искать
     wz.hidden = !raining;
-    if (raining) wz.innerHTML = "<b>✦ Дождь звёздной пыли</b><span>урожай ×2 · ещё " + fmtLeft(s.rain_until - now) + "</span>";
+    if (raining) {                                               // маленький значок в шапке; по нажатию — что это
+      wz.textContent = "☄ ×2";
+      wz.onclick = function () { toast("Дождь звёздной пыли: урожай ×2 ещё " + fmtLeft(s.rain_until - now)); };
+    }
     if (s.gifts.length) {
       var g = el("div", "banner gift"); var names = s.gifts.map(function (x) { return x.from; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
       g.appendChild(el("span", "", "🎁 Подарки от соседей: " + names.slice(0, 3).join(", ") + (names.length > 3 ? " и др." : "")));
