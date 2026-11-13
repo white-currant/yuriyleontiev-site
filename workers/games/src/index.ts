@@ -222,9 +222,11 @@ async function top() {
   const not = h.length ? ` AND user NOT IN (${h.map(() => "?").join(",")})` : "";
   const all = await q(`SELECT name, points, title, avatar FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 10`, h);
   // имя — как его прислал бот (хозяин — названием канала), а не из Телеграма при входе в игру
-  const notU = h.length ? ` AND u.user NOT IN (${h.map(() => "?").join(",")})` : "";
-  const day = await q(`SELECT COALESCE(p.name, u.name), u.earned_today, p.avatar, p.title FROM g_users u LEFT JOIN g_profiles p ON p.user = u.user
-                       WHERE u.day = ? AND u.earned_today > 0${notU} ORDER BY u.earned_today DESC LIMIT 5`, [today(), ...h]);
+  // «Сегодня» — все очки за сутки (по Минску) из всех игр: начисления g_events, а не только раунды «Угадай трек»
+  const notE = h.length ? ` AND e.user NOT IN (${h.map(() => "?").join(",")})` : "";
+  const from = Math.floor((now() + TZ_SHIFT) / 86400) * 86400 - TZ_SHIFT;
+  const day = await q(`SELECT COALESCE(p.name, MAX(e.name)), SUM(e.delta) AS pts, p.avatar, p.title FROM g_events e LEFT JOIN g_profiles p ON p.user = e.user
+                       WHERE e.at >= ? AND e.delta > 0${notE} GROUP BY e.user HAVING pts > 0 ORDER BY pts DESC LIMIT 10`, [from, ...h]);
   const av = (k: any) => (k ? `/avatar/${k}` : null);
   return { all: all.map(([name, points, title, a]) => ({ name, points: Number(points), title, avatar: av(a) })),
            today: day.map(([name, points, a, title]) => ({ name, points: Number(points), avatar: av(a), title: title || "Ученик звёзд" })) };

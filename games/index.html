@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131646";
+    var BUILD = "202611131704";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -681,7 +681,7 @@
   function renderMe(p) {
     me = p;
     $("title").textContent = p.title; $("name").textContent = p.name;
-    $("sigil").textContent = (p.name || "✦").trim().charAt(0).toUpperCase();
+    $("sigil").textContent = initial(p.name);
     setPhoto($("sigil"), p.avatar);
     $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
     $("karma").textContent = p.karma; $("place").textContent = p.place || "—";
@@ -748,6 +748,10 @@
     img.onload = function () { node.style.backgroundImage = 'url("' + full.replace(/"/g, "") + '")'; node.classList.add("photo"); if (node.classList.contains("av")) node.style.color = "transparent"; };
     img.src = full;
   }
+  function initial(name) {                                  // первая буква имени; эмодзи и значки пропускаем, нет букв — звёздочка
+    var m = String(name || "").match(/[\p{L}\p{N}]/u);
+    return m ? m[0].toUpperCase() : "✦";
+  }
   function plural(n, a, b, c) { n = Math.abs(n) % 100; var m = n % 10; return n > 10 && n < 20 ? c : m === 1 ? a : m >= 2 && m <= 4 ? b : c; }
   function renderTop() {
     var rows = topData ? topData[topKey] : [], list = $("list");
@@ -757,7 +761,7 @@
       var li = document.createElement("li");
       li.innerHTML = '<span class="n">' + (i + 1) + '</span><span class="av"></span><span><span class="nm"></span><span class="t"></span></span><span class="p">' + r.points + "</span>";
       li.querySelector(".nm").textContent = r.name; li.querySelector(".t").textContent = r.title || "";
-      li.querySelector(".av").textContent = (r.name || "✦").trim().charAt(0).toUpperCase();
+      li.querySelector(".av").textContent = initial(r.name);
       setPhoto(li.querySelector(".av"), r.avatar);
       list.appendChild(li);
     });
@@ -2221,7 +2225,7 @@
       if (!r.neighbors.length) { ul.innerHTML = "<li class='empty' style='display:block'>Пока соседей нет — позови друзей из чата</li>"; return; }
       r.neighbors.forEach(function (n) {
         var li = el("li"); var av = el("span", "av"); av.className = "av"; av.style.cssText = "border-radius:50%;display:grid;place-items:center;font-weight:650;background:radial-gradient(circle at 35% 30%,#fff1d2,#ffc469 35%,#8a4a14);color:#2a1406";
-        av.textContent = (n.name || "✦").charAt(0).toUpperCase(); setPhoto(av, n.avatar); li.appendChild(av);
+        av.textContent = initial(n.name); setPhoto(av, n.avatar); li.appendChild(av);
         var t = el("span"); t.appendChild(el("span", "", n.name)); t.appendChild(el("span", "t", n.title + (n.gifted ? " · подарок оставлен" : ""))); li.appendChild(t);
         li.appendChild(btn("В гости", "", function () { visit(n.pub); })); li.lastChild.className = "";
         ul.appendChild(li);
