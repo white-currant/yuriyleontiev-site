@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131043";
+    var BUILD = "202611131046";
     try {
       fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
         v = (v || "").trim();
@@ -876,6 +876,16 @@
               ["....w....", "...wC....", "...Cn.w..", ".w.Cn.Cn.", ".CwCnnCn.", ".CnCnNCn.", "CnnNnNnNn", ".NNNNNNN."],
               [".....w.....", "....wC.....", "....Cn...w.", "..w.Cn..wC.", "..CwCnn.Cn.", "..CnCnnCCn.", "w.CnCnNCnn.", "CwCnCnNCnNw", "CnCnNnNCnNC", "CnnNnNnNnNn", ".NNNNNNNNN."]],
   };
+  // формы, которые появляются только мутацией при скрещивании; цифра — роль цвета
+  var SEED0 = ["..1..", ".MMM.", "mmmmm"], SPROUT = [".1.1.", "..0..", "..0.."];
+  CROP.flower = [SEED0, SPROUT, ["...3...", "..353..", "...0...", "1..0..1", ".1.0.1.", "...0..."],
+                 ["...3.3...", "..34443..", ".3344433.", "..34443..", "...323...", "..1.0.1..", ".11.0.11.", "..1.0.1..", "....0...."]];
+  CROP.mushroom = [SEED0, SPROUT, ["..333..", ".34333.", "..222..", "..222..", ".00000."],
+                   ["..33333....", ".3343343...", "333333333..", "...222..333", "...222.3433", "...222..22.", "...222..22.", "..00000000."]];
+  CROP.pumpkin = [SEED0, SPROUT, ["....0..1.", "...0.111.", "..35353..", ".3353533.", ".3535353.", "..55555.."],
+                  [".....0.....", "....00.11..", "..3535353..", ".335353533.", "3345353533.", "3335353533.", ".33535353..", "..5555555.."]];
+  CROP.cactus = [SEED0, SPROUT, ["...1...", "..121..", "..121.1", "1.121.1", ".11211.", "..121..", ".00000."],
+                 ["....4....", "...434...", "...121...", "...121..1", "1..121.11", "11.121.1.", ".1.121.1.", ".111211..", "...121...", "...121...", "..00000.."]];
   var BARROW = ["...C.p..L...", "..CnpPbLhL..", ".kVVVVVVVVk.", ".kWWWWWWWWkkk", "..kWWWWWWk..k", "...kkkkkk....", "....kiIk.....", ".....kk......"].map(function (r) { return (r + "             ").slice(0, 13); });
   var BARREL = [".kkkkkk.", "kVWWWWVk", "kiIIIIik", "kWBWWBWk", "kWBWWBWk", "kiIIIIik", "kWBWWBWk", "kBBBBBBk", ".kkkkkk."];
   var CRATE = ["kkkkkkkkkk", "kVVVVVVVVk", "kWkWWWWkWk", "kWWkWWkWWk", "kWWWkkWWWk", "kWWkWWkWWk", "kWkWWWWkWk", "kBBBBBBBBk", "kkkkkkkkkk"];
@@ -1006,15 +1016,19 @@
   // грядка: доски, земля бороздами, 9 растений; закрытая — заросший травой клочок с табличкой
   // ---------- сорта: форма растения (shape) — от одного родителя, раскраска (color) — от другого ----------
   // Буквы спрайта означают роль цвета: 0 тёмный, 1 основной, 2 светлый, 3 акцент, 4 светлый акцент, 5 полутень.
-  var FAM = {
-    moss:    { roles: { d: 0, b: 1, c: 4, a: 5 }, pal: ["#126150", "#3fcca6", "#9ff5de", "#e9ff8a", "#d6fff3", "#1c8a72"] },
-    berry:   { roles: { l: 0, L: 1, h: 2, p: 3, P: 4, q: 5 }, pal: ["#3f8f3a", "#6fcf5a", "#b6ee88", "#ff4f9a", "#ffd3e6", "#a82868"] },
-    crystal: { roles: { N: 0, C: 1, w: 4, n: 5 }, pal: ["#1f5f98", "#86e6ff", "#c9f6ff", "#e8fbff", "#ffffff", "#3aa6d9"] },
+  var DIG = { 0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5 };
+  var ROLES = { moss: { d: 0, b: 1, c: 4, a: 5 }, berry: { l: 0, L: 1, h: 2, p: 3, P: 4, q: 5 }, crystal: { N: 0, C: 1, w: 4, n: 5 } };
+  var PAL = {
+    moss: ["#126150", "#3fcca6", "#9ff5de", "#e9ff8a", "#d6fff3", "#1c8a72"], berry: ["#3f8f3a", "#6fcf5a", "#b6ee88", "#ff4f9a", "#ffd3e6", "#a82868"],
+    crystal: ["#1f5f98", "#86e6ff", "#c9f6ff", "#e8fbff", "#ffffff", "#3aa6d9"],
+    sun: ["#8a4a12", "#ffb627", "#ffe08a", "#ff6b35", "#fff1c1", "#c8661a"], nebula: ["#3b1f6e", "#8b5cf6", "#c4b5fd", "#f472b6", "#fbcfe8", "#6d28d9"],
+    ember: ["#5c1a0b", "#e2492b", "#ff9f6b", "#ffd166", "#fff3c4", "#a8301a"], frost: ["#5d7f9e", "#dff4ff", "#ffffff", "#a5e4ff", "#ffffff", "#9cc3dd"],
+    night: ["#14123a", "#3a3494", "#7d77d9", "#e8e6ff", "#ffffff", "#262066"], aurora: ["#0f5e5b", "#34d399", "#a7f3d0", "#f472b6", "#fde68a", "#0e8f7a"],
   };
   var DEAD = ["#5a4630", "#8a6a42", "#a88a5a", "#7a5a3a", "#b89a6a", "#4a3826"];
   var SEEDTIER = { common: ["Обычный сорт", "#c9c3e0"], rare: ["Хороший сорт", "#60a5fa"], epic: ["Редкий сорт", "#c084fc"], legendary: ["Легендарный сорт", "#ffc469"] };
   function sprS(c, x, yb, rows, s, dead) {
-    var roles = FAM[s.shape].roles, pal = dead ? DEAD : FAM[s.color].pal, h = rows.length;
+    var roles = ROLES[s.shape] || DIG, pal = dead ? DEAD : PAL[s.color] || PAL.moss, h = rows.length;
     for (var j = 0; j < h; j++) for (var i = 0; i < rows[j].length; i++) {
       var ch = rows[j][i]; if (ch === ".") continue;
       px(c, x + i, yb - h + 1 + j, 1, 1, roles[ch] != null ? pal[roles[ch]] : SPR[ch]);
@@ -1062,7 +1076,7 @@
       if (((t / 500 | 0) + w) % 3) px(c, wx, wy, 1, 1, "rgba(160,215,255,.55)"); }
     if (dry) for (var d = 0; d < 6; d++) { var dx = x + 5 + d * 6, dy = y + 8 + (d * 13) % 26; px(c, dx, dy, 2, 1, "#5e4026"); px(c, dx + 1, dy + 1, 1, 1, "#5e4026"); }
     if (!inf) return;
-    var s = inf.s, rows = CROP[s.shape], st = inf.f >= 1 ? 3 : inf.f > .6 ? 2 : inf.f > .25 ? 1 : 0;
+    var s = inf.s, rows = (CROP[s.shape] || CROP.moss), st = inf.f >= 1 ? 3 : inf.f > .6 ? 2 : inf.f > .25 ? 1 : 0;
     if (inf.dead) st = Math.max(2, st);
     for (var row = 0; row < 3; row++) for (var col = 0; col < 3; col++) {
       var sp = rows[st], cx = x + 8 + col * 13, base = y + 13 + row * 12 + (inf.dead ? 1 : 0), n = row * 3 + col;
@@ -1130,7 +1144,7 @@
       for (var n = 0; n < 9; n++) {
         var cx = x + 8 + (n % 3) * 13, base = y + 13 + ((n / 3) | 0) * 12;
         if (e.kind === "harvest") {
-          var lift = Math.round(p * 14 + Math.sin(n) * 2), sp = CROP[e.s.shape][3];
+          var lift = Math.round(p * 14 + Math.sin(n) * 2), sp = (CROP[e.s.shape] || CROP.moss)[3];
           if (p < .55) { c.globalAlpha = 1 - p / .55; sprS(c, cx - (sp[0].length >> 1), base - lift, sp, e.s); c.globalAlpha = 1; }
           for (var k = 0; k < 4; k++) {                                              // искры разлетаются
             var a = n * 1.7 + k * 1.57, d = 3 + p * 14;
@@ -1164,7 +1178,7 @@
     }, function (e) { F.pending--; toast("Не получилось: " + e.message); if (!F.pending) call("/api/farm").then(setFarm).catch(function () {}); throw e; });
   }
   function cropIcon(cv, s) {                                                      // значок сорта: созревшее растение на земле
-    var rows = CROP[s.shape][3], w = rows[0].length + 4, h = 12, c = cv.getContext("2d");
+    var rows = (CROP[s.shape] || CROP.moss)[3], w = rows[0].length + 4, h = 12, c = cv.getContext("2d");
     cv.width = w; cv.height = h; c.clearRect(0, 0, w, h); px(c, 1, h - 2, w - 2, 2, C.so); px(c, 1, h - 2, w - 2, 1, C.sol);
     sprS(c, 2, h - 2, rows, s);
   }
@@ -1406,7 +1420,8 @@
   }
   function showHybrid(h, then) {
     sheet(function (sh, close) {
-      var n = el("div", "mono", h.fresh ? "Новый сорт!" : "Семя гибрида"); n.style.color = "var(--gold)"; sh.appendChild(n);
+      var mut = { shape: " · мутация: новая форма!", color: " · мутация: новый цвет!", both: " · мутация: новые форма и цвет!" }[h.mutation] || "";
+      var n = el("div", "mono", (h.fresh ? "Новый сорт!" : "Семя гибрида") + mut); n.style.color = "var(--gold)"; sh.appendChild(n);
       var cv = el("canvas", "pix bigseed"); cropIcon(cv, h); sh.appendChild(cv);
       sh.appendChild(el("h3", "", h.name));
       var tier = SEEDTIER[h.tier] || SEEDTIER.common, sub = el("div", "sub"), tb = el("b", "", tier[0]); tb.style.color = tier[1]; sub.appendChild(tb);

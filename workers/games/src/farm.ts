@@ -87,10 +87,19 @@ async function dropVinyl(user: number, chance: number) {
 function priceOf(s: Strain) { return Math.max(3, Math.round(s.dust * 0.5 + s.vinyl * 120 + (s.bonus ? 15 : 0) + s.gen * 2)); }
 function tierOf(p: number) { return p >= 70 ? "legendary" : p >= 40 ? "epic" : p >= 20 ? "rare" : "common"; }
 function view(s: Strain): Strain { const price = priceOf(s); return { ...s, price, tier: tierOf(price) }; }
-const ADJ: Record<string, [string, string]> = { moss: ["Лунный", "Лунные"], berry: ["Звёздный", "Звёздные"], crystal: ["Кометный", "Кометные"] };
-const BADJ: Record<string, [string, string]> = { rain: ["Дождевой", "Дождевые"], lucky: ["Счастливый", "Счастливые"], hardy: ["Стойкий", "Стойкие"],
-                                                rich: ["Щедрый", "Щедрые"], seedy: ["Плодовитый", "Плодовитые"] };
-const NOUN: Record<string, [string, number]> = { moss: ["мох", 0], berry: ["ягоды", 1], crystal: ["хрусталь", 0] };
+// формы растений и раскраски. Базовые — у сортов станции; остальные появляются только мутацией при скрещивании.
+// Прилагательные: [мужской, множественное, женский]; у существительного — какая форма ему нужна.
+const ADJ: Record<string, [string, string, string]> = {
+  moss: ["Лунный", "Лунные", "Лунная"], berry: ["Звёздный", "Звёздные", "Звёздная"], crystal: ["Кометный", "Кометные", "Кометная"],
+  sun: ["Солнечный", "Солнечные", "Солнечная"], nebula: ["Туманный", "Туманные", "Туманная"], ember: ["Огненный", "Огненные", "Огненная"],
+  frost: ["Ледяной", "Ледяные", "Ледяная"], night: ["Полуночный", "Полуночные", "Полуночная"], aurora: ["Сияющий", "Сияющие", "Сияющая"],
+};
+const BADJ: Record<string, [string, string, string]> = { rain: ["Дождевой", "Дождевые", "Дождевая"], lucky: ["Счастливый", "Счастливые", "Счастливая"],
+  hardy: ["Стойкий", "Стойкие", "Стойкая"], rich: ["Щедрый", "Щедрые", "Щедрая"], seedy: ["Плодовитый", "Плодовитые", "Плодовитая"] };
+const NOUN: Record<string, [string, number]> = { moss: ["мох", 0], berry: ["ягоды", 1], crystal: ["хрусталь", 0],
+  flower: ["звездоцвет", 0], mushroom: ["грибы", 1], pumpkin: ["тыква", 2], cactus: ["кактус", 0] };
+const SHAPES = Object.keys(NOUN), COLORS = Object.keys(ADJ);
+const MUTATE_SHAPE = 0.12, MUTATE_COLOR = 0.12;      // шанс, что гибрид получит новую форму / новый цвет, которых нет у родителей
 function nameFor(g: any) {
   const [noun, form] = NOUN[g.shape];
   const words = [...(g.bonus ? [BADJ[g.bonus][form]] : []), ADJ[g.color][form], noun];
@@ -115,8 +124,12 @@ async function strains(ids: string[]): Promise<Record<string, Strain>> {
 async function breed(a: Strain, b: Strain): Promise<Strain> {
   const r = Math.random, avg = (k: keyof Strain) => ((a[k] as number) + (b[k] as number)) / 2, mut = () => 0.85 + r() * 0.4;
   const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+  const pick = (list: string[], not: string[]) => { const l = list.filter((x) => !not.includes(x)); return l[Math.floor(r() * l.length)]; };
+  let mutation: string | null = null, shape = a.shape, color = b.color;
+  if (r() < MUTATE_SHAPE) { shape = pick(SHAPES, [a.shape, b.shape]); mutation = "shape"; }
+  if (r() < MUTATE_COLOR) { color = pick(COLORS, [a.color, b.color]); mutation = mutation ? "both" : "color"; }
   const g: any = {
-    shape: a.shape, color: b.color,
+    shape, color,
     minutes: Math.round(clamp(avg("minutes") * mut(), 5, 480) / 5) * 5,
     dust: Math.round(clamp(avg("dust") * mut(), 1, 400)),
     vinyl: Math.round(clamp(avg("vinyl") * mut(), 0.01, 0.5) * 100) / 100,
@@ -136,7 +149,7 @@ async function breed(a: Strain, b: Strain): Promise<Strain> {
   g.points = Math.max(1, Math.round(g.minutes / 40));
   const id = await hashId(g), name = nameFor(g);
   await q("INSERT OR IGNORE INTO f_strains (id, name, genes, created) VALUES (?, ?, ?, ?)", [id, name, JSON.stringify(g), now()]);
-  return view({ id, name, ...g });
+  return { ...view({ id, name, ...g }), mutation };
 }
 
 // ---------- рост и полив ----------
