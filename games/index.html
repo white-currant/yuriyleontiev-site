@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131130";
+    var BUILD = "202611131134";
     try {
       fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
         v = (v || "").trim();
@@ -1043,12 +1043,13 @@
   // ---------- изометрия ----------
   // Сцена — вид сверху-сбоку: оси двора идут «вправо-вниз» и «влево-вниз» (2 пикселя по ширине на 1 по высоте).
   // Грядки — ромбы 48×24 с центрами BC; двор — большой ромб с забором; дом, колодец и лес — позади двора.
-  var HW = 24, HH = 12;                                    // полуширина и полувысота грядки
-  var O = [92, 116], PX = 28, PY = 14;                     // центр двора и шаг сетки грядок
+  var HW = 21, HH = 10;                                    // полуширина и полувысота грядки
+  var O = [92, 116], PX = 24, PY = 12;                     // центр двора и шаг сетки грядок
   function iso(c, r) { return [Math.round(O[0] + (c - r) * PX), Math.round(O[1] + (c + r) * PY)]; }   // клетка двора → пиксель
-  var BC = (function () { var a = []; for (var r = 0; r < 2; r++) for (var c = 0; c < 3; c++) a.push(iso(c - 1, r - .5)); return a; })();
-  var YC = [iso(-1.9, -1.38), iso(1.9, -1.38), iso(1.9, 1.38), iso(-1.9, 1.38)];   // углы двора: дальний, правый, ближний, левый
-  var WELL = [163, 82];                                     // колодец (для нажатий и эффектов)
+  var BC = (function () { var a = []; for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) a.push(iso(c - 1, r - 1)); return a; })();   // девять грядок 3×3
+  var BORDER = BC.map(function (p, i) { return i; }).sort(function (a, b) { return BC[a][1] - BC[b][1]; });   // порядок рисования: дальние раньше
+  var YC = [iso(-1.85, -1.85), iso(1.85, -1.85), iso(1.85, 1.85), iso(-1.85, 1.85)];   // углы двора: дальний, правый, ближний, левый
+  var WELL = [164, 86];                                     // колодец (для нажатий и эффектов)
   function seg(c, x0, y0, x1, y1, col) {                   // линия по пикселям
     x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
     var dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, e = dx - dy;
@@ -1109,7 +1110,7 @@
     for (x = 0; x < FW; x++) if (r() < .5) px(c, x, 43 + (r() * 2 | 0), 1, 1, C.gd);
     // двор: утоптанная земля, камешки, трава по краям
     poly(c, YC, C.dt);
-    for (i = 0; i < 520; i++) { var qc = (r() * 2 - 1) * 1.9, qr = (r() * 2 - 1) * 1.38, q = iso(qc, qr), nn = r();
+    for (i = 0; i < 560; i++) { var qc = (r() * 2 - 1) * 1.85, qr = (r() * 2 - 1) * 1.85, q = iso(qc, qr), nn = r();
       px(c, q[0], q[1], 1, 1, nn < .5 ? C.dtd : C.dtl); if (nn > .93) { px(c, q[0], q[1], 2, 1, C.pb); px(c, q[0], q[1], 1, 1, C.pbl); } }
     for (i = 0; i < 4; i++) { var e0y = YC[i], e1y = YC[(i + 1) % 4];
       for (var k = 0; k < 26; k++) { var tt = r(); tuft(c, Math.round(e0y[0] + (e1y[0] - e0y[0]) * tt) + (r() * 3 | 0) - 1, Math.round(e0y[1] + (e1y[1] - e0y[1]) * tt) + (r() * 3 | 0) - 1, r() < .5 ? C.g : C.gl); } }
@@ -1119,49 +1120,93 @@
     isoFence(c, YC[3][0] + 1, YC[3][1], YC[0][0] - 2, YC[0][1] + 1);
     isoFence(c, YC[0][0] + 2, YC[0][1] + 1, YC[1][0] - 1, YC[1][1]);
 
-    // дом: две стены, двускатная крыша, труба, дверь и тёплые окна
-    var A = [10, 70], B = [36, 83], Cc = [58, 72], H = 18;
+    // сказочный домик: низкие стены на каменном цоколе, высокая прогнутая крыша с мхом, кривая труба,
+    // круглая дверь, тёплые окна, плющ, фонарик у двери, флюгер-звезда
+    var A = [8, 73], B = [36, 87], Cc = [60, 75], H = 16, GH = 22;
     var up = function (p, h) { return [p[0], p[1] - h]; };
-    var G1 = [(B[0] + Cc[0]) / 2, (B[1] + Cc[1]) / 2 - H - 13], G0 = [G1[0] + A[0] - B[0], G1[1] + A[1] - B[1]];
-    poly(c, [[A[0] - 2, A[1] + 2], [B[0], B[1] + 4], [Cc[0] + 4, Cc[1] + 3], [B[0], B[1] - 6]], "rgba(40,60,20,.35)");                 // тень
-    poly(c, [B, Cc, up(Cc, H), G1, up(B, H)], C.walld);                                                                             // правая стена с фронтоном
-    poly(c, [A, B, up(B, H), up(A, H)], C.wall);                                                                                    // левая стена
-    seg(c, B[0], B[1], B[0], B[1] - H, C.beam); seg(c, A[0], A[1], A[0], A[1] - H, C.beam); seg(c, Cc[0] - 1, Cc[1], Cc[0] - 1, Cc[1] - H, C.beam);
-    seg(c, A[0], A[1], B[0], B[1], C.beam); seg(c, B[0], B[1], Cc[0], Cc[1], C.beam);
-    var onL = function (t, h) { return [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t - h]; };                                 // точка на левой стене
-    var onR = function (t, h) { return [B[0] + (Cc[0] - B[0]) * t, B[1] + (Cc[1] - B[1]) * t - h]; };
-    poly(c, [onL(.5, 0), onL(.78, 0), onL(.78, 12), onL(.5, 12)], C.wdd); poly(c, [onL(.54, 0), onL(.74, 0), onL(.74, 11), onL(.54, 11)], C.wd);   // дверь
-    px(c, Math.round(onL(.7, 5)[0]), Math.round(onL(.7, 5)[1]), 1, 1, C.gold);
-    poly(c, [onL(.12, 5), onL(.38, 5), onL(.38, 13), onL(.12, 13)], C.wdd); poly(c, [onL(.15, 6), onL(.35, 6), onL(.35, 12), onL(.15, 12)], C.glass);  // окно слева
-    seg(c, onL(.25, 6)[0], onL(.25, 6)[1], onL(.25, 12)[0], onL(.25, 12)[1], C.wdd);
-    poly(c, [onR(.3, 5), onR(.7, 5), onR(.7, 13), onR(.3, 13)], C.wdd); poly(c, [onR(.36, 6), onR(.64, 6), onR(.64, 12), onR(.36, 12)], C.glass2);   // окно справа
-    seg(c, onR(.5, 6)[0], onR(.5, 6)[1], onR(.5, 12)[0], onR(.5, 12)[1], C.wdd);
-    var e0 = [A[0] - 3, A[1] - H + 2], e1 = [B[0] + 2, B[1] - H + 4], g1 = [G1[0] + 2, G1[1] + 1], g0 = [G0[0] - 2, G0[1] - 1];           // скат крыши с навесом
-    poly(c, [e0, e1, g1, g0], roof[0]);
-    for (i = 1; i < 8; i++) { var s = i / 8, p0 = [e0[0] + (g0[0] - e0[0]) * s, e0[1] + (g0[1] - e0[1]) * s], p1 = [e1[0] + (g1[0] - e1[0]) * s, e1[1] + (g1[1] - e1[1]) * s];
-      seg(c, p0[0], p0[1], p1[0], p1[1], i % 2 ? roof[1] : roof[2]); }
-    seg(c, e0[0], e0[1], e1[0], e1[1], roof[1]); seg(c, e0[0], e0[1] + 1, e1[0], e1[1] + 1, "rgba(60,30,20,.45)");
-    seg(c, g0[0], g0[1], g1[0], g1[1], roof[2]); seg(c, e1[0], e1[1], g1[0], g1[1], roof[1]);
-    seg(c, g1[0], g1[1], Cc[0] + 2, Cc[1] - H + 1, roof[1]); seg(c, g1[0], g1[1] + 1, Cc[0] + 2, Cc[1] - H + 2, roof[1]);              // край фронтона
-    px(c, 27, 34, 5, 10, "#a8584a"); px(c, 27, 34, 5, 1, "#c97a68"); px(c, 27, 34, 1, 10, "#c97a68"); px(c, 31, 35, 1, 9, "#7e3e34");   // труба
-    px(c, Math.round(onL(.64, 0)[0]) - 5, Math.round(onL(.64, 0)[1]) + 1, 9, 2, C.std); px(c, Math.round(onL(.64, 0)[0]) - 4, Math.round(onL(.64, 0)[1]) + 1, 7, 1, C.stl);  // крыльцо
-    // клумба у дома, тачка, бочки
-    for (i = 0; i < 9; i++) flower(c, 44 + (r() * 22 | 0), 80 + (r() * 6 | 0) - (i % 3), C.flowers[i % C.flowers.length]);
+    var lerp = function (p, q, t2) { return [p[0] + (q[0] - p[0]) * t2, p[1] + (q[1] - p[1]) * t2]; };
+    var G1 = [(B[0] + Cc[0]) / 2, (B[1] + Cc[1]) / 2 - H - GH], G0 = [G1[0] + A[0] - B[0], G1[1] + A[1] - B[1]];
+    var onL = function (t2, h) { var q = lerp(A, B, t2); return [q[0], q[1] - h]; }, onR = function (t2, h) { var q = lerp(B, Cc, t2); return [q[0], q[1] - h]; };
+    poly(c, [[A[0] - 3, A[1] + 2], [B[0], B[1] + 5], [Cc[0] + 6, Cc[1] + 3], [B[0], B[1] - 7]], "rgba(40,60,20,.35)");                 // тень
+    poly(c, [B, Cc, up(Cc, H), G1, up(B, H)], "#e6cf9f");                                                                           // правая стена с фронтоном
+    poly(c, [A, B, up(B, H), up(A, H)], "#f7e6c0");                                                                                 // левая стена
+    poly(c, [A, B, up(B, 3), up(A, 3)], C.st); poly(c, [B, Cc, up(Cc, 3), up(B, 3)], C.std);                                        // каменный цоколь
+    for (i = 0; i < 7; i++) { var q1 = onL(i / 7 + .05, 1); px(c, Math.round(q1[0]), Math.round(q1[1]), 2, 1, C.stl); var q2 = onR(i / 7 + .05, 2); px(c, Math.round(q2[0]), Math.round(q2[1]), 2, 1, C.st); }
+    seg(c, B[0], B[1] - 3, B[0], B[1] - H, C.beam); seg(c, A[0], A[1] - 3, A[0], A[1] - H, C.beam); seg(c, Cc[0] - 1, Cc[1] - 3, Cc[0] - 1, Cc[1] - H, C.beam);
+    seg(c, onR(0, H)[0], onR(0, H)[1], onR(1, H)[0], onR(1, H)[1], C.beam);                                                         // балки фронтона
+    seg(c, onR(.5, H)[0], onR(.5, H)[1], G1[0], G1[1] + 4, C.beam); seg(c, onR(.12, H)[0], onR(.12, H)[1], onR(.5, H + 9)[0], onR(.5, H + 9)[1], C.beam);
+    seg(c, onR(.88, H)[0], onR(.88, H)[1], onR(.5, H + 9)[0], onR(.5, H + 9)[1], C.beam);
+    // круглая дверь с окошком и фонариком
+    var d0 = onL(.5, 3), d1 = onL(.8, 3);
+    poly(c, [d0, d1, [d1[0], d1[1] - 8], [d1[0] - 2, d1[1] - 10.5], [d0[0] + 2, d0[1] - 10], [d0[0], d0[1] - 7]], C.wdd);
+    poly(c, [[d0[0] + 1, d0[1]], [d1[0] - 1, d1[1]], [d1[0] - 1, d1[1] - 7], [d1[0] - 2.5, d1[1] - 9], [d0[0] + 2.5, d0[1] - 8.5], [d0[0] + 1, d0[1] - 6]], "#2f9a8c");
+    seg(c, d0[0] + 4, d0[1] - 8, d0[0] + 4, d0[1] + 1, "#237a6e");
+    px(c, Math.round(d0[0] + 2), Math.round(d0[1] - 6), 2, 2, C.glass); px(c, Math.round(d1[0] - 2), Math.round(d1[1] - 4), 1, 1, C.gold);
+    var lan = [Math.round(d1[0] + 2), Math.round(d1[1] - 9)]; px(c, lan[0], lan[1] - 1, 1, 1, C.wdd); px(c, lan[0] - 1, lan[1], 3, 3, "#ffd27a"); px(c, lan[0], lan[1] + 1, 1, 1, "#fff6df");
+    px(c, Math.round(d0[0]) - 1, Math.round(d0[1]) + 1, 10, 2, C.std); px(c, Math.round(d0[0]), Math.round(d0[1]) + 1, 8, 1, C.stl);     // крыльцо
+    // окна: слева — с переплётом и цветочным ящиком, справа — со ставнями, во фронтоне — круглое
+    poly(c, [onL(.1, 5), onL(.38, 5), onL(.38, 12), onL(.1, 12)], C.wdd); poly(c, [onL(.13, 6), onL(.35, 6), onL(.35, 11), onL(.13, 11)], C.glass);
+    seg(c, onL(.24, 6)[0], onL(.24, 6)[1], onL(.24, 11)[0], onL(.24, 11)[1], C.wdd);
+    poly(c, [onL(.08, 3.5), onL(.4, 3.5), onL(.4, 5.5), onL(.08, 5.5)], C.wd);
+    for (i = 0; i < 4; i++) { var fb = onL(.12 + i * .08, 6); px(c, Math.round(fb[0]), Math.round(fb[1]), 1, 1, C.flowers[(i + 1) % 5]); }
+    poly(c, [onR(.32, 5), onR(.68, 5), onR(.68, 12), onR(.32, 12)], C.wdd); poly(c, [onR(.38, 6), onR(.62, 6), onR(.62, 11), onR(.38, 11)], C.glass2);
+    seg(c, onR(.5, 6)[0], onR(.5, 6)[1], onR(.5, 11)[0], onR(.5, 11)[1], C.wdd);
+    poly(c, [onR(.2, 5), onR(.31, 5), onR(.31, 12), onR(.2, 12)], "#2f9a8c"); poly(c, [onR(.69, 5), onR(.8, 5), onR(.8, 12), onR(.69, 12)], "#2f9a8c");   // ставни
+    var rw = onR(.5, H + 12); disc(c, Math.round(rw[0]), Math.round(rw[1]), 3, C.wdd); disc(c, Math.round(rw[0]), Math.round(rw[1]), 2, C.glass);
+    px(c, Math.round(rw[0]), Math.round(rw[1]) - 2, 1, 5, C.wdd); px(c, Math.round(rw[0]) - 2, Math.round(rw[1]), 5, 1, C.wdd);
+    // плющ по углу дома
+    for (i = 0; i < 16; i++) { var vy = B[1] - 3 - i, vx = B[0] + Math.round(Math.sin(i * .9) * 1.5) + (i > 9 ? i - 9 : 0);
+      px(c, vx, vy, 2, 1, i % 3 ? "#3f8f3a" : "#6fcf5a"); if (i % 5 === 2) px(c, vx + 1, vy, 1, 1, C.flowers[0]); }
+    // крыша: прогнутый скат рядами черепицы, мох, навес; край фронтона
+    var e0 = [A[0] - 4, A[1] - H], e1 = [B[0] + 2, B[1] - H + 2], g1 = [G1[0] + 3, G1[1] + 1], g0 = [G0[0] - 3, G0[1] - 2];
+    var sag = function (p, t2) { return [p[0] - Math.sin(t2 * 3.1416) * 2, p[1] + Math.sin(t2 * 3.1416) * 3]; };               // прогиб, как у сказочных крыш
+    for (i = 0; i <= 80; i++) { var t2 = i / 80, p0 = sag(lerp(e0, g0, t2), t2), p1 = sag(lerp(e1, g1, t2), t2), band = Math.floor(t2 * 9);
+      var colr = (Math.floor(t2 * 80) % 9 === 0) ? roof[1] : band % 2 ? roof[0] : roof[2];
+      seg(c, p0[0], p0[1], p1[0], p1[1], colr); seg(c, p0[0], p0[1] + 1, p1[0], p1[1] + 1, colr); }
+    for (i = 0; i < 9; i++) for (var k2 = 0; k2 < 6; k2++) {                                                                      // черепица вразбежку
+      var t3 = (i + .5) / 9, t4 = (k2 + (i % 2) * .5) / 6; if (t4 > .98) continue;
+      var q3 = lerp(sag(lerp(e0, g0, t3), t3), sag(lerp(e1, g1, t3), t3), t4); px(c, Math.round(q3[0]), Math.round(q3[1]), 1, 3, roof[1]); }
+    for (i = 0; i < 26; i++) { var t5 = r() * .55, t6 = r(), q4 = lerp(sag(lerp(e0, g0, t5), t5), sag(lerp(e1, g1, t5), t5), t6);                 // мох у края
+      px(c, Math.round(q4[0]), Math.round(q4[1]), r() < .5 ? 2 : 1, 1, r() < .5 ? "#5aaa43" : "#8acf60"); }
+    seg(c, e0[0], e0[1] + 2, e1[0], e1[1] + 2, "rgba(60,30,20,.5)"); seg(c, e0[0], e0[1] + 1, e1[0], e1[1] + 1, roof[1]);
+    for (i = 0; i <= 40; i++) { var t7 = i / 40, q5 = sag(lerp(e1, g1, t7), t7), q6 = lerp([Cc[0] + 3, Cc[1] - H + 3], [g1[0], g1[1]], t7);               // торцы крыши
+      px(c, Math.round(q5[0]), Math.round(q5[1]), 2, 2, roof[1]); px(c, Math.round(q6[0] + Math.sin(t7 * 3.1416) * 2), Math.round(q6[1] + Math.sin(t7 * 3.1416) * 3), 2, 2, roof[1]); }
+    seg(c, g0[0], g0[1], g1[0], g1[1], roof[2]); seg(c, g0[0], g0[1] + 1, g1[0], g1[1] + 1, roof[1]);
+    // кривая каменная труба и флюгер-звезда
+    var ch = lerp(sag(lerp(e0, g0, .72), .72), sag(lerp(e1, g1, .72), .72), .3), chx = Math.round(ch[0]), chy = Math.round(ch[1]);
+    px(c, chx, chy - 6, 5, 8, C.st); px(c, chx + 1, chy - 11, 5, 6, C.st); px(c, chx, chy - 6, 1, 8, C.stl); px(c, chx + 1, chy - 11, 1, 5, C.stl);
+    px(c, chx + 4, chy - 5, 1, 7, C.std); px(c, chx + 5, chy - 11, 1, 6, C.std); px(c, chx, chy - 12, 7, 2, C.std); px(c, chx, chy - 12, 7, 1, C.stl);
+    px(c, chx + 2, chy - 8, 2, 1, C.std); px(c, chx + 1, chy - 3, 2, 1, C.std);
+    var st = [Math.round(g1[0]) - 1, Math.round(g1[1]) - 7]; px(c, st[0], st[1] + 3, 1, 5, C.wdd); px(c, st[0], st[1] - 1, 1, 5, C.gold); px(c, st[0] - 2, st[1] + 1, 5, 1, C.gold); px(c, st[0], st[1] + 1, 1, 1, "#fff6df");
+    // у дома: камни-дорожка к двору, грибы, клумба, тачка, бочки
+    [[30, 92], [37, 96], [45, 99]].forEach(function (q) { px(c, q[0], q[1], 5, 2, C.stl); px(c, q[0] + 1, q[1] + 2, 4, 1, C.st); px(c, q[0], q[1] + 1, 5, 1, C.st); });
+    [[5, 80], [62, 82], [3, 88]].forEach(function (q, k3) { px(c, q[0], q[1], 1, 3, "#f3e2c0"); px(c, q[0] - 1, q[1] - 1, 3, 2, k3 % 2 ? "#e2492b" : "#ff8fc0"); px(c, q[0] - 1, q[1] - 1, 1, 1, "#ffffff"); });
+    for (i = 0; i < 10; i++) flower(c, 44 + (r() * 20 | 0), 86 + (r() * 5 | 0) - (i % 3), C.flowers[i % C.flowers.length]);
     spr(c, 104, 68, BARROW); spr(c, 122, 70, BARREL); spr(c, 131, 74, BARREL);
-    // колодец: каменное кольцо, вода, навес
+    var smoke = [chx + 3, chy - 14];
+    var glows = [[Math.round(onL(.24, 8)[0]), Math.round(onL(.24, 8)[1]), 6], [Math.round(onR(.5, 8)[0]), Math.round(onR(.5, 8)[1]), 6], [lan[0], lan[1] + 1, 4], [Math.round(rw[0]), Math.round(rw[1]), 4]];
+
+    // колодец в изометрии: круглый каменный сруб, вода, два столба, островерхая крыша, ведро
     var wx = WELL[0], wy = WELL[1];
-    px(c, wx - 9, wy, 19, 8, C.st);
-    for (y = 0; y < 8; y += 3) for (x = -9 + (y % 2) * 2; x < 10; x += 5) px(c, wx + x, wy + y, 1, 2, C.std);
-    px(c, wx - 9, wy + 7, 19, 1, C.std); px(c, wx - 9, wy + 8, 19, 1, "rgba(40,60,20,.4)");
-    for (y = -4; y <= 4; y++) { var ww = Math.round(Math.sqrt(1 - y * y / 16) * 9.5); px(c, wx - ww, wy + y - 1, ww * 2 + 1, 1, y < -2 ? C.stl : C.st); }
-    for (y = -2; y <= 2; y++) { var w2 = Math.round(Math.sqrt(1 - y * y / 9) * 6); px(c, wx - w2, wy + y - 1, w2 * 2 + 1, 1, C.water); }
-    px(c, wx - 3, wy - 2, 3, 1, C.waterl);
-    px(c, wx - 9, wy - 18, 2, 18, C.wdd); px(c, wx + 8, wy - 18, 2, 18, C.wdd); px(c, wx - 9, wy - 15, 19, 1, C.wd);
-    for (y = 0; y < 6; y++) { var hw2 = 6 + Math.round(y * 1.2); px(c, wx - hw2, wy - 24 + y, hw2 * 2 + 1, 1, y % 2 ? C.wd : C.wdl); }
-    px(c, wx - 12, wy - 19, 25, 1, C.wdd);
-    px(c, wx, wy - 14, 1, 5, "#5b4636"); px(c, wx - 2, wy - 9, 5, 4, C.std); px(c, wx - 2, wy - 9, 5, 1, C.stl);
+    var ell = function (cx2, cy2, rx, ry, col) { for (var yy = -ry; yy <= ry; yy++) { var ww = Math.round(Math.sqrt(1 - yy * yy / (ry * ry + .01)) * rx); px(c, cx2 - ww, cy2 + yy, ww * 2 + 1, 1, col); } };
+    ell(wx + 1, wy + 9, 12, 5, "rgba(40,60,20,.35)");                                           // тень
+    px(c, wx - 10, wy, 21, 8, C.st); ell(wx, wy + 8, 10, 4, C.st);                              // стенка сруба
+    for (y = 1; y < 11; y += 3) for (x = -9 + (y % 2) * 3; x < 10; x += 5) px(c, wx + x, wy + y, 2, 1, C.std);
+    px(c, wx - 10, wy, 3, 9, C.stl); px(c, wx + 7, wy, 4, 10, C.std);                           // свет слева, тень справа
+    ell(wx, wy, 10, 4, C.stl); ell(wx, wy, 8, 3, C.std); ell(wx, wy, 7, 2, C.water);             // верхнее кольцо и вода
+    px(c, wx - 4, wy - 1, 3, 1, C.waterl); px(c, wx + 2, wy + 1, 2, 1, C.waterl);
+    px(c, wx - 4, wy + 10, 3, 1, "#5aaa43"); px(c, wx + 3, wy + 11, 2, 1, "#8acf60"); px(c, wx - 9, wy + 5, 2, 1, "#5aaa43");   // мох
+    px(c, wx - 10, wy - 19, 2, 20, C.wdd); px(c, wx - 10, wy - 19, 1, 20, C.wd); px(c, wx + 9, wy - 19, 2, 20, C.wdd); px(c, wx + 9, wy - 19, 1, 19, C.wd);   // столбы
+    px(c, wx - 9, wy - 15, 19, 2, C.wd); px(c, wx - 9, wy - 15, 19, 1, C.wdl); px(c, wx + 11, wy - 16, 3, 1, C.wdd); px(c, wx + 13, wy - 16, 1, 4, C.wdd);   // ворот с ручкой
+    px(c, wx, wy - 13, 1, 6, "#5b4636"); px(c, wx - 2, wy - 7, 5, 4, C.wd); px(c, wx - 2, wy - 7, 5, 1, C.wdl); px(c, wx - 2, wy - 5, 5, 1, C.std);          // ведро
+    var ap = [wx, wy - 33], el2 = [wx - 15, wy - 20], ef = [wx, wy - 14], er = [wx + 15, wy - 20];
+    poly(c, [ap, el2, ef], roof[0]); poly(c, [ap, ef, er], roof[1]);                              // крыша-шатёр
+    for (i = 1; i < 5; i++) { var a1 = lerp(ap, el2, i / 5), a2 = lerp(ap, ef, i / 5), a3 = lerp(ap, er, i / 5); seg(c, a1[0], a1[1], a2[0], a2[1], roof[2]); seg(c, a2[0], a2[1], a3[0], a3[1], roof[0]); }
+    seg(c, el2[0], el2[1], ef[0], ef[1], roof[1]); seg(c, ef[0], ef[1], er[0], er[1], "rgba(60,30,20,.6)"); seg(c, ap[0], ap[1], ef[0], ef[1], roof[2]);
+    px(c, wx, wy - 36, 1, 3, C.gold); px(c, wx - 1, wy - 35, 3, 1, C.gold);
+    for (i = 0; i < 5; i++) flower(c, wx - 14 + i * 7 + (r() * 2 | 0), wy + 12 + (i % 2) * 2, C.flowers[(i * 3) % C.flowers.length]);
     // деревья и цветы по углам луга
-    tree(c, 10, 160, 9, TREES[0]); tree(c, 172, 166, 10, TREES[0]); tree(c, 176, 98, 7, TREES[1]); tree(c, 5, 96, 6, TREES[1]);
+    tree(c, 10, 160, 9, TREES[0]); tree(c, 172, 166, 10, TREES[0]); tree(c, 181, 136, 7, TREES[1]); tree(c, 5, 96, 6, TREES[1]);
     for (i = 0; i < 26; i++) { x = 2 + (r() * (FW - 4) | 0); y = 150 + (r() * (FH - 154) | 0); if (Math.abs(x - YC[2][0]) < 14 || (x > 60 && y < 166)) continue; flower(c, x, y, C.flowers[(i * 7) % C.flowers.length]); }
     spr(c, 28, FH - 6, CAN); spr(c, 138, FH - 5, PRODUCE);
     // передний забор с калиткой у ближнего угла — отдельным слоем, поверх урожая
@@ -1170,7 +1215,7 @@
     isoFence(f, gr[0], gr[1], YC[1][0] - 1, YC[1][1] + 1);
     [gl, gr].forEach(function (g) { px(f, g[0] - 1, g[1] - 12, 3, 13, C.wdd); px(f, g[0] - 1, g[1] - 12, 2, 12, C.wd); px(f, g[0] - 1, g[1] - 13, 3, 1, C.wdl); });   // столбы калитки
     for (y = FH - 6; y < FH; y++) px(f, 0, y, FW, 1, "rgba(30,60,20," + ((y - FH + 7) * .07).toFixed(2) + ")");
-    statics[seed] = { back: back, front: front, lamps: [[gl[0], gl[1] - 15], [gr[0], gr[1] - 15]] };
+    statics[seed] = { back: back, front: front, lamps: [[gl[0], gl[1] - 15], [gr[0], gr[1] - 15]], smoke: smoke, glows: glows };
     return statics[seed];
   }
 
@@ -1209,12 +1254,12 @@
   }
 
   // пять растений на грядке — от дальних к ближним (так рисуются без «просвечивания»)
-  var SPOTS = [[0, -6], [-11, 0], [11, 0], [0, 1], [0, 7]].map(function (p) { return [p[0], p[1]]; }), NSP = SPOTS.length;
+  var SPOTS = [[0, -5], [-10, 0], [10, 0], [0, 1], [0, 6]].map(function (p) { return [p[0], p[1]]; }), NSP = SPOTS.length;
   function spot(i, n) { return [BC[i][0] + SPOTS[n][0], BC[i][1] + SPOTS[n][1] + 2]; }
 
   // грядка-ромб: дощатый бортик, земля бороздами (политая — тёмная и блестит, сухая — светлая), 9 растений;
   // закрытая — заросла травой, на ней табличка
-  function drawBed(c, pl, i, now, t, ss, dryLim, own) {
+  function drawBed(c, pl, i, now, t, ss, dryLim, own, sign) {
     var cx = BC[i][0], cy = BC[i][1];
     if (pl.locked) {
       var r = rng(300 + i);
@@ -1222,6 +1267,7 @@
       for (var k = 0; k < 70; k++) { var a = r() * 2 - 1, b = r() * 2 - 1; if (Math.abs(a) + Math.abs(b) > .9) continue; px(c, Math.round(cx + a * HW), Math.round(cy + b * HH), 1, 1, r() < .5 ? C.gl : C.gd); }
       for (var k2 = 0; k2 < 5; k2++) { var a2 = r() * 1.2 - .6, b2 = r() * 1.2 - .6; tuft(c, Math.round(cx + a2 * HW), Math.round(cy + b2 * HH)); }
       for (var k3 = 0; k3 < 3; k3++) flower(c, Math.round(cx + (r() - .5) * HW), Math.round(cy + (r() - .5) * HH), C.flowers[(i + k3) % 6]);
+      if (!sign) return;                                                             // табличка — только на следующей к покупке
       var sx = cx - 6, sy = cy - 14;                                                 // табличка со звездой
       px(c, sx + 5, sy + 8, 2, 9, C.wdd); px(c, sx + 3, sy + 17, 6, 1, "rgba(40,60,20,.4)");
       px(c, sx - 1, sy - 1, 14, 10, C.k); px(c, sx, sy, 12, 8, C.wd); px(c, sx, sy, 12, 1, C.wdl);
@@ -1234,7 +1280,7 @@
     rhomb(c, cx, cy, HW, HH, C.wdl);
     rhomb(c, cx, cy, HW - 3, HH - 2, wet ? "#4f301b" : dry ? "#86603c" : C.so);
     for (var b3 = -.7; b3 < .8; b3 += .35) {                                           // борозды вдоль одной из осей
-      var x0 = cx + (-.75 - b3) * 10, y0 = cy + (-.75 + b3) * 5, x1 = cx + (.75 - b3) * 10, y1 = cy + (.75 + b3) * 5;
+      var x0 = cx + (-.75 - b3) * 8.5, y0 = cy + (-.75 + b3) * 4.2, x1 = cx + (.75 - b3) * 8.5, y1 = cy + (.75 + b3) * 4.2;
       seg(c, x0, y0, x1, y1, wet ? "#6a4630" : dry ? "#a07650" : C.sol); seg(c, x0, y0 + 1, x1, y1 + 1, wet ? "#3a2213" : dry ? "#6e4c2e" : C.sod);
     }
     if (wet) for (var w = 0; w < 6; w++) { var wa = ((w * 37 + i * 11) % 100) / 60 - .8, wb = ((w * 53 + i * 7) % 100) / 60 - .8;
@@ -1261,13 +1307,18 @@
     if (cv.width !== FW) { cv.width = FW; cv.height = FH; }
     var c = cv.getContext("2d"), i, L = staticLayer(seed);
     c.drawImage(L.back, 0, 0);
-    [0, 3, 1, 4, 2, 5].forEach(function (k) { if (plots && plots[k]) drawBed(c, plots[k], k, now, t, ss, dryLim, own); });   // дальние грядки — раньше
+    var nextLock = -1; (plots || []).forEach(function (pl, k) { if (pl.locked && nextLock < 0) nextLock = k; });
+    BORDER.forEach(function (k) { if (plots && plots[k]) drawBed(c, plots[k], k, now, t, ss, dryLim, own, k === nextLock); });   // дальние грядки — раньше
     c.drawImage(L.front, 0, 0);
     if (own) drawFx(c, t);
     for (i = 0; i < 4; i++) {                                                      // дым из трубы
       var ph = (t / 1800 + i / 4) % 1;
-      disc(c, 29 + Math.round(Math.sin(ph * 5 + i) * 2 + ph * 4), 31 - Math.round(ph * 15), Math.round(1 + ph * 2), "rgba(240,235,255," + (.55 * (1 - ph)).toFixed(2) + ")");
+      disc(c, L.smoke[0] + Math.round(Math.sin(ph * 5 + i) * 2 + ph * 5), L.smoke[1] - Math.round(ph * 16), Math.round(1 + ph * 2), "rgba(240,235,255," + (.55 * (1 - ph)).toFixed(2) + ")");
     }
+    L.glows.forEach(function (g, k) {                                              // тёплый свет окон и фонарика дышит
+      var pu = .5 + .5 * Math.sin(t / 900 + k * 1.7);
+      disc(c, g[0], g[1], g[2], "rgba(255,206,120," + (.08 + .09 * pu).toFixed(2) + ")");
+    });
     L.lamps.forEach(function (l, k) {                                              // фонари с лунным кристаллом — на столбах калитки
       var pulse = .5 + .5 * Math.sin(t / 600 + k * 2);
       disc(c, l[0], l[1], 5, "rgba(159,245,222," + (.1 + .12 * pulse).toFixed(2) + ")");
@@ -1387,7 +1438,7 @@
       b.style.left = (BC[i][0] - HW) / FW * 100 + "%"; b.style.top = (BC[i][1] - HH - 8) / FH * 100 + "%";
       b.style.width = HW * 2 / FW * 100 + "%"; b.style.height = (HH * 2 + 11) / FH * 100 + "%";
       var lbl = document.createElement("span"), inf = pl.crop ? plotInfo(pl, now, ss, dryLim) : null; lbl.className = "lbl";
-      if (pl.locked) lbl.textContent = own ? (pl.idx === F.state.unlocked ? "✦ " + pl.price : "закрыта") : "закрыта";
+      if (pl.locked) lbl.textContent = own && pl.idx === F.state.unlocked ? "✦ " + pl.price : "";
       else if (!pl.crop) lbl.textContent = own ? "посадить" : "пусто";
       else if (!inf) lbl.textContent = "…";
       else if (inf.dead) { lbl.textContent = own ? "убрать" : "засохло"; lbl.classList.add("dead"); }
@@ -1400,11 +1451,11 @@
     });
     if (own) {                                                                      // колодец: набрать воды в лейку
       var w = document.createElement("button"); w.type = "button"; w.className = "plot well";
-      w.style.left = (WELL[0] - 13) / FW * 100 + "%"; w.style.top = (WELL[1] - 26) / FH * 100 + "%"; w.style.width = 27 / FW * 100 + "%"; w.style.height = 36 / FH * 100 + "%";
+      w.style.left = (WELL[0] - 16) / FW * 100 + "%"; w.style.top = (WELL[1] - 34) / FH * 100 + "%"; w.style.width = 33 / FW * 100 + "%"; w.style.height = 48 / FH * 100 + "%";
       if (F.state.water < F.state.can_max) { var wl = el("span", "lbl water", "набрать воды"); w.appendChild(wl); }
       w.onclick = fillCan; box.appendChild(w);
       var hs = document.createElement("button"); hs.type = "button"; hs.className = "plot well house";       // домик: весь инвентарь
-      hs.style.left = 6 / FW * 100 + "%"; hs.style.top = 30 / FH * 100 + "%"; hs.style.width = 56 / FW * 100 + "%"; hs.style.height = 56 / FH * 100 + "%";
+      hs.style.left = 2 / FW * 100 + "%"; hs.style.top = 26 / FH * 100 + "%"; hs.style.width = 62 / FW * 100 + "%"; hs.style.height = 64 / FH * 100 + "%";
       hs.appendChild(el("span", "lbl water", "инвентарь")); hs.onclick = function () { haptic("light"); invSheet(); }; box.appendChild(hs);
     }
   }
@@ -1952,7 +2003,7 @@
     var base = { moss: { shape: "moss", color: "moss", minutes: 10 }, berry: { shape: "berry", color: "berry", minutes: 60 },
                  crystal: { shape: "crystal", color: "crystal", minutes: 240 }, h1: { shape: "pumpkin", color: "sun", minutes: 60 }, h2: { shape: "flower", color: "nebula", minutes: 60 } };
     var ripe = function (k) { return { crop: k, planted: 0, grown: 1e9, wet_from: 0, water_until: 0 }; };
-    var plots = [ripe("berry"), ripe("crystal"), ripe("h1"), ripe("h2"), ripe("moss"), { locked: true }];
+    var plots = [ripe("berry"), ripe("crystal"), ripe("h1"), ripe("h2"), ripe("moss"), ripe("crystal"), ripe("h1"), ripe("berry"), { locked: true }];
     var t = Date.now();
     drawFarm(full, 47, plots, t / 1000, t, false, base, 1e9, false);
     cv.width = 168; cv.height = 96; cv.getContext("2d").drawImage(full, 8, 62, 168, 96, 0, 0, 168, 96);

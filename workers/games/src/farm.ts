@@ -28,8 +28,8 @@ export const BONUSES: Record<string, string> = {
   rich: "иногда урожай двойной — в среднем каждый четвёртый",
   seedy: "при сборе даёт больше семян",
 };
-export const PLOTS_MAX = 6;
-const PLOT_PRICE = [0, 0, 0, 30, 90, 200];  // на старте открыты 3 грядки, 4–6-я покупаются
+export const PLOTS_MAX = 9;                  // двор 3×3
+const PLOT_PRICE = [0, 0, 0, 30, 90, 200, 400, 700, 1200];  // на старте открыты 3 грядки, 4–9-я покупаются
 const STARTER: [string, number][] = [["moss", 5], ["berry", 2]];   // стартовый мешок семян
 const GIFT_DUST = 5, GIFTS_PER_DAY = 5;
 const CAN_MAX = 5;                           // лейка: поливов до следующего похода к колодцу
