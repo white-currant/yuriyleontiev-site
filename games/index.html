@@ -1313,12 +1313,12 @@
              dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: need - g, wetLeft: pl.water_until - t };
   }
   function strainCode(s) { return s.base ? "" : "сорт " + s.id.slice(1, 5).toUpperCase(); }
-  function describe(s) {                                    // коротко, значками: рост · пыль · полив · шанс пластинки
-    return "⏱ " + fmtLeft(s.minutes * 60) + "  ✦ " + s.dust + "  💧 " + fmtLeft(s.thirst * 60) + "  💿 " + Math.round(s.vinyl * 100) + "%";
+  function describe(s) {                                    // коротко, значками: рост · пыль · полив · шанс артефакта (коллекционного предмета; сейчас это пластинки)
+    return "⏱ " + fmtLeft(s.minutes * 60) + "  ✦ " + s.dust + "  💧 " + fmtLeft(s.thirst * 60) + "  🏺 " + Math.round(s.vinyl * 100) + "%";
   }
   function factGrid(s) {                                    // то же, но с подписями — для справочника
     var g = el("div", "facts");
-    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "даёт " + s.dust + " пыли"], ["💧", "полив раз в " + fmtLeft(s.thirst * 60)], ["💿", "пластинка " + Math.round(s.vinyl * 100) + "%"]]
+    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "даёт " + s.dust + " пыли"], ["💧", "полив раз в " + fmtLeft(s.thirst * 60)], ["🏺", "артефакт " + Math.round(s.vinyl * 100) + "%"]]
       .forEach(function (x) { var d = el("div"); d.appendChild(el("i", "", x[0])); d.append(x[1]); g.appendChild(d); });
     return g;
   }
@@ -1686,7 +1686,7 @@
       line("Растёт", fmtLeft(st.minutes * 60) + " под поливом");
       line("Урожай", "✦ " + st.dust + " пыли и " + st.points + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
       line("Полив", "одного хватает на " + fmtLeft(st.thirst * 60));
-      line("Шанс пластинки", Math.round(st.vinyl * 100) + "% с урожая");
+      line("Шанс артефакта", Math.round(st.vinyl * 100) + "% с урожая");
       line("Семена с урожая", (st.bonus === "seedy" ? "3–4 (плодовитый)" : "2–3") + " за грядку");
       if (st.bonus) line("Особое свойство", bonuses[st.bonus] || "");
       line(st.base ? "Цена у станции" : "Цена в лавке", "✦ " + (st.base ? st.cost : st.price) + " за семя");
@@ -1818,7 +1818,7 @@
   var COLORS = [["moss", ["Лунный", "Лунные", "Лунная"]], ["berry", ["Звёздный", "Звёздные", "Звёздная"]], ["crystal", ["Кометный", "Кометные", "Кометная"]],
                 ["sun", ["Солнечный", "Солнечные", "Солнечная"]], ["nebula", ["Туманный", "Туманные", "Туманная"]], ["ember", ["Огненный", "Огненные", "Огненная"]],
                 ["frost", ["Ледяной", "Ледяные", "Ледяная"]], ["night", ["Полуночный", "Полуночные", "Полуночная"]], ["aurora", ["Сияющий", "Сияющие", "Сияющая"]]];
-  var BONUS_SHORT = { rain: "в дождь урожай ×3", lucky: "пластинки вдвое чаще", hardy: "не засыхает без воды", rich: "иногда двойной урожай", seedy: "даёт больше семян" };
+  var BONUS_SHORT = { rain: "в дождь урожай ×3", lucky: "артефакты вдвое чаще", hardy: "не засыхает без воды", rich: "иногда двойной урожай", seedy: "даёт больше семян" };
   var BONUS_NAME = { rain: "Дождевой", lucky: "Счастливый", hardy: "Стойкий", rich: "Щедрый", seedy: "Плодовитый" };
   F.bookPage = 0;
   function bookIcon(cv, s) {                                  // значок в справочнике: холст одного размера у всех форм, растение по центру внизу

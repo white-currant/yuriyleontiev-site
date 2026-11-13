@@ -23,7 +23,7 @@ export const CROPS: Record<string, Strain> = {
 };
 export const BONUSES: Record<string, string> = {
   rain: "в дождь звёздной пыли урожай ×3, а не ×2",
-  lucky: "пластинки выпадают вдвое чаще",
+  lucky: "артефакты выпадают вдвое чаще",
   hardy: "не засыхает без воды",
   rich: "иногда урожай двойной — в среднем каждый четвёртый",
   seedy: "при сборе даёт больше семян",
