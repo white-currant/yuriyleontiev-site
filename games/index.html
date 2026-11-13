@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131639";
+    var BUILD = "202611131640";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -357,6 +357,9 @@
   .selnote { margin-top: 8px; min-height: 2.8em; font-size: 12.5px; line-height: 1.4; color: rgba(255, 255, 255, .82); }
   .sheet .selnote { color: var(--dim); }
   .salecount2 { color: var(--white); font-weight: 600; }
+  /* подсказка: по центру и выплывает сверху вниз (раньше анимация сбивала центрирование — плашка ехала справа) */
+  .toast { animation: toastin .22s ease-out !important; }
+  @keyframes toastin { from { opacity: 0; transform: translate(-50%, -14px); } to { opacity: 1; transform: translate(-50%, 0); } }
   .fly { position: fixed; z-index: 50; transform: translate(-50%, 0); pointer-events: none; white-space: nowrap; font-size: 15px; font-weight: 800;
     text-shadow: 0 1px 0 rgba(0, 0, 0, .7), 0 0 8px rgba(0, 0, 0, .4); animation: flyup 1s ease-out forwards; }
   .fly.gain { color: #b9f58a; }
