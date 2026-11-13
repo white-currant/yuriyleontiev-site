@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611140205";
+    var BUILD = "202611140209";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1250,6 +1250,34 @@
       for (var k = 0; k < 26; k++) { var tt = r(); tuft(c, Math.round(e0y[0] + (e1y[0] - e0y[0]) * tt) + (r() * 3 | 0) - 1, Math.round(e0y[1] + (e1y[1] - e0y[1]) * tt) + (r() * 3 | 0) - 1, r() < .5 ? C.g : C.gl); } }
     // дорожка от калитки вниз
     for (y = YC[2][1] - 3; y < FH; y++) { var pw = 7 + ((y - YC[2][1]) >> 2); px(c, YC[2][0] - pw, y, pw * 2, 1, y % 3 ? C.dt : C.dtd); }
+    // амбар: красный дощатый сарай за дальним углом двора, крыша — в цвет крыши дома (его идея 2026-11-14)
+    (function () {
+      var A = [82, 51], B = [100, 60], Cc = [116, 52], D = [98, 43], H = 11;
+      var up = function (p, h) { return [p[0], p[1] - h]; }, lerp = function (p, q, t2) { return [p[0] + (q[0] - p[0]) * t2, p[1] + (q[1] - p[1]) * t2]; };
+      var R1 = [(B[0] + Cc[0]) / 2, (B[1] + Cc[1]) / 2 - H - 8], R0 = [R1[0] + A[0] - B[0], R1[1] + A[1] - B[1]];
+      poly(c, [[A[0] - 1, A[1] + 1], [B[0], B[1] + 2], [Cc[0] + 7, Cc[1] + 1], [D[0] + 8, D[1]], D], "rgba(30,55,15,.32)");   // тень
+      poly(c, [B, Cc, up(Cc, H), R1, up(B, H)], "#8f3a26");                                    // правая стена с фронтоном (в тени)
+      poly(c, [A, B, up(B, H), up(A, H)], "#b9533a");                                         // левая стена
+      for (var i = 1; i < 6; i++) { var q0 = lerp(A, B, i / 6); seg(c, q0[0], q0[1] - 1, q0[0], q0[1] - H, "#9a4430"); }      // доски
+      for (i = 1; i < 5; i++) { var q1 = lerp(B, Cc, i / 5); seg(c, q1[0], q1[1] - 1, q1[0], q1[1] - H, "#76301f"); }
+      seg(c, A[0], A[1] - 1, B[0], B[1] - 1, "#5e2617"); seg(c, B[0], B[1] - 1, Cc[0], Cc[1] - 1, "#4a1d12");                 // низ
+      seg(c, B[0], B[1], B[0], B[1] - H, "#f3e2c0"); seg(c, A[0], A[1], A[0], A[1] - H, "#f3e2c0");                          // белые углы
+      var d0 = lerp(A, B, .3), d1 = lerp(A, B, .72);                                           // двустворчатая дверь с белым крестом
+      poly(c, [d0, d1, up(d1, 8), up(d0, 8)], "#6e2a1b");
+      poly(c, [[d0[0] + 1, d0[1]], [d1[0] - 1, d1[1]], [d1[0] - 1, d1[1] - 7], [d0[0] + 1, d0[1] - 7]], "#a3452f");
+      seg(c, d0[0] + 1, d0[1] - 7, d1[0] - 1, d1[1] - 1, "#f3e2c0"); seg(c, d0[0] + 1, d0[1] - 1, d1[0] - 1, d1[1] - 7, "#f3e2c0");
+      seg(c, d0[0] + 1, d0[1] - 7, d1[0] - 1, d1[1] - 7, "#f3e2c0");
+      var hw = [Math.round(R1[0]) - 1, Math.round(R1[1]) + 6]; px(c, hw[0] - 1, hw[1] - 1, 4, 4, "#f3e2c0"); px(c, hw[0], hw[1], 2, 2, "#3a2210");   // окошко сеновала
+      px(c, hw[0], hw[1] + 1, 2, 1, "#e8c45a");                                               // сено
+      var e0 = [A[0] - 3, A[1] - H + 1], e1 = [B[0] + 1, B[1] - H + 3];                      // крыша: передний скат рядами, задний — темнее
+      poly(c, [R0, R1, [Cc[0] + 2, Cc[1] - H + 1], [D[0] - 1, D[1] - H]], roof[1]);
+      for (i = 0; i <= 30; i++) { var t2 = i / 30, p0 = lerp(e0, [R0[0] - 1, R0[1]], t2), p1 = lerp(e1, [R1[0] + 1, R1[1]], t2);
+        var colr = Math.floor(t2 * 30) % 6 === 0 ? roof[1] : Math.floor(t2 * 5) % 2 ? roof[0] : roof[2];
+        seg(c, p0[0], p0[1], p1[0], p1[1], colr); seg(c, p0[0], p0[1] + 1, p1[0], p1[1] + 1, colr); }
+      seg(c, R0[0], R0[1], R1[0], R1[1], roof[2]); seg(c, e0[0], e0[1] + 1, e1[0], e1[1] + 1, "rgba(60,30,20,.5)");
+      for (i = 0; i <= 12; i++) { var q2 = lerp([R1[0] + 1, R1[1]], [Cc[0] + 2, Cc[1] - H + 1], i / 12); px(c, Math.round(q2[0]), Math.round(q2[1]), 2, 2, roof[1]); }
+      px(c, A[0] - 4, A[1] - 2, 3, 3, "#e8c45a"); px(c, A[0] - 3, A[1] - 3, 2, 1, "#f6dc85");                               // клок сена у стены
+    })();
     // задний забор двора
     isoFence(c, YC[3][0] + 1, YC[3][1], YC[0][0] - 2, YC[0][1] + 1);
     isoFence(c, YC[0][0] + 2, YC[0][1] + 1, YC[1][0] - 1, YC[1][1]);
@@ -1569,14 +1597,22 @@
     cv.width = w; cv.height = h; c.clearRect(0, 0, w, h); if (!bare) { px(c, 1, h - 2, w - 2, 2, C.so); px(c, 1, h - 2, w - 2, 1, C.sol); }
     sprS(c, 2, h - 2, rows, s);
   }
-  // урожай в амбаре — в плетёной корзинке (чтобы не путать с семенами, которые рисуются на земле)
-  function produceIcon(cv, s) {
-    var rows = (CROP[s.shape] || CROP.moss)[3], w = rows[0].length + 4, h = 15, c = cv.getContext("2d");
-    cv.width = w; cv.height = h; c.clearRect(0, 0, w, h);
-    sprS(c, 2, h - 4, rows.slice(0, -1), s);                                      // плоды без земли, выглядывают из корзины
-    px(c, 1, h - 5, w - 2, 1, C.wdl); px(c, 0, h - 5, 1, 1, C.wdd); px(c, w - 1, h - 5, 1, 1, C.wdd);   // край корзины
-    for (var y = h - 4; y < h - 1; y++) for (var x = 1; x < w - 1; x++) px(c, x, y, 1, 1, (x + y) % 2 ? C.wd : C.wdd);   // плетение
-    px(c, 2, h - 1, w - 4, 1, C.wdd);
+  // плоды (урожай в амбаре) — свой вид у каждой формы, раскраска по сорту (роли цвета — цифры, как у мутаций)
+  var FRUIT = {
+    moss:     ["..1.21..", ".121121.", "12111211", "51151115", ".5YYYY5.", "..5115..", "...00..."],
+    berry:    ["...1....", "..353...", ".34335..", "3343343.", "53335335", ".111111.", "..0000.."],
+    crystal:  ["..4444..", ".422224.", "42211224", "51111115", ".511115.", "..5115..", "...55..."],
+    grain:    ["4..4..4.", "12.21.12", "21212121", ".121212.", "..YYYY..", ".5.55.5.", "5..55..5"],
+    flower:   ["..3..3..", ".343343.", "..3ss3..", "...ss...", "..YYYY..", "...ss...", "..s..s.."],
+    mushroom: ["..3333..", ".343333.", "33333333", "5.2222.5", "..2222..", "..2222..", ".000000."],
+    pumpkin:  ["....0...", "...00...", ".353535.", "35353535", "35453535", "35353535", ".555555."],
+    cactus:   ["...44...", "..3333..", ".343333.", ".333343.", ".343333.", "..3333..", "...11..."],
+  };
+  function fruitIcon(cv, s) {
+    var rows = FRUIT[s.shape] || FRUIT.moss, c = cv.getContext("2d");
+    cv.width = 12; cv.height = 10; c.clearRect(0, 0, 12, 10);
+    px(c, 2, 9, 8, 1, "rgba(40,25,10,.35)");                                     // тень под плодом
+    sprS(c, 2, 8, rows, { shape: "_fruit", color: s.color });
   }
   function canIcon(cv) { var c = cv.getContext("2d"); cv.width = 12; cv.height = 9; c.clearRect(0, 0, 12, 9); spr(c, 1, 8, CAN); }
   function farmNow() { return F.state ? F.state.now + (Date.now() - F.fetched) / 1000 : Date.now() / 1000; }
@@ -1637,6 +1673,10 @@
       var hs = document.createElement("button"); hs.type = "button"; hs.className = "plot well house";       // домик: весь инвентарь
       hs.style.left = 2 / FW * 100 + "%"; hs.style.top = 26 / FH * 100 + "%"; hs.style.width = 62 / FW * 100 + "%"; hs.style.height = 64 / FH * 100 + "%";
       hs.appendChild(el("span", "lbl water", "справочник")); hs.onclick = function () { haptic("light"); openBook(); }; box.appendChild(hs);
+      var bn = document.createElement("button"); bn.type = "button"; bn.className = "plot well barn";            // амбар: собранный урожай
+      bn.style.left = 76 / FW * 100 + "%"; bn.style.top = 26 / FH * 100 + "%"; bn.style.width = 44 / FW * 100 + "%"; bn.style.height = 36 / FH * 100 + "%";
+      var nb = barnItems().reduce(function (a, it) { return a + it.count; }, 0);
+      bn.appendChild(el("span", "lbl water", nb ? "амбар · " + nb : "амбар")); bn.onclick = function () { haptic("light"); barnSheet(); }; box.appendChild(bn);
     }
   }
   function fillCan() {
@@ -2026,7 +2066,6 @@
     var s = F.state; if (!s) return;
     sheet(function (sh, close) {
       sh.appendChild(el("h3", "", "Инвентарь"));
-      sh.appendChild(el("div", "mono", "Семена — их сажают"));
       var note = el("div", "selnote"), grid = el("div", "invgrid");
       var draw = function () {
         grid.innerHTML = "";
@@ -2038,8 +2077,21 @@
       };
       draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
       sh.appendChild(el("div", "sub", "Перетащи семена, чтобы расставить по порядку: первые три после лейки видны в полоске под фермой."));
+      var listed = s.inv.filter(function (it) { return it.listed > 0; });
+      if (listed.length) sh.appendChild(el("div", "sub", "На продаже в лавке: " + listed.map(function (it) { return (s.strains[it.strain] || {}).name + " ×" + it.listed; }).join(", ") + "."));
+      var acts = el("div", "salebtns");
+      acts.appendChild(btn("Лавка", "ghost", function () { close(); openShop("buy"); }));
+      acts.appendChild(btn("Готово", "", close));
+      sh.appendChild(acts);
+    });
+  }
+  // амбар — сарай на карте: собранный урожай (плоды). Сажать его нельзя — он идёт в звёздную пыль, а дальше на кухню.
+  function barnSheet() {
+    var s = F.state; if (!s) return;
+    sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", "Амбар"));
+      sh.appendChild(el("div", "sub", "Собранный урожай. Семена с урожая лежат отдельно — в инвентаре."));
       // амбар: урожай превращается в звёздную пыль прямо здесь (его правка 2026-11-14: «не продать станции, а превратить в пыль»)
-      var bh = el("div", "mono", "Амбар — собранный урожай"); bh.style.marginTop = "20px"; sh.appendChild(bh);
       var barnBox = el("div"); sh.appendChild(barnBox);
       var drawBarn = function () {
         var cur = F.state, barn = barnItems(), bgrid = el("div", "invgrid"), total = 0;
@@ -2049,32 +2101,27 @@
         barn.forEach(function (it) {
           var st = cur.strains[it.strain], b = el("button", "slot" + (F.barnSel === it.strain ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
           total += it.count * st.dust;
-          var cv = el("canvas", "pix"); produceIcon(cv, st); b.appendChild(cv); b.appendChild(el("span", "n", it.count));
+          var cv = el("canvas", "pix"); fruitIcon(cv, st); b.appendChild(cv); b.appendChild(el("span", "n", it.count));
           b.onclick = function () { haptic("light"); F.barnSel = F.barnSel === it.strain ? null : it.strain; drawBarn(); };
           bgrid.appendChild(b);
         });
         for (var k = barn.length; k < 5; k++) bgrid.appendChild(el("div", "slot empty"));
         barnBox.appendChild(bgrid);
-        if (!barn.length) { barnBox.appendChild(el("div", "sub", "Здесь копится собранный урожай. Его можно превратить в звёздную пыль.")); return; }
+        if (!barn.length) { barnBox.appendChild(el("div", "sub", "Пока пусто. Сюда попадает всё, что ты собираешь с грядок.")); return; }
         var sel = F.barnSel && barnOf(F.barnSel), acts = el("div", "invacts");
         if (sel) {
           var st = cur.strains[sel.strain];
           barnBox.appendChild(el("div", "sub", st.name + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли."));
-          acts.appendChild(btn("1 в пыль · ✦ " + st.dust, "ghost", function () { toDust(st.id, 1, st.dust); drawBarn(); }));
+          acts.appendChild(btn("1 в пыль · ✦ " + st.dust, "ghost", function () { toDust(st.id, 1, st.dust); drawBarn(); renderFarm(); }));
           if (sel.count > 1) acts.appendChild(btn("все " + sel.count + " · ✦ " + st.dust * sel.count, "", function () { toDust(st.id, sel.count, st.dust * sel.count); drawBarn(); }));
         } else {
-          barnBox.appendChild(el("div", "sub", "Собранный урожай. Нажми на ячейку, чтобы превратить его в звёздную пыль."));
+          barnBox.appendChild(el("div", "sub", "Нажми на ячейку, чтобы превратить урожай в звёздную пыль."));
           acts.appendChild(btn("Весь урожай в пыль · ✦ " + total, "", function () { toDust("*", 0, total); drawBarn(); }));
         }
         barnBox.appendChild(acts);
       };
       drawBarn();
-      var listed = s.inv.filter(function (it) { return it.listed > 0; });
-      if (listed.length) sh.appendChild(el("div", "sub", "На продаже в лавке: " + listed.map(function (it) { return (s.strains[it.strain] || {}).name + " ×" + it.listed; }).join(", ") + "."));
-      var acts = el("div", "salebtns");
-      acts.appendChild(btn("Лавка", "ghost", function () { close(); openShop("buy"); }));
-      acts.appendChild(btn("Готово", "", close));
-      sh.appendChild(acts);
+      var acts2 = el("div", "salebtns"); acts2.appendChild(btn("Готово", "", close)); sh.appendChild(acts2);
     });
   }
   function canSheet() {
