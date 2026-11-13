@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131055";
+    var BUILD = "202611131057";
     try {
       fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
         v = (v || "").trim();
@@ -255,9 +255,21 @@
   .toast { border: 0; box-shadow: 0 10px 30px rgba(0, 0, 0, .4); }
 
   /* вкладки гильдии: текст с золотым подчёркиванием */
-  .tabs { margin-top: 34px; display: flex; gap: 22px; overflow-x: auto; scrollbar-width: none; }
-  .tabs button { flex: none; padding: 6px 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em; color: var(--dim); border-bottom: 2px solid transparent; }
-  .tabs button[aria-pressed="true"] { color: var(--white); border-bottom-color: var(--gold); }
+  .tabs { margin-top: 30px; display: flex; gap: 6px; padding: 4px; border-radius: 16px; background: rgba(255, 255, 255, .06);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+  .tabs button { flex: 1; min-height: 40px; border-radius: 12px; font-size: 14.5px; font-weight: 650; color: rgba(246, 239, 227, .7); transition: background .2s, color .2s; }
+  .tabs button:active { transform: scale(.97); }
+  .tabs button[aria-pressed="true"] { background: linear-gradient(180deg, #ffe0a3, var(--gold)); color: #2a1406; box-shadow: 0 4px 16px rgba(242, 169, 59, .3); }
+  .art-card { margin-top: 22px !important; border-radius: 22px !important; overflow: hidden !important; background: rgba(22, 11, 4, .55) !important;
+    -webkit-backdrop-filter: blur(14px) !important; backdrop-filter: blur(14px) !important; }
+  .art-card .art { display: block; width: 100%; aspect-ratio: 2 / 1; cursor: pointer; }
+  .art-card.farm-card .art { aspect-ratio: 160 / 92; }
+  .art-card .art-body { padding: 14px 16px 16px; }
+  .art-card h2 { font-size: 22px; }
+  .art-card .btn { margin-top: 14px; }
+  .coll-empty { margin-top: 18px; padding: 22px 18px; border-radius: 18px; background: rgba(255, 255, 255, .05); text-align: center; }
+  .coll-empty b { font-size: 17px; }
+  .coll-empty p { margin-top: 6px; font-size: 14px; color: var(--dim); }
   .tab { margin-top: 6px; }
   .tab .game-card:first-child { margin-top: 20px; }
   #tab-hall.hall { margin-top: 18px; }
@@ -368,15 +380,21 @@
     </div>
 
     <div class="tab" id="tab-games">
-      <div class="game-card">
-        <h2>Угадай трек из Мастерской&nbsp;47</h2>
-        <p>Звучит отрывок — узнай трек, пока кольцо звёздной пыли не рассеялось.</p>
-        <button class="btn" id="play">Играть</button>
+      <div class="game-card art-card guess-card">
+        <canvas class="art" id="guessart" aria-hidden="true"></canvas>
+        <div class="art-body">
+          <h2>Угадай трек из Мастерской&nbsp;47</h2>
+          <p>Звучит отрывок — узнай трек, пока кольцо звёздной пыли не рассеялось.</p>
+          <button class="btn" id="play">Играть</button>
+        </div>
       </div>
-      <div class="game-card farm-card">
-        <h2>Лунная ферма</h2>
-        <p>Свой участок: сажай, собирай урожай, находи пластинки и заходи в гости к соседям.</p>
-        <button class="btn" id="tofarm">На ферму</button>
+      <div class="game-card art-card farm-card">
+        <canvas class="art pix" id="farmart" aria-hidden="true"></canvas>
+        <div class="art-body">
+          <h2>Лунная ферма</h2>
+          <p>Свой участок: поливай, собирай урожай, выводи новые сорта, торгуй семенами и находи пластинки.</p>
+          <button class="btn" id="tofarm">На ферму</button>
+        </div>
       </div>
     </div>
 
@@ -1660,20 +1678,25 @@
     var box = $("collbody"); if (!box) return;
     if (!F.items || !F.releases) { $("collsub").textContent = "Загружаю…"; return; }
     box.innerHTML = "";
-    var vs = myVinyls(), own = ownedMap(vs), list = F.releases;
-    $("collsub").textContent = "Всё, что выпало тебе в играх гильдии.";
-    var h = el("div", "mono", "Лунная ферма · пластинки · " + Object.keys(own).length + " из " + list.length); h.style.marginTop = "18px"; box.appendChild(h);
-    box.appendChild(el("div", "farm-note left", "Выпадают при сборе урожая. У каждой пластинки четыре редкости и три отделки — точки под пластинкой показывают, какие редкости уже есть."));
-    var g = el("div", "vgrid"), lastRel = null;
-    list.forEach(function (t) {
-      if (t.release !== lastRel) {
-        lastRel = t.release; var a = F.albumById[t.release] || {};
-        var ah = el("div", "mono", (a.title || "") + (a.year ? " · " + a.year : "")); ah.style.cssText = "grid-column:1/-1;margin-top:10px;color:var(--dim)"; g.appendChild(ah);
-      }
-      var best = bestOf(own[t.id]), b = el("button", "vrec" + (best ? "" : " locked") + finCls(best && best.finish)); b.type = "button";
-      var cv = el("canvas", "pix"); b.appendChild(cv); drawVinyl(cv, t, 40, best && best.tier, best && best.finish);
-      b.appendChild(el("span", "", best ? t.title : "???"));
-      if (best) { b.appendChild(pips(own[t.id])); b.onclick = function () { showVinyl(t.id); }; }
+    var vs = myVinyls().slice().sort(function (a, b) { return TRANK[b.tier] - TRANK[a.tier] || FRANK[b.finish] - FRANK[a.finish] || b.at - a.at; });
+    if (!vs.length) {
+      $("collsub").textContent = "";
+      var e = el("div", "coll-empty");
+      e.appendChild(el("b", "", "Пока пусто"));
+      e.appendChild(el("p", "", "Здесь будут появляться коллекционные предметы, которые выпадают в мини-играх гильдии. Например, пластинки треков на Лунной ферме — они изредка находятся при сборе урожая."));
+      box.appendChild(e); return;
+    }
+    $("collsub").textContent = "Коллекционные предметы, которые выпали тебе в мини-играх.";
+    var h = el("div", "mono", "Лунная ферма · пластинки · " + vs.length); h.style.marginTop = "18px"; box.appendChild(h);
+    var g = el("div", "vgrid");
+    vs.forEach(function (v) {
+      var t = F.trackById[v.id]; if (!t) return;
+      var b = el("button", "vrec" + finCls(v.finish)); b.type = "button";
+      var cv = el("canvas", "pix"); b.appendChild(cv); drawVinyl(cv, t, 40, v.tier, v.finish);
+      b.appendChild(el("span", "", t.title));
+      var tl = el("span", "tier", (TIER[v.tier] || TIER.common)[0] + (v.finish !== "plain" ? ", " + FINISH[v.finish] : "") + (v.count > 1 ? " ×" + v.count : ""));
+      tl.style.color = (TIER[v.tier] || TIER.common)[1]; b.appendChild(tl);
+      b.onclick = function () { showVinyl(v.id); };
       g.appendChild(b);
     });
     box.appendChild(g);
@@ -1753,8 +1776,57 @@
   $("exit").onclick = home;
   if (tg && tg.BackButton) tg.BackButton.onClick(function () { back(); });
 
+  // ---------- картинки на карточках игр ----------
+  // «Угадай трек»: пластинка в кольце звёздной пыли на янтарном фоне мастерской. «Лунная ферма»: кусочек самой фермы.
+  function drawGuessArt() {
+    var cv = $("guessart"), W = cv.clientWidth || 340, H = Math.round(W * .5), d = Math.min(devicePixelRatio || 1, 2);
+    cv.width = W * d; cv.height = H * d; var c = cv.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0);
+    var bg = c.createLinearGradient(0, 0, W, H); bg.addColorStop(0, "#2a1406"); bg.addColorStop(.55, "#3a1d08"); bg.addColorStop(1, "#1a0c05");
+    c.fillStyle = bg; c.fillRect(0, 0, W, H);
+    var cx = W * .62, cy = H * .52, R = H * .36;
+    var glow = c.createRadialGradient(cx, cy, 0, cx, cy, W * .7); glow.addColorStop(0, "rgba(255,190,100,.38)"); glow.addColorStop(.4, "rgba(213,139,255,.1)"); glow.addColorStop(1, "rgba(0,0,0,0)");
+    c.fillStyle = glow; c.fillRect(0, 0, W, H);
+    var r = rng(47);
+    for (var i = 0; i < 60; i++) {                                   // искры рилса — косые штрихи
+      var x = r() * W, y = r() * H, l = 6 + r() * 22; c.strokeStyle = "rgba(255," + (170 + (r() * 60 | 0)) + ",90," + (.08 + r() * .25).toFixed(2) + ")";
+      c.lineWidth = .6 + r() * 1.2; c.beginPath(); c.moveTo(x, y); c.lineTo(x + l, y - l * .45); c.stroke();
+    }
+    c.save(); c.translate(cx, cy);                                    // пластинка
+    c.fillStyle = "#0e0a08"; c.beginPath(); c.arc(0, 0, R, 0, 6.2832); c.fill();
+    for (var g = R * .35; g < R; g += 2.4) { c.strokeStyle = "rgba(255,255,255," + (g % 7 < 2.4 ? .08 : .035) + ")"; c.lineWidth = 1; c.beginPath(); c.arc(0, 0, g, 0, 6.2832); c.stroke(); }
+    var sh = c.createLinearGradient(-R, -R, R, R); sh.addColorStop(.35, "rgba(255,220,170,0)"); sh.addColorStop(.5, "rgba(255,220,170,.16)"); sh.addColorStop(.65, "rgba(255,220,170,0)");
+    c.fillStyle = sh; c.beginPath(); c.arc(0, 0, R, 0, 6.2832); c.fill();
+    var lab = c.createRadialGradient(-R * .1, -R * .1, 0, 0, 0, R * .32); lab.addColorStop(0, "#ffe2a8"); lab.addColorStop(.6, "#ffc469"); lab.addColorStop(1, "#b0601a");
+    c.fillStyle = lab; c.beginPath(); c.arc(0, 0, R * .3, 0, 6.2832); c.fill();
+    c.fillStyle = "#2a1406"; c.font = "700 " + Math.round(R * .17) + "px Inter Tight, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("47", 0, 1);
+    c.restore();
+    c.globalCompositeOperation = "lighter";                            // кольцо звёздной пыли
+    for (var k = 0; k < 520; k++) {
+      var a = r() * 6.2832, rr = R * 1.22 + (r() + r() + r() - 1.5) * R * .12, col = r() < .15 ? "225,120,255" : r() < .6 ? "255,200,110" : "255,240,215";
+      c.fillStyle = "rgba(" + col + "," + (.25 + r() * .7).toFixed(2) + ")"; var sz = .6 + r() * 1.6;
+      c.fillRect(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, sz, sz);
+    }
+    c.globalCompositeOperation = "source-over";
+    c.fillStyle = "rgba(255,226,168,.9)";                              // звуковая волна слева
+    for (var b = 0; b < 14; b++) { var hh = (Math.sin(b * 1.3) * .5 + .6) * H * .26 * (1 - Math.abs(b - 6.5) / 9); c.fillRect(W * .07 + b * 7, H * .52 - hh / 2, 3, hh); }
+  }
+  function drawFarmArt() {
+    var cv = $("farmart"), full = document.createElement("canvas");
+    var base = { moss: { shape: "moss", color: "moss", minutes: 10 }, berry: { shape: "berry", color: "berry", minutes: 60 },
+                 crystal: { shape: "crystal", color: "crystal", minutes: 240 }, h1: { shape: "pumpkin", color: "sun", minutes: 60 }, h2: { shape: "flower", color: "nebula", minutes: 60 } };
+    var ripe = function (k) { return { crop: k, planted: 0, grown: 1e9, wet_from: 0, water_until: 0 }; };
+    var plots = [ripe("berry"), ripe("crystal"), ripe("h1"), ripe("h2"), ripe("moss"), { locked: true }];
+    var t = Date.now();
+    drawFarm(full, 47, plots, t / 1000, t, false, base, 1e9, false);
+    cv.width = 160; cv.height = 92; cv.getContext("2d").drawImage(full, 0, 8, 160, 92, 0, 0, 160, 92);
+  }
+  function drawGameArt() { try { drawGuessArt(); drawFarmArt(); } catch (e) {} }
+  $("guessart").onclick = function () { $("play").click(); };
+  $("farmart").onclick = function () { $("tofarm").click(); };
+
   // ---------- старт ----------
   setTab(tabNow);                                            // последняя открытая вкладка гильдии
+  drawGameArt(); addEventListener("resize", function () { drawGuessArt(); });
   if (!API) nope("Сервер игр ещё не подключён.");
   else if (!initData) nope("Открой игру из Телеграма — через бота StarGuardian.");
   else home().catch(function (e) { nope(e.message === "Открой игру из Телеграма" ? "Открой игру из Телеграма — через бота StarGuardian." : "Не получилось связаться с сервером игр."); });
