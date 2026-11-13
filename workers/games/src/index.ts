@@ -401,6 +401,7 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/plant": return json(await farm.plant(user, Number(body.idx), String(body.crop || "")));
     case "/api/farm/harvest": return json(await farm.harvest(user, Number(body.idx)));
     case "/api/farm/unlock": return json(await farm.unlock(user));
+    case "/api/farm/sell": return json(await farm.sellCrop(user, String(body.strain || ""), Number(body.n || 1)));
     case "/api/farm/gifts": return json(await farm.openGifts(user));
     case "/api/farm/neighbors": return json(await farm.neighbors(user, await hiddenIds()));
     case "/api/farm/visit": return json(await farm.visit(user, String(body.pub || "")));

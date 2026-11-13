@@ -6,6 +6,7 @@
 // Очки в звание: за посадку и за полив — по 1, за урожай — по культуре (дневного предела нет — решение 2026-11-13).
 // Скрещивание: если при сборе рядом (слева/справа/сверху/снизу) созрел другой сорт — иногда выпадает семя-гибрид:
 // форма от собираемого, цвет от соседа, свойства — среднее родителей с мутацией, иногда особое свойство.
+// Урожай кладётся в амбар (f_barn): продать станции по цене сорта или (дальше) пустить на кухню.
 // Сорта хранятся в f_strains (общие для всех), семена — в инвентаре f_inv; часть можно выставить в свою лавку,
 // соседи покупают их за пыль по цене, которую считает игра по свойствам (решение пользователя: цена фиксированная).
 // Изредка при сборе выпадает пластинка — один трек Yuriy Leontiev; редкость и отделка — у находки.
@@ -20,9 +21,13 @@ export const CROPS: Record<string, Strain> = {
   moss:    { id: "moss",    name: "Лунный мох",        shape: "moss",    color: "moss",    minutes: 10,  dust: 4,  vinyl: 0.03, thirst: 15, points: 2, bonus: null, gen: 0, cost: 2,  base: true },
   berry:   { id: "berry",   name: "Звёздные ягоды",    shape: "berry",   color: "berry",   minutes: 60,  dust: 16, vinyl: 0.10, thirst: 30, points: 4, bonus: null, gen: 0, cost: 6,  base: true },
   crystal: { id: "crystal", name: "Кометный хрусталь", shape: "crystal", color: "crystal", minutes: 240, dust: 70, vinyl: 0.25, thirst: 90, points: 8, bonus: null, gen: 0, cost: 25, base: true },
+  // зерно (2026-11-14): само по себе дешёвое, нужно ради муки на мельнице; три вариации с разным характером
+  wheat:   { id: "wheat",   name: "Лунная пшеница",    shape: "grain",   color: "sun",     minutes: 20,  dust: 5,  vinyl: 0.04, thirst: 25, points: 2, bonus: null,    gen: 0, cost: 3,  base: true },
+  millet:  { id: "millet",  name: "Огненное просо",    shape: "grain",   color: "ember",   minutes: 45,  dust: 9,  vinyl: 0.06, thirst: 20, points: 2, bonus: "seedy", gen: 0, cost: 5,  base: true },
+  rye:     { id: "rye",     name: "Туманная рожь",     shape: "grain",   color: "nebula",  minutes: 120, dust: 26, vinyl: 0.12, thirst: 60, points: 4, bonus: "hardy", gen: 0, cost: 10, base: true },
 };
 export const BONUSES: Record<string, string> = {
-  rain: "в дождь звёздной пыли урожай ×3, а не ×2",
+  rain: "в звёздный дождь урожай ×3, а не ×2",
   lucky: "артефакты выпадают вдвое чаще",
   hardy: "не засыхает без воды",
   rich: "иногда урожай двойной — в среднем каждый четвёртый",
@@ -103,7 +108,7 @@ const ADJ: Record<string, [string, string, string]> = {
 const BADJ: Record<string, [string, string, string]> = { rain: ["Дождевой", "Дождевые", "Дождевая"], lucky: ["Счастливый", "Счастливые", "Счастливая"],
   hardy: ["Стойкий", "Стойкие", "Стойкая"], rich: ["Щедрый", "Щедрые", "Щедрая"], seedy: ["Плодовитый", "Плодовитые", "Плодовитая"] };
 const NOUN: Record<string, [string, number]> = { moss: ["мох", 0], berry: ["ягоды", 1], crystal: ["хрусталь", 0],
-  flower: ["звездоцвет", 0], mushroom: ["грибы", 1], pumpkin: ["тыква", 2], cactus: ["кактус", 0] };
+  flower: ["звездоцвет", 0], mushroom: ["грибы", 1], pumpkin: ["тыква", 2], cactus: ["кактус", 0], grain: ["колосья", 1] };
 const SHAPES = Object.keys(NOUN), COLORS = Object.keys(ADJ);
 const MUTATE_SHAPE = 0.12, MUTATE_COLOR = 0.12;      // шанс, что гибрид получит новую форму / новый цвет, которых нет у родителей
 function nameFor(g: any) {
@@ -163,7 +168,7 @@ async function breed(a: Strain, b: Strain): Promise<Strain> {
 // и можно показать прогноз на завтра. Особая погода не повторяется два дня подряд.
 export const WEATHER: Record<string, { name: string; icon: string; effect: string; w: number }> = {
   clear:    { name: "Ясная ночь",      icon: "☾",  effect: "обычный день",                         w: 40 },
-  stardust: { name: "Звёздный дождь",  icon: "✨", effect: "урожай звёздной пыли ×2",               w: 15 },
+  stardust: { name: "Звёздный дождь",  icon: "✨", effect: "урожай вдвое больше",                    w: 15 },
   shower:   { name: "Лунный ливень",   icon: "🌧", effect: "поливать не нужно — грядки политы сами", w: 15 },
   drought:  { name: "Засуха",          icon: "☀",  effect: "полива хватает вдвое меньше",           w: 12 },
   wind:     { name: "Солнечный ветер", icon: "🌬", effect: "ветер разносит пыльцу — гибриды вдвое чаще", w: 10 },
@@ -243,12 +248,13 @@ export async function farmState(u: any) {
     .map(([strain, count, listed]) => ({ strain, count: Number(count), listed: Number(listed) }));
   const gifts = await q("SELECT from_name, dust FROM f_gifts WHERE to_user = ? AND opened = 0 ORDER BY id LIMIT 20", [u.id]);
   const sales = await q("SELECT buyer_name, strain, price FROM f_sales WHERE seller = ? AND seen = 0 ORDER BY id LIMIT 20", [u.id]);
+  const barn = (await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])).map(([strain, count]) => ({ strain, count: Number(count) }));
   return {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked))),
-    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1])]),
+    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...barn.map((b) => b.strain)]),
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY),
-    vinyls, inv, gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
+    vinyls, inv, barn, gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })),
   };
 }
@@ -320,9 +326,11 @@ export async function harvest(u: any, idx: number) {
   if (st.dead) return { withered: true, farm: await farmState(u) };       // засохшее — просто убрали
   const rain = (await rainUntil()) > t;
   const double = s.bonus === "rich" && Math.random() < 0.25;
-  const dust = s.dust * (rain ? (s.bonus === "rain" ? 3 : 2) : 1) * (double ? 2 : 1);
+  // урожай идёт в амбар (решение 2026-11-14): продать станции по цене сорта или пустить на кухню
+  const crop = (rain ? (s.bonus === "rain" ? 3 : 2) : 1) * (double ? 2 : 1);
   const points = s.points;
-  const writes = [DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(dust, u.id)];
+  const writes = [DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?)
+                              ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.id, crop)];
   if (points > 0) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)")
     .bind(u.id, nameOf(u), points, "Лунная ферма", t));
   // с урожаем возвращаются семена той же культуры: не меньше 2 (посадил одно — получил больше), обычно 2, иногда 3;
@@ -346,7 +354,27 @@ export async function harvest(u: any, idx: number) {
     hybrid = { ...h, parents: [s.name, other.name], fresh: !Number(had) };
   }
   const vinyl = await dropVinyl(u.id, s.vinyl * (s.bonus === "lucky" ? 2 : 1) * (weatherOn(t) === "fullmoon" ? 2 : 1));
-  return { dust, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
+  return { crop, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
+}
+
+// амбар → станция: урожай продаётся по цене сорта (s.dust за штуку). strain = "*" — продать всё.
+export async function sellCrop(u: any, strain: string, n: number) {
+  await ensureFarm(u);
+  const rows = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
+  const pick = strain === "*" ? rows : rows.filter((r) => r[0] === strain);
+  if (!pick.length) return { error: "В амбаре этого нет" };
+  const ss = await strains(pick.map((r) => r[0]));
+  let got = 0, sold = 0;
+  for (const [id, have] of pick) {
+    const s = ss[id]; if (!s) continue;
+    const k = strain === "*" ? Number(have) : Math.max(1, Math.min(Number(have), Math.round(n) || 1));
+    // списывает ровно один запрос: двойное нажатие не продаст лишнего
+    if (!(await q("UPDATE f_barn SET count = count - ? WHERE user = ? AND strain = ? AND count >= ? RETURNING 1", [k, u.id, id, k])).length) continue;
+    got += k * s.dust; sold += k;
+  }
+  if (!sold) return { error: "В амбаре этого нет" };
+  await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [got, u.id]);
+  return { sold, dust: got, farm: await farmState(u) };
 }
 
 export async function unlock(u: any) {
@@ -476,6 +504,6 @@ export async function setRain(_hours: number) {           // посты кана
 export async function forgetFarm(uid: number) {
   for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM g_items WHERE user = ? AND game = 'farm'",
                      "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?",
-                     "DELETE FROM f_sales WHERE seller = ?"]) await q(sql, [uid]);
+                     "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?"]) await q(sql, [uid]);
   await q("DELETE FROM f_given WHERE from_user = ? OR to_user = ?", [uid, uid]);
 }

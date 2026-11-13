@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131724";
+    var BUILD = "202611140152";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1139,6 +1139,10 @@
                   [".....0.....", "....00.11..", "..3535353..", ".335353533.", "3345353533.", "3335353533.", ".33535353..", "..5555555.."]];
   CROP.cactus = [SEED0, SPROUT, ["...1...", "..121..", "..121.1", "1.121.1", ".11211.", "..121..", ".00000."],
                  ["....4....", "...434...", "...121...", "...121..1", "1..121.11", "11.121.1.", ".1.121.1.", ".111211..", "...121...", "...121...", "..00000.."]];
+  // колосья (зерно, 2026-11-14): стебли зелёные (G, s), колос — в цветах сорта
+  CROP.grain = [SEED0, ["G.G.G", ".GsG.", "..s.."],
+                [".1..1..1.", ".2..2..2.", ".1..1..1.", ".s..s..s.", "Gs.Gs.Gs.", ".s..s.Gs.", ".0000000."],
+                ["...4..4....", "....12....4", "4...21..12.", ".12.12..21.", ".21.21..12.", ".12..5..21.", ".21..s..5..", "..5..s..s..", "..sG.sG.s..", ".Gs..s.Gs..", "..s..s..s..", ".000000000."]];
   var BARROW = ["...C.p..L...", "..CnpPbLhL..", ".kVVVVVVVVk.", ".kWWWWWWWWkkk", "..kWWWWWWk..k", "...kkkkkk....", "....kiIk.....", ".....kk......"].map(function (r) { return (r + "             ").slice(0, 13); });
   var BARREL = [".kkkkkk.", "kVWWWWVk", "kiIIIIik", "kWBWWBWk", "kWBWWBWk", "kiIIIIik", "kWBWWBWk", "kBBBBBBk", ".kkkkkk."];
   var CRATE = ["kkkkkkkkkk", "kVVVVVVVVk", "kWkWWWWkWk", "kWWkWWkWWk", "kWWWkkWWWk", "kWWkWWkWWk", "kWkWWWWkWk", "kBBBBBBBBk", "kkkkkkkkkk"];
@@ -1395,7 +1399,7 @@
   }
   function factGrid(s) {                                    // то же, но с подписями — для справочника
     var g = el("div", "facts");
-    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "даёт " + s.dust + " пыли"], ["💧", "полив раз в " + fmtLeft(s.thirst * 60)], ["🏺", "артефакт " + Math.round(s.vinyl * 100) + "%"]]
+    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "станция даёт " + s.dust], ["💧", "полив раз в " + fmtLeft(s.thirst * 60)], ["🏺", "артефакт " + Math.round(s.vinyl * 100) + "%"]]
       .forEach(function (x) { var d = el("div"); d.appendChild(el("i", "", x[0])); d.append(x[1]); g.appendChild(d); });
     return g;
   }
@@ -1708,9 +1712,9 @@
       return farmCall("/api/farm/harvest", { idx: pl.idx }).catch(function () {});
     }
     if (inf.ripe) {                                                                 // созрело — собрать сразу, без вопросов
-      var gain = inf.s.dust * (s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1);
-      haptic("success"); addFx("harvest", pl.idx, inf.s); floatText(pl.idx, "+" + gain + " ✦ · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков"));
-      s.plots[pl.idx] = { idx: pl.idx, crop: null }; s.dust += gain; renderFarm();   // сразу, не дожидаясь сервера
+      var gain = s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1;          // урожай — в амбар (продать станции или на кухню)
+      haptic("success"); addFx("harvest", pl.idx, inf.s); floatText(pl.idx, "+" + gain + " в амбар · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков"));
+      s.plots[pl.idx] = { idx: pl.idx, crop: null }; barnAdd(inf.s.id, gain); renderFarm();   // сразу, не дожидаясь сервера
       return farmCall("/api/farm/harvest", { idx: pl.idx }).then(function (r) {
         if (r.error) return;
         if (r.double) floatText(pl.idx, "×2 щедрый урожай!", "big");
@@ -1741,6 +1745,9 @@
     if (onclick) b.onclick = onclick;
     return b;
   }
+  function barnOf(id) { var r = null; (F.state.barn || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
+  function barnAdd(id, n) { F.state.barn = F.state.barn || []; var it = barnOf(id); if (it) it.count += n; else F.state.barn.push({ strain: id, count: n }); }
+  function barnItems() { var s = F.state; return (s.barn || []).filter(function (it) { return it.count > 0 && s.strains[it.strain]; }); }
   function bagOf(id) { var r = null; (F.state.inv || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
   function addToBag(id, n) { var it = bagOf(id); if (it) it.count += n; else F.state.inv.push({ strain: id, count: n, listed: 0 }); }
 
@@ -1777,7 +1784,7 @@
       var props = el("div", "variants");
       var line = function (k, v) { var r = el("div"); r.appendChild(el("b", "", k)); r.appendChild(el("span", "", v)); props.appendChild(r); };
       line("Растёт", fmtLeft(st.minutes * 60) + " под поливом");
-      line("Урожай", "✦ " + st.dust + " пыли и " + st.points + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
+      line("Урожай", "в амбар; станция берёт по ✦ " + st.dust + ". За сбор " + st.points + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
       line("Полив", "одного хватает на " + fmtLeft(st.thirst * 60));
       line("Шанс артефакта", Math.round(st.vinyl * 100) + "% с урожая");
       line("Семена с урожая", (st.bonus === "seedy" ? "3–4 (плодовитый)" : "2–3") + " за грядку");
@@ -1906,7 +1913,7 @@
   // ---------- справочник растений и гибридов: книжка на пергаменте (открывается по домику) ----------
   // Страницы: как всё растёт; по странице на каждую форму растения (9 расцветок: найденные нарисованы, ненайденные — силуэтом);
   // особые свойства. «Найден» вид — если такой сорт хоть раз был у игрока (сервер помнит все сорта из инвентаря).
-  var SHAPES = [["moss", "Мох", "мох", 0], ["berry", "Ягоды", "ягоды", 1], ["crystal", "Хрусталь", "хрусталь", 0], ["flower", "Звездоцвет", "звездоцвет", 0],
+  var SHAPES = [["moss", "Мох", "мох", 0], ["berry", "Ягоды", "ягоды", 1], ["crystal", "Хрусталь", "хрусталь", 0], ["grain", "Колосья", "колосья", 1], ["flower", "Звездоцвет", "звездоцвет", 0],
                 ["mushroom", "Грибы", "грибы", 1], ["pumpkin", "Тыква", "тыква", 2], ["cactus", "Кактус", "кактус", 0]];
   var COLORS = [["moss", ["Лунный", "Лунные", "Лунная"]], ["berry", ["Звёздный", "Звёздные", "Звёздная"]], ["crystal", ["Кометный", "Кометные", "Кометная"]],
                 ["sun", ["Солнечный", "Солнечные", "Солнечная"]], ["nebula", ["Туманный", "Туманные", "Туманная"]], ["ember", ["Огненный", "Огненные", "Огненная"]],
@@ -1938,14 +1945,15 @@
           page.appendChild(el("h3", "", "Справочник лунного садовода"));
           page.appendChild(el("div", "bsub", "Найдено видов: " + Object.keys(kn).length + " из " + SHAPES.length * COLORS.length));
           [["Рост", "Растение растёт, только пока грядка полита. Без воды оно просто ждёт. Но если не поливать больше 8 часов — засохнет. В лунный ливень поливает небо."],
-           ["Урожай", "С каждой грядки получаешь звёздную пыль, очки для звания и пару семян на следующую посадку."],
+           ["Урожай", "Собранное ложится в амбар, его можно продать станции за звёздную пыль. За сбор — очки для звания и пара семян на следующую посадку."],
+           ["Зерно", "Пшеница, просо и рожь. Сами по себе стоят недорого — зерно пойдёт на мельницу, в муку."],
            ["Скрещивание", "Когда рядом созрели два разных сорта, при сборе может выпасть семя-гибрид."],
            ["Мутации", "Иногда гибрид выходит совсем не похожим на родителей: с новой формой или новым цветом. Так находятся звездоцветы, грибы, тыквы, кактусы и редкие расцветки."]]
             .forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); });
         } else if (p <= SHAPES.length) {
           var sh2 = SHAPES[p - 1], found = COLORS.filter(function (c) { return kn[sh2[0] + "/" + c[0]]; }).length;
           page.appendChild(el("h3", "", sh2[1]));
-          page.appendChild(el("div", "bsub", "Найдено расцветок: " + found + " из " + COLORS.length + (p > 3 ? " · только мутацией" : "")));
+          page.appendChild(el("div", "bsub", "Найдено расцветок: " + found + " из " + COLORS.length + (p > 4 ? " · только мутацией" : "")));
           var grid = el("div", "bgrid"), info = el("div", "binfo", "Нажми на растение, чтобы узнать о нём.");
           COLORS.forEach(function (c) {
             var e = kn[sh2[0] + "/" + c[0]], cell = el("button", "bcell" + (e ? "" : " unknown")); cell.type = "button";
@@ -1967,7 +1975,7 @@
           page.appendChild(el("h3", "", "Погода"));
           page.appendChild(el("div", "bsub", wv.today ? "Сегодня: " + wv.today.icon + " " + wv.today.name + " · завтра: " + wv.tomorrow.icon + " " + wv.tomorrow.name : "Каждый день — своя погода"));
           var tb = el("div", "wtable"), today = wv.today && wv.today.id;          // таблица погоды: как часто и что делает
-          [["clear", "☾", "Ясная ночь", "40%", "обычный день"], ["stardust", "✨", "Звёздный дождь", "15%", "урожай пыли ×2"],
+          [["clear", "☾", "Ясная ночь", "40%", "обычный день"], ["stardust", "✨", "Звёздный дождь", "15%", "урожай ×2"],
            ["shower", "🌧", "Лунный ливень", "15%", "поливать не нужно"], ["drought", "☀", "Засуха", "12%", "полива хватает вдвое меньше"],
            ["wind", "🌬", "Солнечный ветер", "10%", "гибриды вдвое чаще"], ["fullmoon", "🌕", "Полнолуние", "8%", "артефакты вдвое чаще"]]
             .forEach(function (x) {
@@ -2014,6 +2022,17 @@
       };
       draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
       sh.appendChild(el("div", "sub", "Перетащи семена, чтобы расставить по порядку: первые три после лейки видны в полоске под фермой."));
+      var bh = el("div", "mono", "Амбар"); bh.style.marginTop = "20px"; sh.appendChild(bh);
+      var barn = barnItems(), bgrid = el("div", "invgrid");
+      barn.forEach(function (it) {
+        var st = s.strains[it.strain], b = el("button", "slot"); b.type = "button"; b.setAttribute("aria-label", st.name);
+        var cv = el("canvas", "pix"); cropIcon(cv, st, true); b.appendChild(cv); b.appendChild(el("span", "n", it.count));
+        b.onclick = function () { haptic("light"); close(); openShop("sell"); };
+        bgrid.appendChild(b);
+      });
+      for (var k = barn.length; k < 5; k++) bgrid.appendChild(el("div", "slot empty"));
+      sh.appendChild(bgrid);
+      sh.appendChild(el("div", "sub", barn.length ? "Собранный урожай. Продать его станции можно в лавке, на вкладке «Продать»." : "Здесь копится собранный урожай. Продать его станции можно в лавке."));
       var listed = s.inv.filter(function (it) { return it.listed > 0; });
       if (listed.length) sh.appendChild(el("div", "sub", "На продаже в лавке: " + listed.map(function (it) { return (s.strains[it.strain] || {}).name + " ×" + it.listed; }).join(", ") + "."));
       var acts = el("div", "salebtns");
@@ -2062,9 +2081,9 @@
     var h = function (t) { var x = el("div", "mono", t); x.style.marginTop = "22px"; box.appendChild(x); };
     if (F.shopTab === "buy") {
       h("Станция");
-      box.appendChild(el("div", "farm-note left", "Купленные семена попадают в твой инвентарь. Каждый урожай возвращает 2–3 семени той же культуры, так что покупать нужно, только чтобы начать новую."));
-      ["moss", "berry", "crystal"].forEach(function (k) {
-        var st = s.strains[k], have = bagOf(k);
+      box.appendChild(el("div", "farm-note left", "Купленные семена попадают в твой инвентарь. Каждый урожай возвращает 2–3 семени той же культуры, так что покупать нужно, только чтобы начать новую. Зерно — пшеница, просо и рожь — пойдёт на мельницу."));
+      ["moss", "berry", "crystal", "wheat", "millet", "rye"].forEach(function (k) {
+        var st = s.strains[k], have = bagOf(k); if (!st) return;
         box.appendChild(seedRow(st, "", function () { seedSheet(st); }));
         var acts = el("div", "invacts"), info = el("span", "invcount", "у тебя " + (have ? have.count : 0));
         [1, 5].forEach(function (n) {
@@ -2103,7 +2122,31 @@
       });
       return;
     }
-    // продать
+    // продать: урожай из амбара — станции; свои сорта — игрокам
+    h("Продать урожай станции");
+    var barn = barnItems(), total = 0;
+    barn.forEach(function (it) { total += it.count * s.strains[it.strain].dust; });
+    if (!barn.length) box.appendChild(el("div", "farm-note left", "Амбар пуст. Собранный урожай попадает сюда, станция покупает его сразу."));
+    else {
+      var sellNow = function (node, strain, n, gain) {
+        var cur = F.state;
+        haptic("success"); buyFx(node, "+✦ " + gain, n ? "−" + n + " шт" : "амбар пуст");
+        if (strain === "*") cur.barn = []; else barnOf(strain).count -= n;
+        cur.dust += gain; renderFarm(); renderShopTab();
+        farmCall("/api/farm/sell", { strain: strain, n: n || 0 }).catch(function () {});
+      };
+      var all = el("div", "invacts"), allb = btn("Продать весь урожай · ✦ " + total, "", function (ev) { sellNow(ev.currentTarget, "*", 0, total); });
+      all.appendChild(allb); box.appendChild(all);
+      barn.forEach(function (it) {
+        var st = s.strains[it.strain];
+        box.appendChild(seedRow(st, "×" + it.count, function () { seedSheet(st); }));
+        var acts = el("div", "invacts");
+        acts.appendChild(btn("1 шт · ✦ " + st.dust, "ghost", function (ev) { sellNow(ev.currentTarget, st.id, 1, st.dust); }));
+        if (it.count > 1) acts.appendChild(btn("все " + it.count + " · ✦ " + st.dust * it.count, "", function (ev) { sellNow(ev.currentTarget, st.id, it.count, st.dust * it.count); }));
+        box.appendChild(acts);
+      });
+    }
+    h("Свои сорта — игрокам");
     box.appendChild(el("div", "farm-note left", "Здесь выставляются на продажу выведенные тобой сорта. Их увидят все игроки во вкладке «Купить» и соседи у тебя в гостях. Цену считает игра по свойствам сорта, пыль приходит тебе сразу. Выставленные семена не посадить, пока не уберёшь их с продажи."));
     var mine = s.inv.filter(function (it) { return it.count > 0 && s.strains[it.strain] && !s.strains[it.strain].base; });
     if (!mine.length) { box.appendChild(el("div", "farm-note left", "Своих сортов пока нет. Посади разные культуры на соседние грядки — когда созреют обе, при сборе может выпасть семя-гибрид.")); return; }

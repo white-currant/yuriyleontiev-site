@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS f_plots (user INTEGER NOT NULL, idx INTEGER NOT NULL,
 CREATE TABLE IF NOT EXISTS f_strains (id TEXT PRIMARY KEY, name TEXT NOT NULL, genes TEXT NOT NULL, created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS f_inv (user INTEGER NOT NULL, strain TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
   listed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, strain));
+-- амбар: собранный урожай (count штук сорта strain); продаётся станции или идёт на кухню
+CREATE TABLE IF NOT EXISTS f_barn (user INTEGER NOT NULL, strain TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, strain));
 CREATE INDEX IF NOT EXISTS f_inv_listed ON f_inv (user, listed);
 CREATE TABLE IF NOT EXISTS f_sales (id INTEGER PRIMARY KEY AUTOINCREMENT, seller INTEGER NOT NULL, buyer_name TEXT, strain TEXT NOT NULL,
   price INTEGER NOT NULL, at INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0);
