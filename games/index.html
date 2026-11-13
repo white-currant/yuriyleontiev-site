@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131309";
+    var BUILD = "202611131313";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -267,8 +267,19 @@
   .tabs button[aria-pressed="true"] { background: linear-gradient(180deg, #ffe0a3, var(--gold)); color: #2a1406; box-shadow: 0 4px 16px rgba(242, 169, 59, .3); }
   .art-card { margin-top: 22px !important; border-radius: 22px !important; overflow: hidden !important; background: rgba(22, 11, 4, .55) !important;
     -webkit-backdrop-filter: blur(14px) !important; backdrop-filter: blur(14px) !important; }
-  .art-card .art { display: block; width: 100%; aspect-ratio: 2 / 1; cursor: pointer; }
-  .art-card.farm-card .art { aspect-ratio: 168 / 96; }
+  .art-card .art { display: block; width: 100%; aspect-ratio: 5 / 4; cursor: pointer; }
+  /* игры — рядом, в два столбца: обе видны без прокрутки */
+  #tab-games { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: stretch; margin-top: 16px; }
+  #tab-games[hidden] { display: none; }
+  #tab-games .art-card { margin-top: 0 !important; border-radius: 18px !important; display: flex; flex-direction: column; }
+  #tab-games .art-body { padding: 10px 12px 12px; display: flex; flex-direction: column; flex: 1; }
+  #tab-games .art-card h2 { font-size: 18px; line-height: 1.15; }
+  #tab-games .art-card p { font-size: 12.5px; line-height: 1.35; margin-top: 4px; flex: 1; }
+  #tab-games .art-card .btn { margin-top: 10px; min-height: 42px; font-size: 15px; }
+  .who-stats { margin-top: 5px; display: flex; gap: 14px; font-size: 13.5px; color: var(--dim); }
+  .who-stats b { color: var(--white); font-weight: 700; }
+  .tabs { margin-top: 20px !important; }
+  .art-card.farm-card .art { aspect-ratio: 5 / 4; }
   .art-card .art-body { padding: 14px 16px 16px; }
   .art-card h2 { font-size: 22px; }
   .art-card .btn { margin-top: 14px; }
@@ -481,15 +492,11 @@
     <div class="mono">Звёздная гильдия · StarGuardian</div>
     <div class="who">
       <div class="sigil" id="sigil">✦</div>
-      <div><h1 id="title">Ученик звёзд</h1><div class="name" id="name"></div></div>
+      <div><h1 id="title">Ученик звёзд</h1><div class="name" id="name"></div>
+        <div class="who-stats"><span>карма <b id="karma">0</b></span><span>место <b id="place">—</b></span></div></div>
     </div>
     <div class="bar"><i id="bar"></i></div>
     <div class="bar-note"><span id="pts">0 очков</span><span id="next"></span></div>
-    <div class="chips">
-      <div class="chip"><b id="karma">0</b><span>карма</span></div>
-      <div class="chip"><b id="place">—</b><span>место</span></div>
-      <div class="chip"><b id="todayc">0/12</b><span>раундов сегодня</span></div>
-    </div>
 
     <div class="link-card" id="linkcard" hidden></div>
 
@@ -504,7 +511,7 @@
         <canvas class="art" id="guessart" aria-hidden="true"></canvas>
         <div class="art-body">
           <h2>Угадай трек</h2>
-          <p>Звучит отрывок из любого альбома — узнай трек, пока кольцо звёздной пыли не рассеялось.</p>
+          <p>Узнай трек по отрывку, пока кольцо пыли не рассеялось.</p>
           <button class="btn" id="play">Играть</button>
         </div>
       </div>
@@ -512,7 +519,7 @@
         <canvas class="art pix" id="farmart" aria-hidden="true"></canvas>
         <div class="art-body">
           <h2>Лунная ферма</h2>
-          <p>Свой участок: поливай, собирай урожай, выводи новые сорта, торгуй семенами и находи пластинки.</p>
+          <p>Выращивай, скрещивай сорта, торгуй семенами.</p>
           <button class="btn" id="tofarm">На ферму</button>
         </div>
       </div>
@@ -638,7 +645,6 @@
     setPhoto($("sigil"), p.avatar);
     $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
     $("karma").textContent = p.karma; $("place").textContent = p.place || "—";
-    $("todayc").textContent = Math.min(p.today.scored, p.today.max) + "/" + p.today.max;
     var lad = [0, 30, 100, 250, 500, 1000, 2000, 4000, 8000], prev = 0;
     lad.forEach(function (n) { if (p.points >= n) prev = n; });
     $("next").textContent = p.next ? "до следующего звания " + (p.next - p.points) : "высшее звание";
@@ -2087,11 +2093,11 @@
   // ---------- картинки на карточках игр ----------
   // «Угадай трек»: пластинка в кольце звёздной пыли на янтарном фоне мастерской. «Лунная ферма»: кусочек самой фермы.
   function drawGuessArt() {
-    var cv = $("guessart"), W = cv.clientWidth || 340, H = Math.round(W * .5), d = Math.min(devicePixelRatio || 1, 2);
+    var cv = $("guessart"), W = cv.clientWidth || 170, H = Math.round(W * .8), d = Math.min(devicePixelRatio || 1, 2);
     cv.width = W * d; cv.height = H * d; var c = cv.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0);
     var bg = c.createLinearGradient(0, 0, W, H); bg.addColorStop(0, "#2a1406"); bg.addColorStop(.55, "#3a1d08"); bg.addColorStop(1, "#1a0c05");
     c.fillStyle = bg; c.fillRect(0, 0, W, H);
-    var cx = W * .62, cy = H * .52, R = H * .36;
+    var cx = W * .5, cy = H * .5, R = H * .33;
     var glow = c.createRadialGradient(cx, cy, 0, cx, cy, W * .7); glow.addColorStop(0, "rgba(255,190,100,.38)"); glow.addColorStop(.4, "rgba(213,139,255,.1)"); glow.addColorStop(1, "rgba(0,0,0,0)");
     c.fillStyle = glow; c.fillRect(0, 0, W, H);
     var r = rng(47);
@@ -2115,8 +2121,6 @@
       c.fillRect(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, sz, sz);
     }
     c.globalCompositeOperation = "source-over";
-    c.fillStyle = "rgba(255,226,168,.9)";                              // звуковая волна слева
-    for (var b = 0; b < 14; b++) { var hh = (Math.sin(b * 1.3) * .5 + .6) * H * .26 * (1 - Math.abs(b - 6.5) / 9); c.fillRect(W * .07 + b * 7, H * .52 - hh / 2, 3, hh); }
   }
   function drawFarmArt() {
     var cv = $("farmart"), full = document.createElement("canvas");
@@ -2126,7 +2130,7 @@
     var plots = [ripe("berry"), ripe("crystal"), ripe("h1"), ripe("h2"), ripe("moss"), ripe("crystal"), ripe("h1"), ripe("berry"), { locked: true }];
     var t = Date.now();
     drawFarm(full, 47, plots, t / 1000, t, false, base, 1e9, false);
-    cv.width = 168; cv.height = 96; cv.getContext("2d").drawImage(full, 8, 62, 168, 96, 0, 0, 168, 96);
+    cv.width = 120; cv.height = 96; cv.getContext("2d").drawImage(full, 32, 62, 120, 96, 0, 0, 120, 96);
   }
   function drawGameArt() { try { drawGuessArt(); drawFarmArt(); } catch (e) {} }
   $("guessart").onclick = function () { $("play").click(); };
