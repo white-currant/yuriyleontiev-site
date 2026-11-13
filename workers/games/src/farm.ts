@@ -377,6 +377,14 @@ export async function buy(u: any, pub: string, strain: string, myName: string) {
   return { ok: true, price, ...(await visit(u, pub)), farm: await farmState(u) };
 }
 
+// справочник: все сорта, которые у игрока когда-либо были (строки инвентаря не удаляются — в т.ч. посаженные и проданные)
+export async function book(u: any) {
+  await ensureFarm(u);
+  const rows = await q("SELECT strain FROM f_inv WHERE user = ?", [u.id]);
+  const ss = await strains(rows.map((r) => r[0]));
+  return { strains: Object.values(ss), bonuses: BONUSES };
+}
+
 // рынок: все семена, выставленные игроками (кроме своих). Наружу — публичное имя продавца и номер участка (pub), не аккаунт.
 export async function market(u: any, hidden: number[]) {
   const rows = await q(`SELECT i.user, f.pub, i.strain, i.listed, p.name FROM f_inv i JOIN f_farms f ON f.user = i.user

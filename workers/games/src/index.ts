@@ -375,6 +375,7 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/visit": return json(await farm.visit(user, String(body.pub || "")));
     case "/api/farm/water": return json(await farm.water(user, Number(body.idx)));
     case "/api/farm/fill": return json(await farm.fill(user));
+    case "/api/farm/book": return json(await farm.book(user));
     case "/api/farm/market": return json(await farm.market(user, await hiddenIds()));
     case "/api/farm/seeds": return json(await farm.buySeeds(user, String(body.crop || ""), Number(body.n || 1)));
     case "/api/farm/list": return json(await farm.list(user, String(body.strain || ""), Number(body.delta || 0)));

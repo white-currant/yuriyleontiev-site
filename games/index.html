@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131314";
+    var BUILD = "202611131336";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -478,6 +478,31 @@
   body[data-screen^="farm"] #farm-shop .farm-top { background: var(--wood2); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 4px 0 var(--ink); padding-bottom: 12px; }
   body[data-screen^="farm"] .empty { color: var(--cream2); font-family: var(--pix); }
   body[data-screen^="farm"] .nlist .av { border-radius: 0 !important; box-shadow: 0 -2px 0 var(--ink), 0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink); }
+
+  /* справочник — книжка: пергаментный разворот, чернильный текст */
+  body[data-screen^="farm"] .sheet.book { background: #f4e4bd; color: #3b2614; box-shadow: 0 -4px 0 #c9a86a, 0 -8px 0 var(--ink);
+    background-image: linear-gradient(90deg, rgba(120, 80, 30, .12), rgba(120, 80, 30, 0) 14px, rgba(120, 80, 30, 0) calc(100% - 14px), rgba(120, 80, 30, .12)); }
+  .book .bpage { min-height: 380px; padding: 4px 6px 0; opacity: 0; }
+  .book .bpage.in { opacity: 1; transform: none; transition: opacity .22s, transform .22s; }
+  .book .bpage.fwd { transform: translateX(18px); } .book .bpage.back { transform: translateX(-18px); }
+  .book .bpage.fwd.in, .book .bpage.back.in { transform: none; }
+  body[data-screen^="farm"] .book h3 { color: #3b2614; font-size: 21px; text-align: center; padding-bottom: 8px; border-bottom: 2px solid rgba(90, 56, 32, .35); }
+  .book .bsub { margin-top: 8px; text-align: center; font-size: 13px; font-weight: 600; color: #7a5c38; }
+  .book .brule { margin-top: 12px; font-size: 14.5px; line-height: 1.45; color: #3b2614; }
+  .book .brule b { color: #2b1a0e; }
+  .book .bgrid { margin-top: 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; }
+  .book .bcell { padding: 8px 4px 6px; text-align: center; color: #3b2614; background: rgba(120, 80, 30, .08); }
+  .book .bcell canvas { width: 62%; height: auto; image-rendering: pixelated; }
+  .book .bcell span { display: block; margin-top: 4px; font-size: 12px; font-weight: 700; line-height: 1.2; }
+  .book .bcell.unknown { background: rgba(120, 80, 30, .04); } .book .bcell.unknown span { color: #b39a70; }
+  .book .bcell.on { background: rgba(240, 185, 80, .45); box-shadow: 0 -2px 0 #5a3820, 0 2px 0 #5a3820, -2px 0 0 #5a3820, 2px 0 0 #5a3820; }
+  .book .binfo { margin-top: 12px; min-height: 86px; padding: 10px 12px; font-size: 13.5px; line-height: 1.4; background: rgba(120, 80, 30, .1); color: #3b2614; }
+  .book .binfo b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .book .bbonus { color: #9a5a12; font-weight: 700; } .book .bdim { margin-top: 4px; color: #7a5c38; font-size: 12.5px; }
+  .book .bnav { margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 18px; }
+  .book .bbtn { width: 46px; height: 38px; font-size: 16px; color: #3b2614; background: rgba(120, 80, 30, .16); }
+  .book .bbtn[disabled] { opacity: .3; }
+  .book .bnum { font-size: 13px; font-weight: 700; color: #7a5c38; min-width: 56px; text-align: center; }
 </style>
 </head>
 <body>
@@ -1266,9 +1291,10 @@
     night: ["#14123a", "#3a3494", "#7d77d9", "#e8e6ff", "#ffffff", "#262066"], aurora: ["#0f5e5b", "#34d399", "#a7f3d0", "#f472b6", "#fde68a", "#0e8f7a"],
   };
   var DEAD = ["#5a4630", "#8a6a42", "#a88a5a", "#7a5a3a", "#b89a6a", "#4a3826"];
+  var SIL = ["#c4ad80", "#d2bd92", "#dccaa2", "#d2bd92", "#dccaa2", "#c4ad80"];     // силуэт ненайденного вида — едва заметный на пергаменте
   var SEEDTIER = { common: ["Обычный сорт", "#c9c3e0"], rare: ["Хороший сорт", "#60a5fa"], epic: ["Редкий сорт", "#c084fc"], legendary: ["Легендарный сорт", "#ffc469"] };
   function sprS(c, x, yb, rows, s, dead) {
-    var roles = ROLES[s.shape] || DIG, pal = dead ? DEAD : PAL[s.color] || PAL.moss, h = rows.length;
+    var roles = ROLES[s.shape] || DIG, pal = dead ? DEAD : s.color === "_sil" ? SIL : PAL[s.color] || PAL.moss, h = rows.length;
     for (var j = 0; j < h; j++) for (var i = 0; i < rows[j].length; i++) {
       var ch = rows[j][i]; if (ch === ".") continue;
       px(c, x + i, yb - h + 1 + j, 1, 1, roles[ch] != null ? pal[roles[ch]] : SPR[ch]);
@@ -1434,9 +1460,9 @@
       return r;
     }, function (e) { F.pending--; toast("Не получилось: " + e.message); if (!F.pending) call("/api/farm").then(setFarm).catch(function () {}); throw e; });
   }
-  function cropIcon(cv, s) {                                                      // значок сорта: созревшее растение на земле
-    var rows = (CROP[s.shape] || CROP.moss)[3], w = rows[0].length + 4, h = 12, c = cv.getContext("2d");
-    cv.width = w; cv.height = h; c.clearRect(0, 0, w, h); px(c, 1, h - 2, w - 2, 2, C.so); px(c, 1, h - 2, w - 2, 1, C.sol);
+  function cropIcon(cv, s, bare) {                                                // значок сорта: созревшее растение на земле (bare — без земли)
+    var rows = (CROP[s.shape] || CROP.moss)[3], w = rows[0].length + 4, h = 13, c = cv.getContext("2d");
+    cv.width = w; cv.height = h; c.clearRect(0, 0, w, h); if (!bare) { px(c, 1, h - 2, w - 2, 2, C.so); px(c, 1, h - 2, w - 2, 1, C.sol); }
     sprS(c, 2, h - 2, rows, s);
   }
   function canIcon(cv) { var c = cv.getContext("2d"); cv.width = 12; cv.height = 9; c.clearRect(0, 0, 12, 9); spr(c, 1, 8, CAN); }
@@ -1497,7 +1523,7 @@
       w.onclick = fillCan; box.appendChild(w);
       var hs = document.createElement("button"); hs.type = "button"; hs.className = "plot well house";       // домик: весь инвентарь
       hs.style.left = 2 / FW * 100 + "%"; hs.style.top = 26 / FH * 100 + "%"; hs.style.width = 62 / FW * 100 + "%"; hs.style.height = 64 / FH * 100 + "%";
-      hs.appendChild(el("span", "lbl water", "инвентарь")); hs.onclick = function () { haptic("light"); invSheet(); }; box.appendChild(hs);
+      hs.appendChild(el("span", "lbl water", "справочник")); hs.onclick = function () { haptic("light"); openBook(); }; box.appendChild(hs);
     }
   }
   function fillCan() {
@@ -1775,6 +1801,83 @@
     more.onclick = function () { haptic("light"); invSheet(); }; bar.appendChild(more);
     $("selnote").textContent = selText();
   }
+  // ---------- справочник растений и гибридов: книжка на пергаменте (открывается по домику) ----------
+  // Страницы: как всё растёт; по странице на каждую форму растения (9 расцветок: найденные нарисованы, ненайденные — силуэтом);
+  // особые свойства. «Найден» вид — если такой сорт хоть раз был у игрока (сервер помнит все сорта из инвентаря).
+  var SHAPES = [["moss", "Мох", "мох", 0], ["berry", "Ягоды", "ягоды", 1], ["crystal", "Хрусталь", "хрусталь", 0], ["flower", "Звездоцвет", "звездоцвет", 0],
+                ["mushroom", "Грибы", "грибы", 1], ["pumpkin", "Тыква", "тыква", 2], ["cactus", "Кактус", "кактус", 0]];
+  var COLORS = [["moss", ["Лунный", "Лунные", "Лунная"]], ["berry", ["Звёздный", "Звёздные", "Звёздная"]], ["crystal", ["Кометный", "Кометные", "Кометная"]],
+                ["sun", ["Солнечный", "Солнечные", "Солнечная"]], ["nebula", ["Туманный", "Туманные", "Туманная"]], ["ember", ["Огненный", "Огненные", "Огненная"]],
+                ["frost", ["Ледяной", "Ледяные", "Ледяная"]], ["night", ["Полуночный", "Полуночные", "Полуночная"]], ["aurora", ["Сияющий", "Сияющие", "Сияющая"]]];
+  var BONUS_NAME = { rain: "Дождевой", lucky: "Счастливый", hardy: "Стойкий", rich: "Щедрый", seedy: "Плодовитый" };
+  F.bookPage = 0;
+  function openBook() {
+    var s = F.state; if (!s) return;
+    var data = { strains: Object.keys(s.strains).map(function (k) { return s.strains[k]; }), bonuses: s.bonuses || {} };   // сразу — что уже известно
+    var wrap = sheet(function (sh, close) {
+      sh.classList.add("book");
+      var page = el("div", "bpage"), nav = el("div", "bnav"), prev = el("button", "bbtn", "◀"), next = el("button", "bbtn", "▶"), num = el("span", "bnum");
+      prev.type = next.type = "button";
+      var known = function () {                              // вид (форма+цвет) → лучший найденный сорт и сколько сортов
+        var m = {}; data.strains.forEach(function (st) { var k = st.shape + "/" + st.color, e = m[k] = m[k] || { best: null, n: 0 }; e.n++; if (!e.best || (st.price || 0) > (e.best.price || 0)) e.best = st; });
+        return m;
+      };
+      var N = SHAPES.length + 2;
+      var draw = function (dir) {
+        var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage));
+        page.innerHTML = ""; page.className = "bpage" + (dir ? (dir > 0 ? " fwd" : " back") : "");
+        void page.offsetWidth; page.classList.add("in");
+        if (p === 0) {
+          page.appendChild(el("h3", "", "Справочник лунного садовода"));
+          page.appendChild(el("div", "bsub", "Найдено видов: " + Object.keys(kn).length + " из " + SHAPES.length * COLORS.length));
+          [["Рост", "Растение растёт, только пока грядка полита. Без воды рост стоит на паузе; сухое дольше 8 часов засыхает."],
+           ["Урожай", "Каждая собранная грядка даёт звёздную пыль, очки в звание и 2–3 семени той же культуры."],
+           ["Скрещивание", "Когда рядом созрели два разных сорта, при сборе может выпасть семя-гибрид: форма — от собранного растения, цвет — от соседа, свойства — среднее от обоих."],
+           ["Мутации", "Изредка гибрид получает новую форму или новый цвет, которых нет у родителей. Так открываются звездоцветы, грибы, тыквы, кактусы и редкие расцветки."]]
+            .forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); });
+        } else if (p <= SHAPES.length) {
+          var sh2 = SHAPES[p - 1], found = COLORS.filter(function (c) { return kn[sh2[0] + "/" + c[0]]; }).length;
+          page.appendChild(el("h3", "", sh2[1]));
+          page.appendChild(el("div", "bsub", "Найдено расцветок: " + found + " из " + COLORS.length + (p > 3 ? " · форма появляется только мутацией" : "")));
+          var grid = el("div", "bgrid"), info = el("div", "binfo", "Нажми на найденный вид, чтобы увидеть лучший сорт.");
+          COLORS.forEach(function (c) {
+            var e = kn[sh2[0] + "/" + c[0]], cell = el("button", "bcell" + (e ? "" : " unknown")); cell.type = "button";
+            var cv = el("canvas", "pix"); cropIcon(cv, { shape: sh2[0], color: e ? c[0] : "_sil" }, true); cell.appendChild(cv);
+            var nm = c[1][sh2[3]] + " " + sh2[2];
+            cell.appendChild(el("span", "", e ? nm : "???"));
+            if (e) cell.onclick = function () {
+              grid.querySelectorAll(".bcell").forEach(function (x) { x.classList.remove("on"); }); cell.classList.add("on"); haptic("light");
+              var st = e.best; info.innerHTML = "";
+              info.appendChild(el("b", "", st.name + (st.base ? "" : " · " + strainCode(st))));
+              info.appendChild(el("div", "", describe(st)));
+              if (st.bonus) info.appendChild(el("div", "bbonus", "★ " + (data.bonuses[st.bonus] || "")));
+              info.appendChild(el("div", "bdim", e.n > 1 ? "Это лучший из " + e.n + " найденных сортов этого вида." : st.base ? "Сорт станции: семена продаются в лавке." : "Пока единственный найденный сорт этого вида."));
+            };
+            grid.appendChild(cell);
+          });
+          page.appendChild(grid); page.appendChild(info);
+        } else {
+          page.appendChild(el("h3", "", "Особые свойства"));
+          page.appendChild(el("div", "bsub", "Достаются гибридам случайно и могут перейти по наследству."));
+          Object.keys(BONUS_NAME).forEach(function (k) { var d = el("p", "brule"); d.appendChild(el("b", "", BONUS_NAME[k] + ". ")); d.append((data.bonuses[k] || "").replace(/^./, function (ch) { return ch.toUpperCase(); }) + "."); page.appendChild(d); });
+        }
+        num.textContent = (p + 1) + " / " + N; prev.disabled = p === 0; next.disabled = p === N - 1;
+      };
+      prev.onclick = function () { haptic("light"); F.bookPage--; draw(-1); };
+      next.onclick = function () { haptic("light"); F.bookPage++; draw(1); };
+      var x0 = null;                                          // листание свайпом
+      sh.addEventListener("touchstart", function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+      sh.addEventListener("touchend", function (e) { if (x0 == null) return; var dx = e.changedTouches[0].clientX - x0; x0 = null;
+        if (Math.abs(dx) > 60) { if (dx < 0 && F.bookPage < N - 1) { F.bookPage++; draw(1); } else if (dx > 0 && F.bookPage > 0) { F.bookPage--; draw(-1); } } }, { passive: true });
+      nav.appendChild(prev); nav.appendChild(num); nav.appendChild(next);
+      sh.appendChild(page); sh.appendChild(nav);
+      var foot = el("div", "salebtns"); foot.appendChild(btn("Инвентарь", "ghost", function () { close(); invSheet(); })); foot.appendChild(btn("Закрыть", "", close)); sh.appendChild(foot);
+      draw(0);
+      call("/api/farm/book").then(function (r) { if (r.strains) { data = r; draw(0); } }).catch(function () {});   // полный список — с сервера
+    });
+    return wrap;
+  }
+
   function invSheet() {
     var s = F.state; if (!s) return;
     sheet(function (sh, close) {
