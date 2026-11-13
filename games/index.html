@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131717";
+    var BUILD = "202611131720";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1309,7 +1309,7 @@
     px(c, chx + 2, chy - 8, 2, 1, C.std); px(c, chx + 1, chy - 3, 2, 1, C.std);
     var st = [Math.round(g1[0]) - 1, Math.round(g1[1]) - 7]; px(c, st[0], st[1] + 3, 1, 5, C.wdd); px(c, st[0], st[1] - 1, 1, 5, C.gold); px(c, st[0] - 2, st[1] + 1, 5, 1, C.gold); px(c, st[0], st[1] + 1, 1, 1, "#fff6df");
     // у дома: камни-дорожка к двору, грибы, клумба, тачка, бочки
-    [[30, 92], [37, 96], [45, 99]].forEach(function (q) { px(c, q[0], q[1], 5, 2, C.stl); px(c, q[0] + 1, q[1] + 2, 4, 1, C.st); px(c, q[0], q[1] + 1, 5, 1, C.st); });
+    // (каменные плиты от двери к двору убраны: они ложились поверх забора серыми прямоугольниками)
     [[5, 80], [62, 82], [3, 88]].forEach(function (q, k3) { px(c, q[0], q[1], 1, 3, "#f3e2c0"); px(c, q[0] - 1, q[1] - 1, 3, 2, k3 % 2 ? "#e2492b" : "#ff8fc0"); px(c, q[0] - 1, q[1] - 1, 1, 1, "#ffffff"); });
     for (i = 0; i < 10; i++) flower(c, 44 + (r() * 20 | 0), 86 + (r() * 5 | 0) - (i % 3), C.flowers[i % C.flowers.length]);
     spr(c, 104, 68, BARROW); spr(c, 122, 70, BARREL); spr(c, 131, 74, BARREL);
