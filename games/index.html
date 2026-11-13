@@ -2090,7 +2090,7 @@
     var s = F.state; if (!s) return;
     sheet(function (sh, close) {
       sh.appendChild(el("h3", "", "Амбар"));
-      sh.appendChild(el("div", "sub", "Собранный урожай. Семена с урожая лежат отдельно — в инвентаре."));
+      sh.appendChild(el("div", "sub", "Собранный урожай. Семена лежат в инвентаре."));
       // амбар: урожай превращается в звёздную пыль прямо здесь (его правка 2026-11-14: «не продать станции, а превратить в пыль»)
       var barnBox = el("div"); sh.appendChild(barnBox);
       var drawBarn = function () {
