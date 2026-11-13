@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611131405";
+    var BUILD = "202611131625";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -607,7 +607,7 @@
   <section class="screen" id="farm-neighbors" hidden>
     <div class="farm-top"><button class="exit" type="button" data-go="farm">← На ферму</button><div class="mono">Соседи</div></div>
     <ul class="nlist" id="nlist"></ul>
-    <div class="farm-note">Каждому соседу можно раз в день оставить подарок — 5 звёздной пыли.</div>
+    <div class="farm-note" id="giftnote">Каждому соседу можно раз в день оставить подарок — 5 звёздной пыли.</div>
   </section>
 
   <section class="screen" id="farm-visit" hidden>
@@ -2161,6 +2161,9 @@
     var ul = $("nlist"); ul.innerHTML = "<li class='empty' style='display:block'>Загружаю…</li>";
     call("/api/farm/neighbors").then(function (r) {
       ul.innerHTML = "";
+      var gn = $("giftnote"), per = r.gifts_per_day || 5;
+      if (gn && r.gifts_left != null) gn.textContent = r.gifts_left > 0 ? "Подарков на сегодня осталось: " + r.gifts_left + " из " + per + ". Один подарок — 5 звёздной пыли соседу, каждому не чаще раза в день."
+        : "Сегодня ты уже раздал все " + per + " подарков. Завтра можно снова.";
       if (!r.neighbors.length) { ul.innerHTML = "<li class='empty' style='display:block'>Пока соседей нет — позови друзей из чата</li>"; return; }
       r.neighbors.forEach(function (n) {
         var li = el("li"); var av = el("span", "av"); av.className = "av"; av.style.cssText = "border-radius:50%;display:grid;place-items:center;font-weight:650;background:radial-gradient(circle at 35% 30%,#fff1d2,#ffc469 35%,#8a4a14);color:#2a1406";
@@ -2181,9 +2184,13 @@
       renderPlots($("visitplots"), v.plots, v.now, false, v.strains, v.dry_limit);
       renderShop(pub, v);
       $("visitnote").textContent = v.title + " · пластинок: " + v.vinyls;
-      var gb = $("giftbtn"); gb.disabled = v.gifted; gb.textContent = v.gifted ? "Подарок уже оставлен сегодня" : "Оставить подарок — 5 пыли";
-      gb.onclick = function () { gb.disabled = true; call("/api/farm/gift", { pub: pub }).then(function (r) {
-        if (r.error) { toast(r.error); return; } haptic("success"); toast("Подарок оставлен!"); gb.textContent = "Подарок уже оставлен сегодня"; }); };
+      var gb = $("giftbtn"), left = v.gifts_left == null ? 1 : v.gifts_left, per = v.gifts_per_day || 5;
+      gb.disabled = v.gifted || left <= 0;
+      gb.textContent = v.gifted ? "Подарок уже оставлен сегодня" : left <= 0 ? "Подарки на сегодня кончились (" + per + " из " + per + ")"
+        : "Оставить подарок — 5 пыли (осталось " + left + ")";
+      gb.onclick = function () { gb.disabled = true; haptic("light"); gb.textContent = "Оставляю…"; call("/api/farm/gift", { pub: pub }).then(function (r) {
+        if (r.error) { toast(r.error); gb.textContent = r.error; return; }
+        haptic("success"); toast("Подарок оставлен! Сегодня можно ещё " + r.gifts_left); gb.textContent = "Подарок уже оставлен сегодня"; }); };
     });
   }
 

@@ -327,7 +327,14 @@ export async function neighbors(u: any, hidden: number[]) {
                           (SELECT COUNT(*) FROM f_given g WHERE g.from_user = ? AND g.to_user = f.user AND g.day = ?)
                         FROM f_farms f JOIN g_profiles p ON p.user = f.user
                         WHERE f.user != ?${not} ORDER BY p.points DESC LIMIT 30`, [u.id, today(), u.id, ...hidden]);
-  return { neighbors: rows.map(([pub, name, title, avatar, given]) => ({ pub, name, title, avatar: avatar ? `/avatar/${avatar}` : null, gifted: Number(given) > 0 })) };
+  return { neighbors: rows.map(([pub, name, title, avatar, given]) => ({ pub, name, title, avatar: avatar ? `/avatar/${avatar}` : null, gifted: Number(given) > 0 })),
+           gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY };
+}
+
+// сколько подарков игрок ещё может оставить сегодня
+async function giftsLeft(uid: number) {
+  const [[sent]] = await q("SELECT COUNT(*) FROM f_given WHERE from_user = ? AND day = ?", [uid, today()]);
+  return Math.max(0, GIFTS_PER_DAY - Number(sent));
 }
 
 export async function visit(u: any, pub: string) {
@@ -340,7 +347,7 @@ export async function visit(u: any, pub: string) {
   const shop = await q("SELECT strain, listed FROM f_inv WHERE user = ? AND listed > 0", [f[0]]);
   return { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given,
            plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(f[1]))), now: now(),
-           rain_until: await rainUntil(), dry_limit: DRY_LIMIT,
+           rain_until: await rainUntil(), dry_limit: DRY_LIMIT, gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY,
            shop: shop.map(([strain, n]) => ({ strain, count: Number(n) })),
            strains: await strains([...plots.map((p) => p[1]), ...shop.map((x) => x[0])]), bonuses: BONUSES };
 }
@@ -409,7 +416,7 @@ export async function gift(u: any, pub: string, myName: string) {
   const ins = await q("INSERT OR IGNORE INTO f_given (from_user, to_user, day) VALUES (?, ?, ?) RETURNING 1", [u.id, f[0], today()]);
   if (!ins.length) return { error: "Сегодня ты уже дарил этому соседу" };
   await q("INSERT INTO f_gifts (to_user, from_name, dust, at) VALUES (?, ?, ?, ?)", [f[0], myName, GIFT_DUST, now()]);
-  return { ok: true, dust: GIFT_DUST };
+  return { ok: true, dust: GIFT_DUST, gifts_left: await giftsLeft(u.id) };
 }
 
 export async function setRain(hours: number) {
