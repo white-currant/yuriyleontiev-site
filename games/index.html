@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150006";
+    var BUILD = "202611150012";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -501,6 +501,12 @@
   body[data-screen^="farm"] .slot.empty, body[data-screen^="farm"] .invgrid .slot.empty { background: #4f3017; box-shadow: var(--frame), inset 3px 3px 0 #3b2412; opacity: .75; }
   body[data-screen^="farm"] .slot.on, body[data-screen^="farm"] .invgrid .slot.on { background: #c79a5e; box-shadow: 0 -3px 0 var(--cream), 0 3px 0 var(--cream), -3px 0 0 var(--cream), 3px 0 0 var(--cream),
     0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), inset 3px 3px 0 #e2bd86; }
+  /* сорта с особым свойством — цветная рамка внутри ячейки и камешек в углу (его идея 2026-11-15) */
+  .slot.bn::after { content: ""; position: absolute; inset: 6px; border: 2px solid var(--bn); pointer-events: none; opacity: .9; }
+  .slot.bn::before { content: ""; position: absolute; right: 4px; top: 4px; width: 6px; height: 6px; background: var(--bn); box-shadow: 0 0 0 2px var(--ink); pointer-events: none; z-index: 1; }
+  .slot.bn .n, .slot.bn .vars { z-index: 2; }
+  .bn-rain { --bn: #6fc8ff; } .bn-lucky { --bn: #7ce38f; } .bn-hardy { --bn: #c9d3df; } .bn-rich { --bn: #ffcf4a; } .bn-seedy { --bn: #ff8fd0; }
+  .bnswatch { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--bn); margin-right: 6px; vertical-align: -1px; }
   body[data-screen^="farm"] .slot .n { font-family: var(--pix); font-size: 13px; right: 4px; bottom: 1px; color: var(--cream);
     text-shadow: 1px 0 0 var(--ink), -1px 0 0 var(--ink), 0 1px 0 var(--ink), 0 -1px 0 var(--ink); }
   body[data-screen^="farm"] .slot.more { font-family: var(--pix); font-size: 14px; color: var(--cream2); }
@@ -2056,13 +2062,13 @@
   function renderFarm() {
     var s = F.state; if (!s) return;
     var now = farmNow();
-    $("dustpill").textContent = "✦ " + s.dust;
-    $("waterpill").textContent = "💧 " + s.water + "/" + s.can_max;
+    setText($("dustpill"), "✦ " + s.dust);
+    setText($("waterpill"), "💧 " + s.water + "/" + s.can_max);
     var ban = $("farmbanners"); ban.innerHTML = "";
     var wz = $("weather"), wt = s.weather && s.weather.today, wn = s.weather && s.weather.tomorrow;   // погода дня — значком в шапке
     wz.hidden = !wt;
     if (wt) {
-      wz.textContent = wt.icon;                                 // в шапке только значок; название и смысл — по нажатию
+      setText(wz, wt.icon);                                 // в шапке только значок; название и смысл — по нажатию
       wz.setAttribute("aria-label", wt.name);
       wz.classList.toggle("calm", wt.id === "clear");
       wz.onclick = function () { haptic("light"); toast(wt.icon + " " + wt.name + ": " + wt.effect + ". Ещё " + fmtLeft(wt.until - farmNow()) + ". Завтра: " + wn.icon + " " + wn.name.toLowerCase() + "."); };
@@ -2087,6 +2093,8 @@
   // погода — его иконки 16×16 (2026-11-14): значки погоды приходят с сервера символами и тоже заменяются картинками
   var ICONS = { "✦": "art/dust.png", "💧": "art/water.png", "☾": "art/weather-clear.png", "✨": "art/weather-stardust.png", "🌧": "art/weather-shower.png",
                 "☀": "art/weather-drought.png", "🌬": "art/weather-wind.png", "🌕": "art/weather-fullmoon.png", "⏱": "art/clock.png" }, ICON_RE = /✦|💧|☾|✨|🌧|☀|🌬|🌕|⏱/;
+  var ICON_IMG = {};                                            // заранее загруженные значки: клон показывается сразу, без мигания
+  Object.keys(ICONS).forEach(function (k) { var im = new Image(); im.className = "ico"; im.alt = k; im.src = ICONS[k]; if (im.decode) im.decode().catch(function () {}); ICON_IMG[k] = im; });
   function iconize(root) {
     if (!root || !document.body.contains(root)) return;
     var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), list = [], n;
@@ -2097,7 +2105,7 @@
       var parts = tn.nodeValue.replace(/\uFE0F/g, "").split(/(✦|💧|☾|✨|🌧|☀|🌬|🌕|⏱)/);
       parts.forEach(function (part, i) {
         if (i > 0 && ICONS[parts[i - 1]] && part.charAt(0) === " ") part = part.slice(1);   // пробел после значка — его заменяет отступ
-        if (ICONS[part]) { var im = document.createElement("img"); im.className = "ico"; im.src = ICONS[part]; im.alt = part; f.appendChild(im); }
+        if (ICONS[part]) f.appendChild(ICON_IMG[part].cloneNode(false));
         else if (part) f.appendChild(document.createTextNode(part));
       });
       if (/flex|grid/.test(getComputedStyle(p).display)) { var sp = document.createElement("span"); sp.appendChild(f); f = sp; }   // в кнопке-флексе — одним куском, без зазоров
@@ -2108,10 +2116,11 @@
     if (m.type === "characterData") iconize(m.target); else m.addedNodes.forEach(function (x) { if (x.nodeType === 1 || x.nodeType === 3) iconize(x); });
   }); }).observe(document.body, { childList: true, subtree: true, characterData: true });
   iconize(document.body);
+  function setText(node, t) { if (!node || node._t === t) return; node._t = t; node.textContent = t; }   // тот же текст — не трогаем (значки не мигают)
   function setFarm(st) {
     siblings(st);
     F.state = st; F.fetched = Date.now(); renderFarm(); if (F.invRedraw) F.invRedraw();
-    if (!$("farm-shop").hidden) { $("shopdust").textContent = "✦ " + st.dust; if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
+    if (!$("farm-shop").hidden) { setText($("shopdust"), "✦ " + st.dust); if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
   }
   function farmLoop() {
     clearInterval(F.tick);
@@ -2370,6 +2379,7 @@
     if (key === "can") { canIcon(cv, !s.water); b.setAttribute("aria-label", "Лейка"); b.appendChild(cv); b.appendChild(el("span", "n", s.water + "/" + s.can_max)); }
     else {
       var st = s.strains[key], it = bagOf(key), grp = groupOf(key); cropIcon(cv, st); b.setAttribute("aria-label", itemName(it.strain)); b.appendChild(cv);
+      if (BN_FRAMES && st.bonus) b.classList.add("bn", "bn-" + st.bonus);
       b.appendChild(el("span", "n", grp ? grp.total : freeOf(it)));
       if (grp && grp.ids.length > 1) b.appendChild(el("span", "vars", grp.ids.length + " " + plural(grp.ids.length, "сорт", "сорта", "сортов")));
     }
@@ -2402,7 +2412,7 @@
     for (var k = shown.length; k < 3; k++) bar.appendChild(el("div", "slot empty"));
     var more = el("button", "slot more", keys.length > 3 ? "ещё " + (keys.length - 3) : "все"); more.type = "button";
     more.onclick = function () { haptic("light"); invSheet(); }; bar.appendChild(more);
-    $("selnote").textContent = selText();
+    setText($("selnote"), selText());
   }
   // ---------- справочник растений и гибридов: книжка на пергаменте (открывается по домику) ----------
   // Страницы: как всё растёт; по странице на каждую форму растения (9 расцветок: найденные нарисованы, ненайденные — силуэтом);
@@ -2417,6 +2427,7 @@
     { name: "Evilin", what: "за помощь с графикой", url: "https://t.me/EVILINSTUDIO" },
   ];
   var BONUS_SHORT = { rain: "в звёздный дождь урожай ×3", lucky: "артефакты вдвое чаще", hardy: "не засыхает без воды", rich: "иногда двойной урожай", seedy: "даёт больше семян" };
+  var BN_FRAMES = false;   // рамки сортов с особыми свойствами: готовы, ждут его «пуш»
   var BONUS_NAME = { rain: "Дождевой", lucky: "Счастливый", hardy: "Стойкий", rich: "Щедрый", seedy: "Плодовитый" };
   F.bookPage = 0;
   function bookIcon(cv, s) {                                  // значок в справочнике: холст одного размера у всех форм, растение по центру внизу
@@ -2485,8 +2496,8 @@
           page.appendChild(el("div", "bdim wfoot", "Погода одна на всех и меняется в полночь. Особая погода не повторяется два дня подряд."));
         } else if (p === SHAPES.length + 2) {
           page.appendChild(el("h3", "", "Особые свойства"));
-          page.appendChild(el("div", "bsub", "Бывают у гибридов и передаются потомкам."));
-          Object.keys(BONUS_NAME).forEach(function (k) { var d = el("p", "brule"); d.appendChild(el("b", "", BONUS_NAME[k] + ". ")); d.append((data.bonuses[k] || "").replace(/^./, function (ch) { return ch.toUpperCase(); }) + "."); page.appendChild(d); });
+          page.appendChild(el("div", "bsub", "Бывают у гибридов и передаются потомкам." + (BN_FRAMES ? " В инвентаре такие семена — в цветной рамке." : "")));
+          Object.keys(BONUS_NAME).forEach(function (k) { var d = el("p", "brule"); if (BN_FRAMES) d.appendChild(el("span", "bnswatch bn-" + k)); d.appendChild(el("b", "", BONUS_NAME[k] + ". ")); d.append((data.bonuses[k] || "").replace(/^./, function (ch) { return ch.toUpperCase(); }) + "."); page.appendChild(d); });
         } else {
           // благодарности — отдельная страница; новых людей дописывать в CREDITS
           page.appendChild(el("h3", "", "Благодарности"));
@@ -2583,11 +2594,12 @@
       var box = el("div"); sh.appendChild(box);
       var foot = el("div", "sheetfoot"); sh.appendChild(foot);
       var confirmAll = false;
-      var draw = function () {
+      var draw = function (footOnly) {
         var s = F.state, g = groupItems().filter(function (x) { return x.name === name; })[0];
-        box.innerHTML = ""; foot.innerHTML = "";
+        if (!footOnly) box.innerHTML = ""; foot.innerHTML = "";
         if (!g) { close(); return; }
         if (g.ids.indexOf(F.vsel) < 0) F.vsel = g.key;
+        if (!footOnly) {
         box.appendChild(el("h3", "", name));
         box.appendChild(el("div", "sub", g.ids.length > 1 ? "Сортов: " + g.ids.length + ", семян всего " + g.total + ". У гибридов одного названия свойства немного разные — сравни и оставь лучшие." : "Семян: " + g.total + "."));
         var cols = [["minutes", "рост", -1, function (v) { return fmtLeft(v * 60); }], ["dust", "пыль", 1, function (v) { return v; }],
@@ -2603,11 +2615,17 @@
             r.appendChild(el("span", "vc" + cls, c[3](v)));
           });
           var it = bagOf(id); r.appendChild(el("span", "cnt", "×" + freeOf(it)));
-          r.onclick = function () { haptic("light"); F.vsel = id; confirmAll = false; draw(); };
+          r.dataset.id = id;
+          r.onclick = function () {                               // выбор — сразу, на месте: без перестройки таблицы
+            haptic("light"); F.vsel = id; confirmAll = false;
+            t.querySelectorAll(".vrow.on").forEach(function (x) { x.classList.remove("on"); }); r.classList.add("on");
+            draw(true);
+          };
           t.appendChild(r);
         });
         box.appendChild(t);
         var bon = s.strains[g.ids[0]].bonus; if (bon) box.appendChild(el("div", "sub bonus", "★ " + ((s.bonuses || {})[bon] || "")));
+        }
         // действия с выбранным
         var id = F.vsel, st = s.strains[id], it = bagOf(id), fr = freeOf(it), sd = seedDustOf(st), lbl = g.ids.length > 1 ? " " + (ROMAN[g.ids.indexOf(id)] || "") : "";
         foot.appendChild(el("div", "sub", name + lbl + ": " + fr + " " + plural(fr, "семя", "семени", "семян") + (it.listed ? ", на продаже " + it.listed : "")));
@@ -2629,7 +2647,7 @@
           if (restN) {
             var c3 = el("div", "invacts");
             c3.appendChild(btn(confirmAll ? "Точно? Распылить " + restN + " · ✦ " + restD : "Оставить" + lbl + ", остальные в пыль · ✦ " + restD, confirmAll ? "" : "ghost", function () {
-              if (!confirmAll) { confirmAll = true; haptic("light"); return draw(); }
+              if (!confirmAll) { confirmAll = true; haptic("light"); return draw(true); }
               rest.forEach(function (x) { var n = freeOf(bagOf(x)); if (n > 0) seedsDust(x, n, "inv"); });
               confirmAll = false; F.sel = id; F.pick[name] = id; draw();
             }));
@@ -2892,7 +2910,7 @@
   function itemIconOf(id) { return function (cv) { itemIcon(cv, id); }; }
   function renderShopTab() {
     var s = F.state, box = $("shopview"); if (!s) return;
-    box.innerHTML = ""; $("shopdust").textContent = "✦ " + s.dust;
+    box.innerHTML = ""; setText($("shopdust"), "✦ " + s.dust);
     // в «Купить» — кружок: сколько штук игроки выставили в разделе
     var cnt = { seed: 0, crop: 0, food: 0 }, mk = F.market;
     if (mk) { mk.offers.forEach(function (o) { cnt.seed += o.count; }); (mk.items || []).forEach(function (o) { cnt[catOf(o.item)] += o.count; }); }
@@ -3020,7 +3038,7 @@
     var cur = F.state;
     if (cur.dust < price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
     haptic("success"); buyFx(b, gain, "−✦ " + price);
-    cur.dust -= price; $("shopdust").textContent = "✦ " + cur.dust;
+    cur.dust -= price; setText($("shopdust"), "✦ " + cur.dust);
     b.disabled = true; b.textContent = "Покупаю…";
     call("/api/farm/buy", { pub: pub, strain: id, kind: kind }).then(function (r) {
       if (r.error) { toast(r.error); call("/api/farm").then(setFarm); return openShop("buy"); }
