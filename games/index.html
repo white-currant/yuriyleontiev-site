@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611142341";
+    var BUILD = "202611142351";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -359,6 +359,9 @@
   .selnote { margin-top: 8px; min-height: 2.8em; font-size: 12.5px; line-height: 1.4; color: rgba(255, 255, 255, .82); }
   .sheet .selnote { color: var(--dim); }
   .salecount2 { color: var(--white); font-weight: 600; }
+  .credit { margin-top: 20px; display: flex; align-items: baseline; justify-content: center; gap: 14px; }
+  .credit .cname { font-size: 24px; font-weight: 900; letter-spacing: -.01em; color: #6a3fb0; text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 5px; white-space: nowrap; }
+  .credit .cwhat { font-size: 16px; }
   /* варианты одного сорта: ячейка с пометкой и окно сравнения (его идея 2026-11-14 — как выбор оттенка эмодзи) */
   .slot .vars { position: absolute; left: 5px; top: 3px; font-size: 10px; font-weight: 800; color: #ffe2a8; text-shadow: 0 1px 2px rgba(0, 0, 0, .9); letter-spacing: .02em; }
   .vtable { margin-top: 12px; display: grid; gap: 4px; }
@@ -2408,6 +2411,10 @@
   var COLORS = [["moss", ["Лунный", "Лунные", "Лунная"]], ["berry", ["Звёздный", "Звёздные", "Звёздная"]], ["crystal", ["Кометный", "Кометные", "Кометная"]],
                 ["sun", ["Солнечный", "Солнечные", "Солнечная"]], ["nebula", ["Туманный", "Туманные", "Туманная"]], ["ember", ["Огненный", "Огненные", "Огненная"]],
                 ["frost", ["Ледяной", "Ледяные", "Ледяная"]], ["night", ["Полуночный", "Полуночные", "Полуночная"]], ["aurora", ["Сияющий", "Сияющие", "Сияющая"]]];
+  // благодарности в конце справочника (его просьба 2026-11-14); новых людей — просто дописать строку
+  var CREDITS = [
+    { name: "Evilin", what: "за помощь с графикой", url: "https://t.me/EVILINSTUDIO" },
+  ];
   var BONUS_SHORT = { rain: "в звёздный дождь урожай ×3", lucky: "артефакты вдвое чаще", hardy: "не засыхает без воды", rich: "иногда двойной урожай", seedy: "даёт больше семян" };
   var BONUS_NAME = { rain: "Дождевой", lucky: "Счастливый", hardy: "Стойкий", rich: "Щедрый", seedy: "Плодовитый" };
   F.bookPage = 0;
@@ -2426,7 +2433,7 @@
         var m = {}; data.strains.forEach(function (st) { var k = st.shape + "/" + st.color, e = m[k] = m[k] || { best: null, n: 0 }; e.n++; if (!e.best || (st.price || 0) > (e.best.price || 0)) e.best = st; });
         return m;
       };
-      var N = SHAPES.length + 3;
+      var N = SHAPES.length + 4;                                // + страница благодарностей
       var draw = function (dir) {
         var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage));
         page.innerHTML = ""; page.className = "bpage" + (dir ? (dir > 0 ? " fwd" : " back") : "");
@@ -2475,10 +2482,18 @@
             });
           page.appendChild(tb);
           page.appendChild(el("div", "bdim wfoot", "Погода одна на всех и меняется в полночь. Особая погода не повторяется два дня подряд."));
-        } else {
+        } else if (p === SHAPES.length + 2) {
           page.appendChild(el("h3", "", "Особые свойства"));
           page.appendChild(el("div", "bsub", "Бывают у гибридов и передаются потомкам."));
           Object.keys(BONUS_NAME).forEach(function (k) { var d = el("p", "brule"); d.appendChild(el("b", "", BONUS_NAME[k] + ". ")); d.append((data.bonuses[k] || "").replace(/^./, function (ch) { return ch.toUpperCase(); }) + "."); page.appendChild(d); });
+        } else {
+          // благодарности — отдельная страница; новых людей дописывать в CREDITS
+          page.appendChild(el("h3", "", "Благодарности"));
+          CREDITS.forEach(function (c) {
+            var d = el("div", "credit"), a = el("a", "cname", c.name); a.href = c.url;
+            a.onclick = function (e) { e.preventDefault(); haptic("light"); if (tg && tg.openTelegramLink && /^https:\/\/t\.me\//.test(c.url)) tg.openTelegramLink(c.url); else if (tg && tg.openLink) tg.openLink(c.url); else open(c.url, "_blank"); };
+            d.appendChild(a); if (c.what) d.appendChild(el("div", "cwhat", c.what)); page.appendChild(d);
+          });
         }
         num.textContent = (p + 1) + " / " + N; prev.disabled = p === 0; next.disabled = p === N - 1;
       };
