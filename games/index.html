@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150129";
+    var BUILD = "202611150146";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -121,7 +121,7 @@
     border-radius: 14px; font-weight: 650; font-size: 16px; background: linear-gradient(180deg, #ffe0a3, var(--gold)); color: #2a1406;
     box-shadow: 0 6px 24px rgba(242, 169, 59, .28);
     transition: transform .12s, opacity .2s; }
-  .btn:active { transform: scale(.98); }
+  .btn:active, .btn.pressed { transform: scale(.98); }
   .btn.ghost { background: transparent; color: var(--white); border: 1px solid var(--faint); box-shadow: none; }
   .btn[disabled] { opacity: .45; pointer-events: none; }
 
@@ -543,7 +543,7 @@
   /* кнопки: пиксельные, с «толщиной» снизу */
   body[data-screen^="farm"] .btn { border-radius: 0; font-family: var(--pix); font-weight: 700; font-size: 17px; background: var(--pgold); color: var(--ink);
     box-shadow: var(--frame), inset 0 -5px 0 var(--pgold2), inset 0 3px 0 #ffdc8f; -webkit-backdrop-filter: none; backdrop-filter: none; transition: transform .06s; }
-  body[data-screen^="farm"] .btn:active { transform: translateY(2px); box-shadow: var(--frame), inset 0 -2px 0 var(--pgold2); }
+  body[data-screen^="farm"] .btn.pressed, body[data-screen^="farm"] .btn:active { transform: translateY(2px); box-shadow: var(--frame), inset 0 -2px 0 var(--pgold2); }
   body[data-screen^="farm"] .btn.ghost { background: var(--wood3); color: var(--cream); box-shadow: var(--frame), inset 0 -5px 0 #6e4425, inset 0 3px 0 var(--wood4); }
   body[data-screen^="farm"] .btn[disabled] { opacity: .5; }
   body[data-screen^="farm"] .farm-actions { gap: 14px; padding: 0 3px; margin-top: 14px; }
@@ -2150,6 +2150,8 @@
     if (m.type === "characterData") iconize(m.target); else m.addedNodes.forEach(function (x) { if (x.nodeType === 1 || x.nodeType === 3) iconize(x); });
   }); }).observe(document.body, { childList: true, subtree: true, characterData: true });
   iconize(document.body);
+  // iOS не показывает нажатие (:active) без слушателя касаний — кнопка «не прожималась»; плюс класс на время касания
+  document.addEventListener("touchstart", function (e) { var b = e.target.closest && e.target.closest("button"); if (b) { b.classList.add("pressed"); setTimeout(function () { b.classList.remove("pressed"); }, 160); } }, { passive: true });
   function setText(node, t) { if (!node || node._t === t) return; node._t = t; node.textContent = t; }   // тот же текст — не трогаем (значки не мигают)
   function setFarm(st) {
     siblings(st);
@@ -2297,7 +2299,8 @@
       var props = el("div", "variants");
       var line = function (k, v) { var r = el("div"); r.appendChild(el("b", "", k)); r.appendChild(el("span", "", v)); props.appendChild(r); };
       line("Растёт", fmtLeft(st.minutes * 60) + " под поливом");
-      line("Урожай", "в амбар; одна штука — ✦ " + st.dust + " пыли. За сбор " + st.points + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
+      line("Урожай", "✦ " + st.dust + " пыли за штуку");
+      line("Очки за сбор", st.points + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
       line("Полив", "одного хватает на " + fmtLeft(st.thirst * 60));
       line("Шанс артефакта", Math.round(st.vinyl * 100) + "% с урожая");
       line("Семена с урожая", (st.bonus === "seedy" ? "3–4 (плодовитый)" : "2–3") + " за грядку");
