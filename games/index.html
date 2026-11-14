@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611142220";
+    var BUILD = "202611142227";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1274,7 +1274,7 @@
         var hs = comp[0] * 2654435761 >>> 0;
         var ci = Math.round(comp.reduce(function (a, k) { return a + k % w; }, 0) / comp.length) + w * Math.round(comp.reduce(function (a, k) { return a + (k / w | 0); }, 0) / comp.length);
         var cx0 = ci % w, cy0 = ci / w | 0; px0.forEach(function (p) { p[3] = Math.abs(p[0] - cx0) + Math.abs(p[1] - cy0); });   // расстояние от центра
-        stars.push({ px: px0, ph: (hs % 628) / 100, sp: .0018 + (hs % 97) / 97 * .003, big: comp.length > 2 });
+        stars.push({ px: px0, ph: (hs % 628) / 100, sp: .0004 + (hs % 97) / 97 * .0007, big: comp.length > 2 });
       }
       c.putImageData(new ImageData(d, w, h), 0, 0);
       SKY.sky = a; SKY.planets = cv; SKY.stars = stars; SKY.ready = true; statics = {};
@@ -1283,9 +1283,10 @@
   })();
   function drawStars(c, t) {                                                         // мерцание: у каждой звезды свой ритм
     SKY.stars.forEach(function (s) {
-      var v = .5 + .5 * Math.sin(t * s.sp + s.ph), a = .12 + .88 * v * v * v;                 // большую часть времени тусклее, вспыхивают
-      s.px.forEach(function (p) {                                       // у крупной звезды лучи вырастают на вспышке: ближние раньше, дальние позже
-        var k = !s.big || !p[3] ? (s.big ? Math.max(.45, a) : a) : p[3] === 1 ? (v - .3) / .7 : (v - .65) / .35;
+      // ненавязчиво, фоном (его просьба 2026-11-14): медленно и неглубоко, лучи не гаснут, а чуть тускнеют
+      var v = .5 + .5 * Math.sin(t * s.sp + s.ph), a = .55 + .45 * v;
+      s.px.forEach(function (p) {
+        var k = !s.big || !p[3] ? a : p[3] === 1 ? .6 + .35 * v : .35 + .45 * v;
         if (k > .02) px(c, p[0], p[1], 1, 1, p[2] + Math.min(1, k).toFixed(2) + ")");
       });
     });
@@ -1453,7 +1454,8 @@
     // деревья и цветы по углам луга
     tree(c, 10, 160, 9, TREES[0]); tree(c, 172, 166, 10, TREES[0]); tree(c, 181, 136, 7, TREES[1]); tree(c, 5, 96, 6, TREES[1]);
     for (i = 0; i < 26; i++) { x = 2 + (r() * (FW - 4) | 0); y = 150 + (r() * (FH - 154) | 0); if (Math.abs(x - YC[2][0]) < 14 || (x > 60 && y < 166)) continue; flower(c, x, y, C.flowers[(i * 7) % C.flowers.length]); }
-    spr(c, 28, FH - 6, CAN); spr(c, 138, FH - 5, PRODUCE);
+    if (typeof CANIMG !== "undefined" && CANIMG.n === 2) c.drawImage(CANIMG.full, 27, FH - 11); else spr(c, 28, FH - 6, CAN);
+    spr(c, 138, FH - 5, PRODUCE);
     // передний забор с калиткой у ближнего угла — отдельным слоем, поверх урожая
     var gl = [YC[2][0] - 16, YC[2][1] - 8], gr = [YC[2][0] + 16, YC[2][1] - 8];
     isoFence(f, YC[3][0] + 1, YC[3][1] + 1, gl[0], gl[1]);
@@ -1886,7 +1888,15 @@
     px(c, 2, h - 1, 8, 1, "rgba(40,25,10,.35)");                                 // тень под плодом
     sprS(c, 2, h - 2, rows, { shape: "_fruit", color: s.color, id: s.id, base: s.base });
   }
-  function canIcon(cv) { var c = cv.getContext("2d"); cv.width = 12; cv.height = 9; c.clearRect(0, 0, 12, 9); spr(c, 1, 8, CAN); }
+  // лейка — его рисунок как есть (art/can-full.png; пустая — та же, без воды: art/can-empty.png): полная, пока есть вода, пустая — когда кончилась
+  var CANIMG = { full: new Image(), empty: new Image(), n: 0 };
+  CANIMG.full.onload = CANIMG.empty.onload = function () { if (++CANIMG.n === 2) { statics = {}; if (F.state) renderFarm(); } };
+  CANIMG.full.src = "art/can-full.png"; CANIMG.empty.src = "art/can-empty.png";
+  function canIcon(cv, empty) {
+    var c = cv.getContext("2d");
+    if (CANIMG.n < 2) { cv.width = 12; cv.height = 9; c.clearRect(0, 0, 12, 9); spr(c, 1, 8, CAN); return; }
+    var im = empty ? CANIMG.empty : CANIMG.full; cv.width = im.width; cv.height = im.height; c.clearRect(0, 0, cv.width, cv.height); c.drawImage(im, 0, 0);
+  }
   function farmNow() { return F.state ? F.state.now + (Date.now() - F.fetched) / 1000 : Date.now() / 1000; }
   function farmAnim() {
     if (F.anim) return;
@@ -2259,7 +2269,7 @@
   function makeSlot(key, onPick) {
     var s = F.state, b = el("button", "slot" + (F.sel === key ? " on" : "")); b.type = "button"; b.dataset.key = key;
     var cv = el("canvas", "pix");
-    if (key === "can") { canIcon(cv); b.setAttribute("aria-label", "Лейка"); b.appendChild(cv); b.appendChild(el("span", "n", s.water + "/" + s.can_max)); }
+    if (key === "can") { canIcon(cv, !s.water); b.setAttribute("aria-label", "Лейка"); b.appendChild(cv); b.appendChild(el("span", "n", s.water + "/" + s.can_max)); }
     else { var st = s.strains[key], it = bagOf(key); cropIcon(cv, st); b.setAttribute("aria-label", itemName(it.strain)); b.appendChild(cv); b.appendChild(el("span", "n", freeOf(it))); }
     b.onclick = function () {
       if (F.dragged && Date.now() - F.dragged < 400) return;      // только что перетаскивали
@@ -2549,7 +2559,7 @@
   function canSheet() {
     var s = F.state;
     sheet(function (sh, close) {
-      var cv = el("canvas", "pix bigseed"); canIcon(cv); sh.appendChild(cv);
+      var cv = el("canvas", "pix bigseed"); canIcon(cv, !s.water); sh.appendChild(cv);
       sh.appendChild(el("h3", "", "Лейка"));
       sh.appendChild(el("div", "sub", "Воды на " + s.water + " из " + s.can_max + " поливов. Набрать — нажми на колодец. Растение растёт, только пока полито; без воды рост на паузе, засыхает, только если простоит сухим двое суток. За каждый полив сухой грядки и за каждую посадку — +1 очко в звание."));
       sh.appendChild(btn("Понятно", "ghost", close));
