@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611141020";
+    var BUILD = "202611141022";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1121,12 +1121,13 @@
               m: "#5a3820", M: "#8f5e38", B: "#7a4a26", W: "#ad703f", V: "#cf9458", I: "#8e949c", i: "#cdd2d8",
               Y: "#ffd166", R: "#ff6b6b", O: "#ff9f43", G: "#7cc757", s: "#6cc24f" };
   var CROP = {        // [семечко, росток, подрос, созрел]
+    // созревший мох — низкая подушка с ножками спор, ягоды — крона на стволе: силуэты не путаются в любом цвете (его просьба 2026-11-14)
     moss: [["..b..", ".MMM.", "mmmmm"], [".b.b.", "bbabb", ".ddd."],
            ["...bbb...", ".bbbabbb.", "bbabbbbab", "abbbabbba", ".ddddddd."],
-           ["..c....c...", "...bbbbb.c.", ".bbbcbbbbb.", "bbcbbbbbabb", "babbbabbbcb", "abbabbbabba", ".ddddddddd."]],
+           ["..c...c...c", "..a...a..ca", ".bbbabbbabb", "bbcbbbbcbbb", "babbbcbbbab", "abbabbbabba", ".ddddddddd."]],
     berry: [["..L..", ".MMM.", "mmmmm"], ["L.L.L", ".lLl.", "..l.."],
             ["...LLL...", "..LhLLL..", ".LLLLLLl.", "LhLlLLLLl", "lLLLLlLLl", ".lLLLLLl.", "..lllll.."],
-            ["....LLL....", "..LLhLLLL..", ".LhpPLLpPL.", "LLqpLLLqpLL", "LhLLLpPLLLl", "lLLpPqLLhLl", "lLLqpLLLqLl", ".lLLLLLLLl.", "..lllllll.."]],
+            ["...LL.LLL..", "..LhLLLhLL.", ".LLPpLLLLLl", "LhLqpLLPpLl", "LLLLLLLqpLl", "lLPpLLhLLLl", ".lqpLLLLLl.", "..llLLLll..", "....lMl....", "....mM.....", "...mMmMm..."]],
     crystal: [["..C..", ".MMM.", "mmmmm"], [".w.", ".C.", "CnC", "NnN"],
               ["....w....", "...wC....", "...Cn.w..", ".w.Cn.Cn.", ".CwCnnCn.", ".CnCnNCn.", "CnnNnNnNn", ".NNNNNNN."],
               [".....w.....", "....wC.....", "....Cn...w.", "..w.Cn..wC.", "..CwCnn.Cn.", "..CnCnnCCn.", "w.CnCnNCnn.", "CwCnCnNCnNw", "CnCnNnNCnNC", "CnnNnNnNnNn", ".NNNNNNNNN."]],
