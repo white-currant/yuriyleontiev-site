@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150150";
+    var BUILD = "202611150154";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2110,7 +2110,12 @@
     if (s.gifts.length) {
       var g = el("div", "banner gift"); var names = s.gifts.map(function (x) { return x.from; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
       g.appendChild(el("span", "", "🎁 Подарки от соседей: " + names.slice(0, 3).join(", ") + (names.length > 3 ? " и др." : "")));
-      var gb = el("button", "", "Забрать"); gb.onclick = function () { call("/api/farm/gifts").then(function (res) { toast("+" + res.dust + " звёздной пыли"); setFarm(res.farm); }); };
+      var gb = el("button", "", "Забрать"); gb.onclick = function () {      // сразу: пыль в балансе, баннер прочь; сервер подтвердит
+        var sum = s.gifts.reduce(function (a, x) { return a + (x.dust || 0); }, 0);
+        haptic("success"); s.dust += sum; s.gifts = []; renderFarm(); toast("+" + sum + " звёздной пыли");
+        var dp = $("dustpill"); if (dp) { dp.classList.remove("bump"); void dp.offsetWidth; dp.classList.add("bump"); }
+        farmCall("/api/farm/gifts").catch(function () {});
+      };
       g.appendChild(gb); ban.appendChild(g);
     }
     if (s.sales && s.sales.length) {
