@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611141002";
+    var BUILD = "202611141004";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1490,21 +1490,30 @@
   var MILL = [138, 62], OVEN = [40, 160];
   function jobOf(kit, kind) { var j = null; ((kit && kit.jobs) || []).forEach(function (x) { if (x.kind === kind) j = x; }); return j; }
   function hasBuild(kit, kind) { return !!(kit && kit.builds && kit.builds.indexOf(kind) >= 0); }
-  function drawSign(c, x, y, own) {                                                  // табличка «здесь можно построить»
+  var DIG3 = ["111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001", "111100111001111", "111100111101111", "111001010010010", "111101111101111", "111101111001111"];   // цифры 3×5
+  function drawSign(c, x, y, own, price) {                                           // табличка «здесь можно построить» с ценой
     if (!own) return;
-    px(c, x, y - 9, 2, 10, C.wdd); px(c, x - 5, y - 13, 12, 7, C.k); px(c, x - 4, y - 12, 10, 5, C.wd); px(c, x - 4, y - 12, 10, 1, C.wdl);
-    px(c, x - 1, y - 11, 4, 3, C.gold); px(c, x, y - 12, 2, 1, C.gold);
+    var t = String(price || ""), w = 6 + t.length * 4 + 3, l = x - (w >> 1), top = y - 15;
+    px(c, x - 1, y - 8, 2, 9, C.wdd); px(c, x - 1, y - 8, 1, 9, C.wd);              // столбик
+    px(c, l, top, w, 9, C.k); px(c, l + 1, top + 1, w - 2, 7, C.wdd); px(c, l + 1, top + 1, w - 2, 1, C.wd);   // доска
+    var sx = l + 2, sy = top + 2;                                                      // звёздочка
+    px(c, sx + 2, sy, 1, 5, C.gold); px(c, sx, sy + 2, 5, 1, C.gold); px(c, sx + 1, sy + 1, 3, 3, C.gold);
+    for (var i = 0; i < t.length; i++) {
+      var g = DIG3[+t[i]], ox = sx + 6 + i * 4;
+      for (var k = 0; k < 15; k++) if (g[k] === "1") px(c, ox + k % 3, sy + (k / 3 | 0), 1, 1, "#fff6df");
+    }
   }
-  function drawLot(c, q, own) {                                                       // пустой участок под стройку: утоптанная земля, колышки, верёвка
+  function drawLot(c, q, own, price) {                                                       // пустой участок под стройку: утоптанная земля, колышки, верёвка
     poly(c, q, "#c79a62"); poly(c, [q[0], q[1], [(q[1][0] + q[2][0]) / 2, (q[1][1] + q[2][1]) / 2], [(q[0][0] + q[3][0]) / 2, (q[0][1] + q[3][1]) / 2]], "#b98a55");
     for (var i = 0; i < 4; i++) { var a = q[i], b = q[(i + 1) % 4]; seg(c, a[0], a[1] - 2, b[0], b[1] - 2, "#efe3c4"); }
     q.forEach(function (p) { px(c, Math.round(p[0]), Math.round(p[1]) - 4, 1, 5, C.wdd); px(c, Math.round(p[0]), Math.round(p[1]) - 4, 1, 1, C.wdl); });
-    if (own) { var cx = 0, cy = 0; q.forEach(function (p) { cx += p[0] / 4; cy += p[1] / 4; }); drawSign(c, Math.round(cx), Math.round(cy) + 3, own); }
+    if (own) { var cx = 0, cy = 0; q.forEach(function (p) { cx += p[0] / 4; cy += p[1] / 4; }); drawSign(c, Math.round(cx), Math.round(cy) + 3, own, price); }
   }
+  function lotPrice(kit, kind) { return ((kit && kit.build_list) || {})[kind] ? kit.build_list[kind].price : { barn: 50, mill: 60, oven: 150 }[kind]; }
   var LOTS = { barn: [[82, 51], [100, 60], [116, 52], [98, 43]], mill: [[125, 62], [138, 67], [151, 62], [138, 57]], oven: [[26, 156], [40, 161], [54, 156], [40, 151]] };
   function drawMill(c, t, kit, own, now) {
     var x = MILL[0], y = MILL[1];
-    if (!hasBuild(kit, "mill")) return drawLot(c, LOTS.mill, own);
+    if (!hasBuild(kit, "mill")) return drawLot(c, LOTS.mill, own, lotPrice(kit, "mill"));
     var job = jobOf(kit, "mill"), busy = job && job.ready > now;
     poly(c, [[x - 9, y + 2], [x + 2, y + 6], [x + 14, y + 1], [x + 2, y - 3]], "rgba(30,55,15,.3)");    // тень
     for (var yy = 0; yy < 26; yy++) {                                                // башня: сужается кверху, свет слева
@@ -1528,7 +1537,7 @@
   // печь: глиняный купол из кирпича на каменном основании, кирпичная арка устья, труба с колпаком, поленница и лопата
   function drawOven(c, t, kit, own, now) {
     var x = OVEN[0], y = OVEN[1];
-    if (!hasBuild(kit, "oven")) return drawLot(c, LOTS.oven, own);
+    if (!hasBuild(kit, "oven")) return drawLot(c, LOTS.oven, own, lotPrice(kit, "oven"));
     var job = jobOf(kit, "oven"), busy = job && job.ready > now, ready = job && job.ready <= now, i, j;
     poly(c, [[x - 15, y + 1], [x + 1, y + 6], [x + 27, y + 3], [x + 12, y - 3]], "rgba(30,55,15,.32)");     // тень
     // основание: верхняя грань и две боковые, камни
@@ -1579,7 +1588,7 @@
     if (cv.width !== FW) { cv.width = FW; cv.height = FH; }
     var c = cv.getContext("2d"), i, L = staticLayer(seed);
     c.drawImage(L.back, 0, 0);
-    if (hasBuild(kit, "barn")) c.drawImage(L.shed, 0, 0); else drawLot(c, LOTS.barn, own);
+    if (hasBuild(kit, "barn")) c.drawImage(L.shed, 0, 0); else drawLot(c, LOTS.barn, own, lotPrice(kit, "barn"));
     c.drawImage(L.back2, 0, 0);
     drawMill(c, t, kit, own, now);
     var nextLock = -1; (plots || []).forEach(function (pl, k) { if (pl.locked && nextLock < 0) nextLock = k; });
@@ -1837,13 +1846,13 @@
       var bn = document.createElement("button"); bn.type = "button"; bn.className = "plot well barn";            // амбар: собранный урожай
       bn.style.left = 76 / FW * 100 + "%"; bn.style.top = 26 / FH * 100 + "%"; bn.style.width = 44 / FW * 100 + "%"; bn.style.height = 36 / FH * 100 + "%";
       var nb = barnItems().reduce(function (a, it) { return a + it.count; }, 0), hb = hasBuild(F.state, "barn");
-      bn.appendChild(el("span", "lbl water", !hb ? "амбар · ✦ " + ((F.state.build_list || {}).barn || {}).price : nb ? "амбар · " + nb : "амбар"));
+      bn.appendChild(el("span", "lbl water", !hb ? "амбар" : nb ? "амбар · " + nb : "амбар"));
       bn.onclick = function () { haptic("light"); if (hb) barnSheet(); else kitchenSheet("barn"); }; box.appendChild(bn);
       [["mill", MILL, 30, 42, "мельница", "мука готова!"], ["oven", OVEN, 40, 28, "печь", "готово!"]].forEach(function (q) {     // мельница и печь
         var kb = document.createElement("button"); kb.type = "button"; kb.className = "plot well kitchen";
         kb.style.left = (q[1][0] - q[2] / 2) / FW * 100 + "%"; kb.style.top = (q[1][1] - q[3] + 4) / FH * 100 + "%"; kb.style.width = q[2] / FW * 100 + "%"; kb.style.height = q[3] / FH * 100 + "%";
         var st = F.state, job = jobOf(st, q[0]), tn = farmNow(), txt;
-        if (!hasBuild(st, q[0])) txt = q[4] + " · ✦ " + ((st.build_list || {})[q[0]] || {}).price;
+        if (!hasBuild(st, q[0])) txt = q[4];
         else if (job) txt = job.ready <= tn ? q[5] : fmtShort(job.ready - tn);
         else txt = q[4];
         kb.appendChild(el("span", "lbl water" + (job && job.ready <= tn ? " ready" : ""), txt));
