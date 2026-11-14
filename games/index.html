@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150122";
+    var BUILD = "202611150129";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2504,9 +2504,13 @@
       var rules = function (list) { list.forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); }); };
       var draw = function (dir) {
         var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage)), SH = SHAPES.length;
+        // порядок страниц (его решение 2026-11-15): сначала текстовые, потом виды растений, в конце благодарности
+        var ORDER = [0, 1, SH + 2, SH + 3, SH + 4, SH + 5], q;
+        for (var oi = 2; oi <= SH + 1; oi++) ORDER.push(oi);
+        ORDER.push(SH + 6); q = ORDER[p];
         page.innerHTML = ""; page.scrollTop = 0; page.className = "bpage" + (dir ? (dir > 0 ? " fwd" : " back") : "");
         void page.offsetWidth; page.classList.add("in");
-        if (p === 0) {
+        if (q === 0) {
           page.appendChild(el("h3", "", "Справочник лунного садовода"));
           page.appendChild(el("div", "bsub", "Найдено видов: " + Object.keys(kn).length + " из " + SHAPES.length * COLORS.length));
           rules([
@@ -2517,7 +2521,7 @@
             ["Лопата", "Внизу слева — лейка и лопата. Лопатой можно выкопать растение, посаженное по ошибке: семя вернётся в инвентарь, очко за посадку уйдёт обратно."],
             ["Грядки", "Сначала открыты три грядки, остальные покупаются за звёздную пыль — каждая следующая дороже."],
           ]);
-        } else if (p === 1) {
+        } else if (q === 1) {
           page.appendChild(el("h3", "", "Гибриды и мутации"));
           page.appendChild(el("div", "bsub", "Как выводить новые сорта"));
           rules([
@@ -2527,10 +2531,10 @@
             ["Особые свойства", "Если у родителя есть особое свойство, гибрид унаследует его чаще чем в половине случаев. Если нет — новое свойство иногда появляется само, примерно у одного гибрида из семи."],
             ["Варианты сорта", "Гибриды с одинаковым названием могут чуть отличаться свойствами. В инвентаре они лежат в одной ячейке с пометкой «N сорта»; нажми на неё дважды — сравнишь варианты и оставишь лучшие, а остальные распылишь или продашь."],
           ]);
-        } else if (p <= SH + 1) {
-          var sh2 = SHAPES[p - 2], found = COLORS.filter(function (c) { return kn[sh2[0] + "/" + c[0]]; }).length;
+        } else if (q <= SH + 1) {
+          var sh2 = SHAPES[q - 2], found = COLORS.filter(function (c) { return kn[sh2[0] + "/" + c[0]]; }).length;
           page.appendChild(el("h3", "", sh2[1]));
-          page.appendChild(el("div", "bsub", "Найдено расцветок: " + found + " из " + COLORS.length + (p > 5 ? " · только мутацией" : "")));
+          page.appendChild(el("div", "bsub", "Найдено расцветок: " + found + " из " + COLORS.length + (q > 5 ? " · только мутацией" : "")));
           var grid = el("div", "bgrid"), info = el("div", "binfo", "Нажми на растение, чтобы узнать о нём.");
           COLORS.forEach(function (c) {
             var e = kn[sh2[0] + "/" + c[0]], cell = el("button", "bcell" + (e ? "" : " unknown")); cell.type = "button";
@@ -2547,7 +2551,7 @@
             grid.appendChild(cell);
           });
           page.appendChild(grid); page.appendChild(info);
-        } else if (p === SH + 2) {
+        } else if (q === SH + 2) {
           var wv = (F.state && F.state.weather) || {};
           page.appendChild(el("h3", "", "Погода"));
           page.appendChild(el("div", "bsub", wv.today ? "Сегодня: " + wv.today.icon + " " + wv.today.name + " · завтра: " + wv.tomorrow.icon + " " + wv.tomorrow.name : "Каждый день — своя погода"));
@@ -2562,7 +2566,7 @@
             });
           page.appendChild(tb);
           page.appendChild(el("div", "bdim wfoot", "Погода одна на всех и меняется в полночь. Особая погода не повторяется два дня подряд."));
-        } else if (p === SH + 3) {
+        } else if (q === SH + 3) {
           page.appendChild(el("h3", "", "Особые свойства"));
           page.appendChild(el("div", "bsub", "Бывают у гибридов и передаются потомкам"));
           if (BN_FRAMES) page.appendChild(el("p", "brule", "В инвентаре такие семена — в рамке своего цвета."));
@@ -2572,7 +2576,7 @@
             var t = el("p", "brule"); t.appendChild(el("b", "", BONUS_NAME[k] + ". ")); t.append((data.bonuses[k] || "").replace(/^./, function (ch) { return ch.toUpperCase(); }) + ".");
             d.appendChild(t); page.appendChild(d);
           });
-        } else if (p === SH + 4) {
+        } else if (q === SH + 4) {
           page.appendChild(el("h3", "", "Кухня"));
           page.appendChild(el("div", "bsub", "Постройки на ферме покупаются за звёздную пыль"));
           rules([
@@ -2590,7 +2594,7 @@
             row.appendChild(tx); rl.appendChild(row);
           });
           page.appendChild(rl);
-        } else if (p === SH + 5) {
+        } else if (q === SH + 5) {
           page.appendChild(el("h3", "", "Лавка и пыль"));
           page.appendChild(el("div", "bsub", "Звёздная пыль — деньги фермы"));
           rules([
