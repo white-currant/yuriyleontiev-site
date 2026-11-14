@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611141004";
+    var BUILD = "202611141005";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1451,10 +1451,7 @@
       for (var k2 = 0; k2 < 5; k2++) { var a2 = r() * 1.2 - .6, b2 = r() * 1.2 - .6; tuft(c, Math.round(cx + a2 * HW), Math.round(cy + b2 * HH)); }
       for (var k3 = 0; k3 < 3; k3++) flower(c, Math.round(cx + (r() - .5) * HW), Math.round(cy + (r() - .5) * HH), C.flowers[(i + k3) % 6]);
       if (!sign) return;                                                             // табличка — только на следующей к покупке
-      var sx = cx - 6, sy = cy - 14;                                                 // табличка со звездой
-      px(c, sx + 5, sy + 8, 2, 9, C.wdd); px(c, sx + 3, sy + 17, 6, 1, "rgba(40,60,20,.4)");
-      px(c, sx - 1, sy - 1, 14, 10, C.k); px(c, sx, sy, 12, 8, C.wd); px(c, sx, sy, 12, 1, C.wdl);
-      px(c, sx + 5, sy + 2, 2, 4, C.gold); px(c, sx + 4, sy + 3, 4, 2, C.gold);
+      px(c, cx - 3, cy + 2, 6, 1, "rgba(40,60,20,.4)"); drawSign(c, cx, cy + 2, true, pl.price);   // табличка с ценой
       return;
     }
     var inf = pl.crop ? plotInfo(pl, now, ss, dryLim) : null, wet = inf && inf.wet, dry = inf && !inf.wet && !inf.ripe;
@@ -1824,7 +1821,7 @@
       b.style.left = (BC[i][0] - HW) / FW * 100 + "%"; b.style.top = (BC[i][1] - HH - 8) / FH * 100 + "%";
       b.style.width = HW * 2 / FW * 100 + "%"; b.style.height = (HH * 2 + 11) / FH * 100 + "%";
       var lbl = document.createElement("span"), inf = pl.crop ? plotInfo(pl, now, ss, dryLim) : null; lbl.className = "lbl";
-      if (pl.locked) lbl.textContent = own && pl.idx === F.state.unlocked ? "✦ " + pl.price : "";
+      if (pl.locked) lbl.textContent = "";
       else if (!pl.crop) lbl.textContent = own ? "посадить" : "пусто";
       else if (!inf) lbl.textContent = "…";
       else if (inf.dead) { lbl.textContent = own ? "убрать" : "засохло"; lbl.classList.add("dead"); }
