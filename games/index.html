@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611141018";
+    var BUILD = "202611141020";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2291,6 +2291,10 @@
     });
   }
   // амбар — сарай на карте: собранный урожай (плоды). Сажать его нельзя — он идёт в звёздную пыль, а дальше на кухню.
+  function fitIcon(cv, pct) {                                   // вписать иконку в ячейку по большей стороне: высокие колосья не упираются в края
+    if (cv.width >= cv.height) { cv.style.width = pct + "%"; cv.style.height = "auto"; }
+    else { cv.style.height = pct + "%"; cv.style.width = "auto"; }
+  }
   function barnSheet() {
     var s = F.state; if (!s) return;
     sheet(function (sh, close) {
@@ -2306,7 +2310,7 @@
         barn.forEach(function (it) {
           var st = itemOf(it.strain), b = el("button", "slot" + (F.barnSel === it.strain ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
           total += it.count * st.dust;
-          var cv = el("canvas", "pix"); itemIcon(cv, it.strain); cv.style.width = it.strain.indexOf("p:") === 0 ? "92%" : "80%"; b.appendChild(cv);   b.appendChild(el("span", "n", it.count));   // в амбаре — крупно
+          var cv = el("canvas", "pix"); itemIcon(cv, it.strain); fitIcon(cv, it.strain.indexOf("p:") === 0 ? 84 : 70); b.appendChild(cv);   b.appendChild(el("span", "n", it.count));   // в амбаре — крупно
           b.onclick = function () { haptic("light"); F.barnSel = F.barnSel === it.strain ? null : it.strain; drawBarn(); };
           bgrid.appendChild(b);
         });
