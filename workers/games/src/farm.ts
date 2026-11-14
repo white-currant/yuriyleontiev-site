@@ -253,14 +253,15 @@ export async function farmState(u: any) {
   const sales = await q("SELECT buyer_name, strain, price FROM f_sales WHERE seller = ? AND seen = 0 ORDER BY id LIMIT 20", [u.id]);
   const barn = (await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])).map(([strain, count]) => ({ strain, count: Number(count) }));
   const stall = (await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [u.id])).map(([item, listed]) => ({ item: String(item), listed: Number(listed) }));
+  const chest = (await q("SELECT strain, count FROM f_chest WHERE user = ? AND count > 0", [u.id])).map(([strain, count]) => ({ strain: String(strain), count: Number(count) }));
   const bs = [...barn.map((b) => b.strain), ...stall.map((x) => x.item)];
   return {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked))),
-    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean)]),
+    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
     ...(await kitchenOf(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...(await q("SELECT recipe FROM f_jobs WHERE user = ?", [u.id])).map((x) => "p:" + x[0])])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY),
-    vinyls, inv, barn, stall, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
+    vinyls, inv, barn, stall, chest, seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })),
   };
 }
@@ -561,6 +562,41 @@ export async function list(u: any, strain: string, delta: number) {
   return { farm: await farmState(u) };
 }
 
+// ---------- сундук: лишние семена (2026-11-14) ----------
+// delta > 0 — убрать в сундук из инвентаря (выставленные на продажу не трогаем), < 0 — достать обратно.
+export async function chestMove(u: any, strain: string, delta: number) {
+  await ensureFarm(u);
+  const d = Math.max(-100000, Math.min(100000, Math.round(delta) || 0));
+  if (!strain || !d) return { farm: await farmState(u) };
+  if (d > 0) {
+    if (!(await q("UPDATE f_inv SET count = count - ? WHERE user = ? AND strain = ? AND count - listed >= ? RETURNING 1", [d, u.id, strain, d])).length)
+      return { error: "В инвентаре столько нет" };
+    await q("INSERT INTO f_chest (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count", [u.id, strain, d]);
+  } else {
+    const k = -d;
+    if (!(await q("UPDATE f_chest SET count = count - ? WHERE user = ? AND strain = ? AND count >= ? RETURNING 1", [k, u.id, strain, k])).length)
+      return { error: "В сундуке столько нет" };
+    await q("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count", [u.id, strain, k]);
+  }
+  return { farm: await farmState(u) };
+}
+
+// семена → звёздная пыль (его просьба 2026-11-14): 40% цены семени — базовые дешевле, чем у станции (купить и распылить невыгодно)
+export const SEED_DUST = 0.4;
+export const seedDust = (st: Strain) => Math.max(1, Math.floor((st.base ? st.cost || 1 : st.price || 1) * SEED_DUST));
+export async function seedsToDust(u: any, strain: string, n: number, from = "inv") {
+  await ensureFarm(u);
+  const st = (await strains([strain]))[strain];
+  if (!st) return { error: "Таких семян нет" };
+  const k = Math.max(1, Math.min(100000, Math.round(n) || 1)), got = k * seedDust(st);
+  const ok = from === "chest"
+    ? await q("UPDATE f_chest SET count = count - ? WHERE user = ? AND strain = ? AND count >= ? RETURNING 1", [k, u.id, strain, k])
+    : await q("UPDATE f_inv SET count = count - ? WHERE user = ? AND strain = ? AND count - listed >= ? RETURNING 1", [k, u.id, strain, k]);
+  if (!ok.length) return { error: from === "chest" ? "В сундуке столько нет" : "Столько свободных семян нет" };
+  await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [got, u.id]);
+  return { dust: got, farm: await farmState(u) };
+}
+
 // ---------- прилавок: урожай и продукты игрокам (2026-11-14) ----------
 // Цена — в полтора раза больше, чем дать пыль в амбаре: распылить — самое невыгодное, продать — выгоднее, еда — ещё выгоднее.
 const STALL_MARKUP = 1.5;
@@ -694,7 +730,7 @@ export async function setRain(_hours: number) {           // посты кана
 
 export async function forgetFarm(uid: number) {
   for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM g_items WHERE user = ? AND game = 'farm'",
-                     "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?", "DELETE FROM f_stall WHERE user = ?", "DELETE FROM f_prices WHERE user = ?",
+                     "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?", "DELETE FROM f_stall WHERE user = ?", "DELETE FROM f_chest WHERE user = ?", "DELETE FROM f_prices WHERE user = ?",
                      "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?", "DELETE FROM f_builds WHERE user = ?", "DELETE FROM f_jobs WHERE user = ?"]) await q(sql, [uid]);
   await q("DELETE FROM f_given WHERE from_user = ? OR to_user = ?", [uid, uid]);
 }

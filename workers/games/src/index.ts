@@ -416,6 +416,8 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/seeds": return json(await farm.buySeeds(user, String(body.crop || ""), Number(body.n || 1)));
     case "/api/farm/list": return json(await farm.list(user, String(body.strain || ""), Number(body.delta || 0)));
     case "/api/farm/price": return json(await farm.setPrice(user, String(body.item || "").slice(0, 80), Number(body.price || 0), body.kind === "seed" ? "seed" : "item"));
+    case "/api/farm/seed-dust": return json(await farm.seedsToDust(user, String(body.strain || "").slice(0, 80), Number(body.n || 1), body.from === "chest" ? "chest" : "inv"));
+    case "/api/farm/chest": return json(await farm.chestMove(user, String(body.strain || "").slice(0, 80), Number(body.delta || 0)));
     case "/api/farm/stall": return json(await farm.listItem(user, String(body.item || "").slice(0, 80), Number(body.delta || 0)));
     case "/api/farm/sales/seen": return json(await farm.salesSeen(user));
     case "/api/farm/buy": {

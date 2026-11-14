@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611142233";
+    var BUILD = "202611142257";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1497,7 +1497,7 @@
     var base = PAL[s.color] || PAL.moss; if (!s.id || s.base || CROPS0[s.id]) return base;
     var hsh = 0; for (var i = 0; i < s.id.length; i++) hsh = (hsh * 31 + s.id.charCodeAt(i)) >>> 0;
     // подмес одного из шести тонов + чуть светлее/темнее: заметно даже на белых раскрасках.
-    // Сорта с одним названием у игрока (SIBL) получают тона по порядку — гарантированно разные (одинаковые «Щедрые ягоды» путались).
+    // Сорта одного вида у игрока (SIBL: та же форма и раскраска, любое название) получают тона по порядку — гарантированно разные (одинаковые «Щедрые ягоды» путались).
     var TONES = ["#ff6fae", "#3fe0a6", "#ffc23a", "#9b7bff", "#43b8ff", "#ff8a4a"], sib = SIBL[s.id];
     var ti = sib != null ? sib % 6 : hsh % 6, dl = sib != null ? [0, -.07, .06][Math.floor(sib / 6) % 3] : [-.06, 0, .05][Math.floor(hsh / 6) % 3], mixK = sib != null ? .38 : .3;
     var key = s.id + s.color + ":" + ti + ":" + dl; if (VARS[key]) return VARS[key];
@@ -1507,9 +1507,9 @@
   }
   var CROPS0 = { moss: 1, berry: 1, crystal: 1, wheat: 1, millet: 1, rye: 1 };
   var SIBL = {};
-  function siblings(st) {                                     // свои сорта с одинаковым названием → номер по порядку
+  function siblings(st) {                                     // свои сорта одного вида (форма + раскраска) → номер по порядку
     var by = {}; SIBL = {};
-    Object.keys((st && st.strains) || {}).forEach(function (id) { var x = st.strains[id]; if (x && !x.base && !CROPS0[id]) (by[x.name] = by[x.name] || []).push(id); });
+    Object.keys((st && st.strains) || {}).forEach(function (id) { var x = st.strains[id]; if (x && !x.base && !CROPS0[id]) { var k = x.shape + "/" + x.color; (by[k] = by[k] || []).push(id); } });
     Object.keys(by).forEach(function (n) { if (by[n].length > 1) by[n].sort().forEach(function (id, i) { SIBL[id] = i; }); });
   }
   function sprS(c, x, yb, rows, s, dead) {
@@ -1594,7 +1594,7 @@
   var HEN = [["..R...", ".wwwY.", "wwwww.", "wwwww.", ".y.y.."], ["..R...", ".wwwY.", "wwwww.", "wwwww.", "y...y."]];
   var HENPAL = { w: "#fff6e6", R: "#e2492b", Y: "#ffb627", y: "#e08a1c" };
   // ---------- мельница и печь (2026-11-14): рисуются поверх сцены, т.к. зависят от того, построены ли и работают ли ----------
-  var MILL = [138, 62], OVEN = [40, 160];
+  var MILL = [138, 62], OVEN = [40, 160], CHEST = [17, 95], CHEST_ON = false;   // сундук готов, но выключен (его решение 2026-11-14: ждёт спрайта художника)
   function jobOf(kit, kind) { var j = null; ((kit && kit.jobs) || []).forEach(function (x) { if (x.kind === kind) j = x; }); return j; }
   function hasBuild(kit, kind) { return !!(kit && kit.builds && kit.builds.indexOf(kind) >= 0); }
   var DIG3 = ["111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001", "111100111001111", "111100111101111", "111001010010010", "111101111101111", "111101111001111"];   // цифры 3×5
@@ -1618,6 +1618,27 @@
   }
   function lotPrice(kit, kind) { return ((kit && kit.build_list) || {})[kind] ? kit.build_list[kind].price : { barn: 50, mill: 200, oven: 300 }[kind]; }
   var LOTS = { barn: [[82, 51], [100, 60], [116, 52], [98, 43]], mill: [[125, 62], [138, 67], [151, 62], [138, 57]], oven: [[26, 156], [40, 161], [54, 156], [40, 151]] };
+  // сундук у домика в изометрии, как амбар и печь: светлая левая грань, тень справа, крышка, железные полосы, замок
+  function drawChest(c, own, n) {
+    var x = CHEST[0] + 4, y = CHEST[1] - 1, H = 4, L = 3;
+    var A = [x - 6, y - 3], B = [x, y], Cc = [x + 6, y - 3], D = [x, y - 6];
+    var up = function (p, h) { return [p[0], p[1] - h]; }, lerp = function (p, q, t2) { return [p[0] + (q[0] - p[0]) * t2, p[1] + (q[1] - p[1]) * t2]; };
+    poly(c, [[A[0], A[1] + 1], [B[0], B[1] + 2], [Cc[0] + 4, Cc[1] + 1], [D[0] + 4, D[1] + 1]], "rgba(30,55,15,.32)");      // тень
+    poly(c, [A, B, up(B, H), up(A, H)], "#9a6438"); poly(c, [B, Cc, up(Cc, H), up(B, H)], "#6e4425");                      // ящик
+    for (var i = 1; i < 4; i++) { var q = lerp(A, B, i / 4); seg(c, q[0], q[1] - 1, q[0], q[1] - H + 1, "#86552f"); }        // доски
+    for (i = 1; i < 4; i++) { var q2 = lerp(B, Cc, i / 4); seg(c, q2[0], q2[1] - 1, q2[0], q2[1] - H + 1, "#5a361d"); }
+    poly(c, [up(A, H), up(B, H), up(B, H + L), up(A, H + L)], "#b57a45"); poly(c, [up(B, H), up(Cc, H), up(Cc, H + L), up(B, H + L)], "#8a5530");   // крышка
+    poly(c, [up(A, H + L), up(B, H + L), up(Cc, H + L), up(D, H + L)], "#d39a5e");                                           // верх крышки
+    seg(c, up(A, H + L)[0], up(A, H + L)[1], up(B, H + L)[0], up(B, H + L)[1], "#e8b779");                                   // блик по ребру
+    seg(c, up(A, H)[0], up(A, H)[1], up(B, H)[0], up(B, H)[1], C.k); seg(c, up(B, H)[0], up(B, H)[1], up(Cc, H)[0], up(Cc, H)[1], C.k);   // щель крышки
+    seg(c, A[0], A[1], B[0], B[1], "#3a2414"); seg(c, B[0], B[1], Cc[0], Cc[1], "#2a190d");                                 // низ
+    [.25, .75].forEach(function (t) {                                                                                        // железные полосы
+      var a = lerp(A, B, t), d = lerp(D, Cc, t);
+      seg(c, a[0], a[1], a[0], a[1] - H - L, "#8e949c"); seg(c, a[0], a[1] - H - L, d[0], d[1] - H - L, "#b4bac2");
+      var r = lerp(B, Cc, t); seg(c, r[0], r[1], r[0], r[1] - H - L, "#6c727b");
+    });
+    var lk = lerp(A, B, .5); px(c, Math.round(lk[0]) - 1, Math.round(lk[1]) - H - 1, 2, 3, C.gold); px(c, Math.round(lk[0]) - 1, Math.round(lk[1]) - H + 1, 2, 1, "#b8862d");   // замок
+  }
   function drawMill(c, t, kit, own, now) {
     var x = MILL[0], y = MILL[1];
     if (!hasBuild(kit, "mill")) return drawLot(c, LOTS.mill, own, lotPrice(kit, "mill"));
@@ -1702,6 +1723,7 @@
     BORDER.forEach(function (k) { if (plots && plots[k] && BC[k]) drawBed(c, plots[k], k, now, t, ss, dryLim, own, k === nextLock); });   // дальние грядки — раньше
     c.drawImage(L.front, 0, 0);
     drawOven(c, t, kit, own, now);
+    if (CHEST_ON) drawChest(c, own);
     if (own) drawFx(c, t);
     for (i = 0; i < 4; i++) {                                                      // дым из трубы
       var ph = (t / 1800 + i / 4) % 1;
@@ -1974,6 +1996,10 @@
       var nb = barnItems().reduce(function (a, it) { return a + it.count; }, 0), hb = hasBuild(F.state, "barn");
       bn.appendChild(el("span", "lbl water", !hb ? "амбар" : nb ? "амбар · " + nb : "амбар"));
       bn.onclick = function () { haptic("light"); if (hb) barnSheet(); else kitchenSheet("barn"); }; box.appendChild(bn);
+      if (CHEST_ON) { var ch = document.createElement("button"); ch.type = "button"; ch.className = "plot well chest";        // сундук: лишние семена
+      ch.style.left = (CHEST[0] - 3) / FW * 100 + "%"; ch.style.top = (CHEST[1] - 14) / FH * 100 + "%"; ch.style.width = 16 / FW * 100 + "%"; ch.style.height = 16 / FH * 100 + "%";
+      var nch = (F.state.chest || []).reduce(function (a, it) { return a + it.count; }, 0);
+      ch.appendChild(el("span", "lbl water", nch ? "сундук · " + nch : "сундук")); ch.onclick = function () { haptic("light"); chestSheet(); }; box.appendChild(ch); }
       [["mill", MILL, 30, 42, "мельница", "мука готова!"], ["oven", OVEN, 40, 28, "печь", "готово!"]].forEach(function (q) {     // мельница и печь
         var kb = document.createElement("button"); kb.type = "button"; kb.className = "plot well kitchen";
         kb.style.left = (q[1][0] - q[2] / 2) / FW * 100 + "%"; kb.style.top = (q[1][1] - q[3] + 4) / FH * 100 + "%"; kb.style.width = q[2] / FW * 100 + "%"; kb.style.height = q[3] / FH * 100 + "%";
@@ -2196,6 +2222,12 @@
       sh.appendChild(props);
       var mine = s && !opt.foreign ? bagOf(st.id) : null;
       if (mine) sh.appendChild(el("div", "sub", "У тебя: " + mine.count));
+      if (mine && freeOf(mine) > 0) {                                                // лишние семена — в пыль
+        var sd = seedDustOf(st), fr = freeOf(mine), da = el("div", "invacts");
+        da.appendChild(btn("1 в пыль · ✦ " + sd, "ghost", function () { close(); seedsDust(st.id, 1, "inv"); }));
+        if (fr > 1) da.appendChild(btn("все " + fr + " в пыль · ✦ " + sd * fr, "ghost", function () { close(); seedsDust(st.id, fr, "inv"); }));
+        sh.appendChild(da);
+      }
       if (mine && !st.base) {                                                       // продажа: сколько семян лежит в твоей лавке
         var h = el("div", "mono", "Твоя лавка"); h.style.marginTop = "18px"; sh.appendChild(h);
         sh.appendChild(el("div", "sub", "Соседи, которые зайдут к тебе в гости, смогут купить выставленные семена по ✦ " + st.price +
@@ -2411,6 +2443,67 @@
     return wrap;
   }
 
+  // сундук у домика: лишние семена. Убрал — в инвентаре их нет (не посадить и не продать), достал — вернулись
+  function seedDustOf(st) { var k = (F.state && F.state.seed_dust) || .4; return Math.max(1, Math.floor((st.base ? st.cost || 1 : st.price || 1) * k)); }
+  function seedsDust(id, n, from) {                              // семена → пыль сразу, сервер подтвердит
+    var s = F.state, st = s.strains[id], got = n * seedDustOf(st);
+    if (from === "chest") chestOf(id).count -= n; else bagOf(id).count -= n;
+    if (F.sel === id && freeOf(bagOf(id)) <= 0) F.sel = "can";
+    s.dust += got; haptic("success"); toast("+✦ " + got + " звёздной пыли"); renderFarm();
+    farmCall("/api/farm/seed-dust", { strain: id, n: n, from: from }).catch(function () {});
+  }
+  function chestOf(id) { var r = null; (F.state.chest || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
+  function chestSheet() {
+    var s = F.state; if (!s) return;
+    sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", "Сундук"));
+      sh.appendChild(el("div", "sub", "Лишние семена. Из сундука их не посадить и не продать — сначала достань в инвентарь. Совсем ненужные можно превратить в звёздную пыль."));
+      var box = el("div"); sh.appendChild(box);
+      var draw = function () {
+        box.innerHTML = "";
+        var cur = F.state, sel = F.chestSel, inChest = (cur.chest || []).filter(function (it) { return it.count > 0 && cur.strains[it.strain]; }), inBag = seedItems();
+        var grid = function (title, items, from) {
+          var h = el("div", "mono", title); h.style.marginTop = "16px"; box.appendChild(h);
+          var g = el("div", "invgrid");
+          items.forEach(function (it) {
+            var n = from === "bag" ? freeOf(it) : it.count, key = from + ":" + it.strain;
+            var b = el("button", "slot" + (sel === key ? " on" : "")); b.type = "button";
+            var cv = el("canvas", "pix"); cropIcon(cv, cur.strains[it.strain]); b.appendChild(cv); b.appendChild(el("span", "n", n));
+            b.onclick = function () { haptic("light"); F.chestSel = sel === key ? null : key; draw(); };
+            g.appendChild(b);
+          });
+          for (var k = items.length; k < Math.max(5, Math.ceil(items.length / 5) * 5); k++) g.appendChild(el("div", "slot empty"));
+          box.appendChild(g);
+        };
+        grid(inChest.length ? "В сундуке" : "В сундуке пусто", inChest, "chest");
+        grid("В инвентаре", inBag, "bag");
+        if (sel && !((sel.indexOf("bag:") === 0 ? inBag : inChest).some(function (it) { return sel === (sel.slice(0, sel.indexOf(":")) + ":" + it.strain); }))) sel = F.chestSel = null;
+        if (!sel) { box.appendChild(el("div", "sub", "Нажми на семена в инвентаре, чтобы убрать их в сундук, или в сундуке — чтобы достать.")); return; }
+        var from = sel.slice(0, sel.indexOf(":")), id = sel.slice(sel.indexOf(":") + 1), st = cur.strains[id];
+        var have = from === "bag" ? freeOf(bagOf(id)) : chestOf(id).count;
+        box.appendChild(el("div", "sub", itemName(id) + (SIBL[id] != null ? " (" + strainCode(st) + ")" : "") + " · " + (from === "bag" ? "в инвентаре " : "в сундуке ") + have));
+        var move = function (n) {                                   // n > 0 — в сундук, n < 0 — обратно
+          haptic("light");
+          var b0 = bagOf(id); if (n > 0) b0.count -= n; else addToBag(id, -n);
+          var c0 = chestOf(id); if (c0) c0.count += n; else (F.state.chest = F.state.chest || []).push({ strain: id, count: n });
+          if ((n > 0 ? freeOf(bagOf(id)) : chestOf(id).count) <= 0) F.chestSel = null;
+          if (F.sel === id && freeOf(bagOf(id)) <= 0) F.sel = "can";
+          draw(); renderFarm(); farmCall("/api/farm/chest", { strain: id, delta: n }).catch(function () {});
+        };
+        var a = el("div", "invacts"), sg = from === "bag" ? 1 : -1;
+        a.appendChild(btn(from === "bag" ? "В сундук: 1" : "Достать 1", "ghost", function () { move(sg); }));
+        if (have > 1) a.appendChild(btn((from === "bag" ? "В сундук все " : "Достать все ") + have, "", function () { move(sg * have); }));
+        box.appendChild(a);
+        var sd = seedDustOf(st), b2 = el("div", "invacts"), src = from === "bag" ? "inv" : "chest";
+        var dust = function (n) { seedsDust(id, n, src); if ((src === "chest" ? chestOf(id).count : freeOf(bagOf(id))) <= 0) F.chestSel = null; draw(); };
+        b2.appendChild(btn("1 в пыль · ✦ " + sd, "ghost", function () { dust(1); }));
+        if (have > 1) b2.appendChild(btn("все в пыль · ✦ " + sd * have, "ghost", function () { dust(have); }));
+        box.appendChild(b2);
+      };
+      draw();
+      var acts = el("div", "salebtns"); acts.appendChild(btn("Готово", "", close)); sh.appendChild(acts);
+    });
+  }
   function invSheet() {
     var s = F.state; if (!s) return;
     sheet(function (sh, close) {
@@ -2430,6 +2523,7 @@
       if (listed.length) sh.appendChild(el("div", "sub", "На продаже в лавке: " + listed.map(function (it) { return (s.strains[it.strain] || {}).name + " ×" + it.listed; }).join(", ") + "."));
       var acts = el("div", "salebtns");
       acts.appendChild(btn("Лавка", "ghost", function () { close(); openShop("buy"); }));
+      if (CHEST_ON) acts.appendChild(btn("Сундук", "ghost", function () { close(); chestSheet(); }));
       acts.appendChild(btn("Готово", "", close));
       sh.appendChild(acts);
     });

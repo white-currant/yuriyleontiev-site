@@ -37,6 +37,8 @@ CREATE INDEX IF NOT EXISTS f_inv_listed ON f_inv (user, listed);
 CREATE TABLE IF NOT EXISTS f_stall (user INTEGER NOT NULL, item TEXT NOT NULL, listed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, item));
 CREATE INDEX IF NOT EXISTS f_stall_listed ON f_stall (listed);
 -- своя цена продавца (2026-11-14): на семена и товары прилавка, в пределах 70–130% от цены игры; нет строки — цена игры
+-- сундук (2026-11-14): лишние семена из инвентаря; в сундуке их не посадить и не продать, пока не достанешь
+CREATE TABLE IF NOT EXISTS f_chest (user INTEGER NOT NULL, strain TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, strain));
 CREATE TABLE IF NOT EXISTS f_prices (user INTEGER NOT NULL, item TEXT NOT NULL, price INTEGER NOT NULL, PRIMARY KEY (user, item));
 CREATE TABLE IF NOT EXISTS f_sales (id INTEGER PRIMARY KEY AUTOINCREMENT, seller INTEGER NOT NULL, buyer_name TEXT, strain TEXT NOT NULL,
   price INTEGER NOT NULL, at INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0);
