@@ -119,6 +119,70 @@ function nameFor(g: any) {
   const t = words.join(" ").toLowerCase();
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
+let MERGED = false;
+async function sortByName(name: string): Promise<Strain | null> {
+  for (const k in CROPS) if (!CROPS[k].hidden && CROPS[k].name === name) return view(CROPS[k]);
+  const [r] = await q("SELECT id, name, genes FROM f_strains WHERE name = ? ORDER BY created, id LIMIT 1", [name]);
+  return r ? view({ id: String(r[0]), name: String(r[1]), ...JSON.parse(String(r[2])) }) : null;
+}
+// ОТЛОЖЕНО (его решение 2026-11-14: сначала понятно показать и дать сравнить гибриды) — не вызывается.
+// Разовое объединение одноимённых сортов (2026-11-14): свойства — среднее всех вариантов, все запасы игроков
+// (инвентарь, сундук, грядки, амбар, прилавок, задания кухни, история продаж) переходят на один сорт; количество суммируется.
+// Свои цены на старые варианты сбрасываются к цене игры. Повторно не запускается (g_meta farm_merge_v1).
+export async function mergeSortsOnce() {
+  if (!(await q("INSERT OR IGNORE INTO g_meta (key, value) VALUES ('farm_merge_v1', ?) RETURNING 1", [String(now())])).length) return null;
+  const rows = await q("SELECT id, name, genes FROM f_strains ORDER BY created, id");
+  const by: Record<string, { id: string; g: any }[]> = {};
+  for (const [id, name, genes] of rows) (by[String(name)] = by[String(name)] || []).push({ id: String(id), g: JSON.parse(String(genes)) });
+  const report: string[] = [];
+  for (const name of Object.keys(by)) {
+    const list = by[name];
+    let base: string | null = null;
+    for (const k in CROPS) if (!CROPS[k].hidden && CROPS[k].name === name) base = k;
+    if (list.length < 2 && !base) continue;
+    const keep = base || list[0].id, olds = list.map((x) => x.id).filter((id) => id !== keep);
+    if (!base) {                                                     // среднее по всем вариантам
+      const avg = (k: string) => list.reduce((a, x) => a + Number(x.g[k] || 0), 0) / list.length, g = { ...list[0].g };
+      g.minutes = Math.max(5, Math.round(avg("minutes") / 5) * 5); g.dust = Math.max(1, Math.round(avg("dust")));
+      g.vinyl = Math.round(avg("vinyl") * 100) / 100; g.thirst = Math.max(10, Math.round(avg("thirst") / 5) * 5);
+      g.points = Math.max(POINTS_HARVEST_MIN, Math.round(g.minutes / 30)); g.gen = Math.min(...list.map((x) => Number(x.g.gen || 1)));
+      await q("UPDATE f_strains SET genes = ? WHERE id = ?", [JSON.stringify(g), keep]);
+    }
+    for (const old of olds) {
+      const moveCount = (t: string, col: string, extra = "") => [
+        DB.prepare(`INSERT INTO ${t} (user, ${col}, count${extra ? ", " + extra : ""}) SELECT user, ?, count${extra ? ", " + extra : ""} FROM ${t} WHERE ${col} = ? AND true
+                    ON CONFLICT(user, ${col}) DO UPDATE SET count = count + excluded.count${extra ? `, ${extra} = ${extra} + excluded.${extra}` : ""}`).bind(keep, old),
+        DB.prepare(`DELETE FROM ${t} WHERE ${col} = ?`).bind(old)];
+      if (base) await q("UPDATE f_inv SET listed = 0 WHERE strain = ?", [old]);    // семена станции не продаются — снять с продажи
+      const stmts = [
+        ...moveCount("f_inv", "strain", "listed"), ...moveCount("f_chest", "strain"), ...moveCount("f_barn", "strain"),
+        DB.prepare(`INSERT INTO f_stall (user, item, listed) SELECT user, ?, listed FROM f_stall WHERE item = ? AND true
+                    ON CONFLICT(user, item) DO UPDATE SET listed = listed + excluded.listed`).bind(keep, old),
+        DB.prepare("DELETE FROM f_stall WHERE item = ?").bind(old),
+        DB.prepare("UPDATE f_plots SET crop = ? WHERE crop = ?").bind(keep, old),
+        DB.prepare("UPDATE f_sales SET strain = ? WHERE strain = ?").bind(keep, old),
+        DB.prepare("DELETE FROM f_prices WHERE item IN (?, ?)").bind(old, "s:" + old),
+      ];
+      // мука и выпечка этого сорта: «p:<рецепт>@старый» → «@новый»
+      for (const [t, col, cnt] of [["f_barn", "strain", "count"], ["f_stall", "item", "listed"]] as const) {
+        const ps = await q(`SELECT DISTINCT ${col} FROM ${t} WHERE ${col} LIKE ?`, ["p:%@" + old]);
+        for (const [pid] of ps) {
+          const nid = String(pid).slice(0, String(pid).length - old.length) + keep;
+          stmts.push(DB.prepare(`INSERT INTO ${t} (user, ${col}, ${cnt}) SELECT user, ?, ${cnt} FROM ${t} WHERE ${col} = ? AND true
+                                 ON CONFLICT(user, ${col}) DO UPDATE SET ${cnt} = ${cnt} + excluded.${cnt}`).bind(nid, pid),
+                     DB.prepare(`DELETE FROM ${t} WHERE ${col} = ?`).bind(pid),
+                     DB.prepare("DELETE FROM f_prices WHERE item = ?").bind(pid));
+        }
+      }
+      const js = await q("SELECT user, kind, recipe FROM f_jobs WHERE recipe LIKE ?", ["%@" + old]);
+      for (const [user, kind, recipe] of js)
+        stmts.push(DB.prepare("UPDATE f_jobs SET recipe = ? WHERE user = ? AND kind = ?").bind(String(recipe).slice(0, String(recipe).length - old.length) + keep, user, kind));
+      await DB.batch(stmts);
+      report.push(`${name}: ${old} → ${keep}`);
+    }
+  }
+  return report;
+}
 async function hashId(g: any) {
   const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(g))));
   return "h" + [...d.slice(0, 5)].map((b) => b.toString(16).padStart(2, "0")).join("");
