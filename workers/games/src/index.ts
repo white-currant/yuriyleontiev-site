@@ -9,6 +9,7 @@
 // Бот:    GET  /bot/events?after=N | POST /bot/profiles | /bot/link | /bot/forget | /bot/avatar   (заголовок X-Games-Key)
 
 const BOT_ID = 8990614166; // @starguardian_yl_bot
+const KARMA_START = 10;                                   // карма новичка, пока бот ещё не прислал его профиль (как в ChatGuard)
 const TG_KEY = "e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d"; // открытый ключ Телеграма (production)
 const SITE = "https://yuriyleontiev.music";
 const ORIGINS = [SITE, "http://127.0.0.1:8047", "http://localhost:8047"];
@@ -146,7 +147,7 @@ async function profile(u: any, g?: any) {
   const name = link?.state === "linked" ? link.title : sname || nameOf(u);
   const avatar = savatar ? `/avatar/${savatar}` : (link === null || link?.state === "linked") ? null : (u.photo_url || null);
   return { name, avatar, link,
-           points, karma: Number(karma || 0), place: sp != null ? Number(place) : null, ...rankOf(points),
+           points, karma: karma == null ? KARMA_START : Number(karma), place: sp != null ? Number(place) : null, ...rankOf(points),
            today: { scored: g.scored, max: SCORED_PER_DAY, earned: g.earned }, streak: g.streak, best_streak: g.best,
            played: g.played, correct: g.correct };
 }
@@ -254,7 +255,7 @@ async function playerCard(ref: string) {
   const seen = new Set<string>();
   for (const [st, genes] of kinds) { const g = genes ? JSON.parse(genes) : { shape: st, color: st }; seen.add(`${g.shape}/${g.color}`); }
   const it = await q("SELECT game, kind, item, tier, finish, count, first_at FROM g_items WHERE user = ? ORDER BY first_at DESC", [uid]);
-  return { name: p[0], points: Number(p[1]), karma: Number(p[2] || 0), title: p[3], place: Number(p[4] || 0), avatar: p[5] ? `/avatar/${p[5]}` : null,
+  return { name: p[0], points: Number(p[1]), karma: p[2] == null ? KARMA_START : Number(p[2]), title: p[3], place: Number(p[4] || 0), avatar: p[5] ? `/avatar/${p[5]}` : null,
            farm: fm ? { pub: fm[0], beds: Number(fm[1]), species: seen.size } : null,
            items: it.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
 }
