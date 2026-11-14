@@ -25,6 +25,12 @@ CREATE TABLE IF NOT EXISTS f_inv (user INTEGER NOT NULL, strain TEXT NOT NULL, c
   listed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, strain));
 -- амбар: собранный урожай (count штук сорта strain); продаётся станции или идёт на кухню
 CREATE TABLE IF NOT EXISTS f_barn (user INTEGER NOT NULL, strain TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, strain));
+-- кухня: купленные строения (mill, oven) и задание в каждом (одно на строение)
+CREATE TABLE IF NOT EXISTS f_builds (user INTEGER NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (user, kind));
+CREATE TABLE IF NOT EXISTS f_jobs (user INTEGER NOT NULL, kind TEXT NOT NULL, recipe TEXT NOT NULL, n INTEGER NOT NULL,
+  started INTEGER NOT NULL, ready INTEGER NOT NULL, PRIMARY KEY (user, kind));
+-- амбар стал покупным (2026-11-14): у кого в амбаре уже был урожай — амбар даётся бесплатно (повтор безвреден)
+INSERT OR IGNORE INTO f_builds (user, kind, at) SELECT DISTINCT user, 'barn', 0 FROM f_barn;
 CREATE INDEX IF NOT EXISTS f_inv_listed ON f_inv (user, listed);
 CREATE TABLE IF NOT EXISTS f_sales (id INTEGER PRIMARY KEY AUTOINCREMENT, seller INTEGER NOT NULL, buyer_name TEXT, strain TEXT NOT NULL,
   price INTEGER NOT NULL, at INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0);

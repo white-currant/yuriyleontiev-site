@@ -255,7 +255,8 @@ export async function farmState(u: any) {
   return {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked))),
-    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...barn.map((b) => b.strain)]),
+    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...barn.map((b) => b.strain).filter((x) => !x.startsWith("p:"))]),
+    ...(await kitchenOf(u.id)), recipes: RECIPES, products: PRODUCTS, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY),
     vinyls, inv, barn, gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })),
@@ -330,10 +331,15 @@ export async function harvest(u: any, idx: number) {
   const rain = (await rainUntil()) > t;
   const double = s.bonus === "rich" && Math.random() < 0.25;
   // урожай идёт в амбар (решение 2026-11-14): превратить в звёздную пыль (по цене сорта) или пустить на кухню
+  // без амбара (его покупают) урожай сразу превращается в пыль, как было до кухни
   const crop = (rain ? (s.bonus === "rain" ? 3 : 2) : 1) * (double ? 2 : 1);
   const points = s.points;
-  const writes = [DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?)
-                              ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.id, crop)];
+  const hasBarn = (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length > 0;
+  const dust = hasBarn ? 0 : crop * s.dust;
+  const writes = [hasBarn
+    ? DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?)
+                  ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.id, crop)
+    : DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(dust, u.id)];
   if (points > 0) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)")
     .bind(u.id, nameOf(u), points, "Лунная ферма", t));
   // с урожаем возвращаются семена той же культуры: не меньше 2 (посадил одно — получил больше), обычно 2, иногда 3;
@@ -357,7 +363,7 @@ export async function harvest(u: any, idx: number) {
     hybrid = { ...h, parents: [s.name, other.name], fresh: !Number(had) };
   }
   const vinyl = await dropVinyl(u.id, s.vinyl * (s.bonus === "lucky" ? 2 : 1) * (weatherOn(t) === "fullmoon" ? 2 : 1));
-  return { crop, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
+  return { crop, dust, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
 }
 
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
@@ -366,7 +372,7 @@ export async function sellCrop(u: any, strain: string, n: number) {
   const rows = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
   const pick = strain === "*" ? rows : rows.filter((r) => r[0] === strain);
   if (!pick.length) return { error: "В амбаре этого нет" };
-  const ss = await strains(pick.map((r) => r[0]));
+  const ss: Record<string, { dust: number }> = { ...(await strains(pick.map((r) => r[0]).filter((x) => !String(x).startsWith("p:")))), ...PRODUCTS };
   let got = 0, sold = 0;
   for (const [id, have] of pick) {
     const s = ss[id]; if (!s) continue;
@@ -378,6 +384,83 @@ export async function sellCrop(u: any, strain: string, n: number) {
   if (!sold) return { error: "В амбаре этого нет" };
   await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [got, u.id]);
   return { sold, dust: got, farm: await farmState(u) };
+}
+
+// ---------- кухня: мельница и печь (2026-11-14) ----------
+// Строения покупаются за пыль. В каждом одно задание: загрузил — ждёшь (как рост, без полива) — забрал в амбар.
+// Ингредиенты — из амбара: по форме растения (любой сорт и цвет; берутся самые дешёвые) или готовые продукты («p:flour»).
+// Готовое лежит в амбаре как «p:<рецепт>»: превращается в пыль по цене рецепта; дальше — заказы ресторанов.
+export const BUILDS: Record<string, { name: string; price: number; max: number }> = {
+  barn: { name: "Амбар",    price: 50,  max: 0 },     // без амбара урожай сразу идёт в пыль; кухня без амбара не работает
+  mill: { name: "Мельница", price: 60,  max: 10 },
+  oven: { name: "Печь",     price: 150, max: 5 },
+};
+export const RECIPES: Record<string, { kind: string; name: string; needs: Record<string, number>; min: number; dust: number; points: number }> = {
+  flour:  { kind: "mill", name: "Мука",               needs: { grain: 1 },                       min: 3,  dust: 7,   points: 0 },
+  bread:  { kind: "oven", name: "Лунный хлеб",        needs: { "p:flour": 2 },                   min: 10, dust: 18,  points: 1 },
+  soup:   { kind: "oven", name: "Суп из мха",         needs: { moss: 2, berry: 1 },              min: 10, dust: 36,  points: 1 },
+  bun:    { kind: "oven", name: "Ягодная булочка",    needs: { "p:flour": 1, berry: 2 },         min: 20, dust: 55,  points: 2 },
+  pie:    { kind: "oven", name: "Звёздный пирог",     needs: { "p:flour": 2, berry: 1, crystal: 1 }, min: 60, dust: 140, points: 4 },
+  tea:    { kind: "oven", name: "Звездоцветный чай",  needs: { flower: 2 },                      min: 15, dust: 60,  points: 2 },
+  stew:   { kind: "oven", name: "Грибная похлёбка",   needs: { mushroom: 2, moss: 1 },           min: 20, dust: 70,  points: 3 },
+  pumpkin:{ kind: "oven", name: "Тыквенный пирог",    needs: { "p:flour": 1, pumpkin: 1 },       min: 30, dust: 80,  points: 3 },
+  jam:    { kind: "oven", name: "Кактусовый джем",    needs: { cactus: 2, berry: 1 },            min: 20, dust: 75,  points: 3 },
+};
+const PRODUCTS: Record<string, { name: string; dust: number }> = Object.fromEntries(Object.entries(RECIPES).map(([k, r]) => ["p:" + k, { name: r.name, dust: r.dust }]));
+async function kitchenOf(uid: number) {
+  const builds = (await q("SELECT kind FROM f_builds WHERE user = ?", [uid])).map((r) => String(r[0]));
+  const jobs = (await q("SELECT kind, recipe, n, started, ready FROM f_jobs WHERE user = ?", [uid]))
+    .map(([kind, recipe, n, started, ready]) => ({ kind, recipe, n: Number(n), started: Number(started), ready: Number(ready) }));
+  return { builds, jobs };
+}
+export async function build(u: any, kind: string) {
+  const b = BUILDS[kind]; if (!b) return { error: "Такого строения нет" };
+  await ensureFarm(u);
+  if ((await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, kind])).length) return { error: "Уже построено" };
+  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [b.price, u.id, b.price])).length)
+    return { error: "Не хватает звёздной пыли" };
+  await q("INSERT OR IGNORE INTO f_builds (user, kind, at) VALUES (?, ?, ?)", [u.id, kind, now()]);
+  return { farm: await farmState(u) };
+}
+// загрузить n порций рецепта: ингредиенты списываются из амбара сразу (самые дешёвые подходящие)
+export async function cook(u: any, recipe: string, n: number) {
+  const r = RECIPES[recipe]; if (!r) return { error: "Такого рецепта нет" };
+  const b = BUILDS[r.kind], k = Math.max(1, Math.min(b.max, Math.round(n) || 1));
+  if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, r.kind])).length) return { error: b.name + " ещё не построена" };
+  if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Сначала нужен амбар: продуктам негде лежать" };
+  if ((await q("SELECT 1 FROM f_jobs WHERE user = ? AND kind = ?", [u.id, r.kind])).length) return { error: b.name + " занята" };
+  const barn = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
+  const ss = await strains(barn.map((x) => x[0]).filter((x) => !String(x).startsWith("p:")));
+  const plan: [string, number][] = [];
+  for (const [need, per] of Object.entries(r.needs)) {
+    let left = per * k;
+    const fit = barn.filter(([id]) => need.startsWith("p:") ? id === need : ss[id] && ss[id].shape === need)
+      .sort((a, c) => (ss[a[0]]?.dust || 0) - (ss[c[0]]?.dust || 0));
+    for (const [id, have] of fit) { const take = Math.min(left, Number(have)); if (take > 0) { plan.push([id, take]); left -= take; } }
+    if (left > 0) return { error: "Не хватает продуктов в амбаре" };
+  }
+  const done: [string, number][] = [];
+  for (const [id, take] of plan) {                       // списываем; если что-то успели забрать параллельно — возвращаем
+    if ((await q("UPDATE f_barn SET count = count - ? WHERE user = ? AND strain = ? AND count >= ? RETURNING 1", [take, u.id, id, take])).length) done.push([id, take]);
+    else { for (const [id2, t2] of done) await q("UPDATE f_barn SET count = count + ? WHERE user = ? AND strain = ?", [t2, u.id, id2]); return { error: "Не хватает продуктов в амбаре" }; }
+  }
+  const t = now();
+  if (!(await q("INSERT OR IGNORE INTO f_jobs (user, kind, recipe, n, started, ready) VALUES (?, ?, ?, ?, ?, ?) RETURNING 1", [u.id, r.kind, recipe, k, t, t + r.min * 60 * k])).length) {
+    for (const [id2, t2] of done) await q("UPDATE f_barn SET count = count + ? WHERE user = ? AND strain = ?", [t2, u.id, id2]);
+    return { error: b.name + " занята" };
+  }
+  return { farm: await farmState(u) };
+}
+export async function collect(u: any, kind: string) {
+  const [j] = await q("SELECT recipe, n, ready FROM f_jobs WHERE user = ? AND kind = ?", [u.id, kind]);
+  if (!j) return { error: "Нечего забирать" };
+  if (Number(j[2]) > now()) return { error: "Ещё не готово" };
+  if (!(await q("DELETE FROM f_jobs WHERE user = ? AND kind = ? RETURNING 1", [u.id, kind])).length) return { error: "Уже забрано" };
+  const r = RECIPES[String(j[0])], n = Number(j[1]), pts = (r?.points || 0) * n;
+  const writes = [DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, "p:" + j[0], n)];
+  if (pts) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)").bind(u.id, nameOf(u), pts, "Лунная ферма", now()));
+  await DB.batch(writes);
+  return { recipe: j[0], n, points: pts, farm: await farmState(u) };
 }
 
 export async function unlock(u: any) {
@@ -429,7 +512,7 @@ export async function visit(u: any, pub: string) {
   return { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given,
            plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(f[1]))), now: now(),
            rain_until: await rainUntil(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY), dry_limit: DRY_LIMIT, gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY,
-           shop: shop.map(([strain, n]) => ({ strain, count: Number(n) })),
+           shop: shop.map(([strain, n]) => ({ strain, count: Number(n) })), ...(await kitchenOf(Number(f[0]))),
            strains: await strains([...plots.map((p) => p[1]), ...shop.map((x) => x[0])]), bonuses: BONUSES };
 }
 
@@ -507,6 +590,6 @@ export async function setRain(_hours: number) {           // посты кана
 export async function forgetFarm(uid: number) {
   for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM g_items WHERE user = ? AND game = 'farm'",
                      "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?",
-                     "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?"]) await q(sql, [uid]);
+                     "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?", "DELETE FROM f_builds WHERE user = ?", "DELETE FROM f_jobs WHERE user = ?"]) await q(sql, [uid]);
   await q("DELETE FROM f_given WHERE from_user = ? OR to_user = ?", [uid, uid]);
 }
