@@ -252,13 +252,15 @@ export async function farmState(u: any) {
   const gifts = await q("SELECT from_name, dust FROM f_gifts WHERE to_user = ? AND opened = 0 ORDER BY id LIMIT 20", [u.id]);
   const sales = await q("SELECT buyer_name, strain, price FROM f_sales WHERE seller = ? AND seen = 0 ORDER BY id LIMIT 20", [u.id]);
   const barn = (await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])).map(([strain, count]) => ({ strain, count: Number(count) }));
+  const stall = (await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [u.id])).map(([item, listed]) => ({ item: String(item), listed: Number(listed) }));
+  const bs = [...barn.map((b) => b.strain), ...stall.map((x) => x.item)];
   return {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked))),
-    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...barn.map((b) => b.strain).filter((x) => !x.startsWith("p:")), ...barn.map((b) => sortOf(b.strain)).filter(Boolean)]),
-    ...(await kitchenOf(u.id)), recipes: RECIPES, products: (await productsFor([...barn.map((b) => b.strain), ...(await q("SELECT recipe FROM f_jobs WHERE user = ?", [u.id])).map((x) => "p:" + x[0])])).products, build_list: BUILDS,
+    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean)]),
+    ...(await kitchenOf(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...(await q("SELECT recipe FROM f_jobs WHERE user = ?", [u.id])).map((x) => "p:" + x[0])])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY),
-    vinyls, inv, barn, gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
+    vinyls, inv, barn, stall, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })),
   };
 }
@@ -537,11 +539,17 @@ export async function visit(u: any, pub: string) {
   const vin = Number((await q("SELECT COUNT(DISTINCT item) FROM g_items WHERE user = ? AND game = 'farm' ", [f[0]]))[0][0]);
   const given = (await q("SELECT 1 FROM f_given WHERE from_user = ? AND to_user = ? AND day = ?", [u.id, f[0], today()])).length > 0;
   const shop = await q("SELECT strain, listed FROM f_inv WHERE user = ? AND listed > 0", [f[0]]);
+  const stall = await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [f[0]]);
+  const ii = await itemInfo(stall.map((r) => String(r[0]))), own = await ownPrices(Number(f[0]));
   return { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given,
            plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(f[1]))), now: now(),
            rain_until: await rainUntil(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY), dry_limit: DRY_LIMIT, gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY,
-           shop: shop.map(([strain, n]) => ({ strain, count: Number(n) })), ...(await kitchenOf(Number(f[0]))),
-           strains: await strains([...plots.map((p) => p[1]), ...shop.map((x) => x[0])]), bonuses: BONUSES };
+           ...(await kitchenOf(Number(f[0]))),
+           stall: stall.map(([item, n]) => ({ item: String(item), count: Number(n), price: ii.info[String(item)] ? sellerPrice(stallPrice(ii.info[String(item)].dust), own[String(item)]) : 0 })).filter((x) => x.price),
+           products: ii.products, ...(await (async () => {
+             const ss = { ...ii.strains, ...(await strains([...plots.map((p) => p[1]), ...shop.map((x) => x[0])])) };
+             return { strains: ss, shop: shop.map(([strain, n]) => ({ strain, count: Number(n), price: ss[strain] ? sellerPrice(ss[strain].price!, own["s:" + strain]) : 0 })) };
+           })()), bonuses: BONUSES };
 }
 
 // ---------- лавка ----------
@@ -553,14 +561,76 @@ export async function list(u: any, strain: string, delta: number) {
   return { farm: await farmState(u) };
 }
 
-export async function buy(u: any, pub: string, strain: string, myName: string) {
+// ---------- прилавок: урожай и продукты игрокам (2026-11-14) ----------
+// Цена — в полтора раза больше, чем дать пыль в амбаре: распылить — самое невыгодное, продать — выгоднее, еда — ещё выгоднее.
+const STALL_MARKUP = 1.5;
+export const stallPrice = (dust: number) => Math.max(1, Math.ceil(dust * STALL_MARKUP));
+// продавец может сам двигать цену в небольших пределах (его просьба 2026-11-14): 70–130% от цены игры
+const PRICE_LO = 0.7, PRICE_HI = 1.3;
+export const priceRange = (base: number) => [Math.max(1, Math.floor(base * PRICE_LO)), Math.max(1, Math.ceil(base * PRICE_HI))];
+const sellerPrice = (base: number, own: any) => { const [lo, hi] = priceRange(base), p = Number(own); return own == null || !p ? base : Math.max(lo, Math.min(hi, Math.round(p))); };
+async function ownPrices(uid: number) { const m: Record<string, number> = {}; for (const [i, p] of await q("SELECT item, price FROM f_prices WHERE user = ?", [uid])) m[String(i)] = Number(p); return m; }
+// ключ цены: семена — «s:<сорт>», товар прилавка — его код (у сорта семена и урожай — разные товары с разной ценой)
+export async function setPrice(u: any, item: string, price: number, kind = "item") {
+  await ensureFarm(u);
+  let b = 0;
+  if (kind === "seed") { const st = (await strains([item]))[item]; if (st && !st.base) b = st.price!; }
+  else { const ii = (await itemInfo([item])).info[item]; if (ii) b = stallPrice(ii.dust); }
+  if (!b) return { error: "Такого товара нет" };
+  const p = sellerPrice(b, price), key = (kind === "seed" ? "s:" : "") + item;
+  if (p === b) await q("DELETE FROM f_prices WHERE user = ? AND item = ?", [u.id, key]);
+  else await q("INSERT INTO f_prices (user, item, price) VALUES (?, ?, ?) ON CONFLICT(user, item) DO UPDATE SET price = excluded.price", [u.id, key, p]);
+  return { farm: await farmState(u) };
+}
+async function itemInfo(ids: string[]) {         // сорт или продукт → { name, dust }
+  const ss = await strains(ids.filter((x) => !x.startsWith("p:"))), pr = await productsFor(ids), out: Record<string, any> = {};
+  for (const id of ids) out[id] = id.startsWith("p:") ? pr.products[id] : ss[id];
+  return { info: out, strains: { ...ss, ...pr.sorts }, products: pr.products };
+}
+export async function listItem(u: any, item: string, delta: number) {
+  await ensureFarm(u);
+  const d = Math.max(-1000, Math.min(1000, Math.round(delta) || 0));
+  if (!item || !d) return { farm: await farmState(u) };
+  if (d > 0) {                                           // из амбара на прилавок
+    if (!(await q("UPDATE f_barn SET count = count - ? WHERE user = ? AND strain = ? AND count >= ? RETURNING 1", [d, u.id, item, d])).length)
+      return { error: "В амбаре столько нет" };
+    await q("INSERT INTO f_stall (user, item, listed) VALUES (?, ?, ?) ON CONFLICT(user, item) DO UPDATE SET listed = listed + excluded.listed", [u.id, item, d]);
+  } else {                                               // с прилавка обратно в амбар
+    const k = -d;
+    if (!(await q("UPDATE f_stall SET listed = listed - ? WHERE user = ? AND item = ? AND listed >= ? RETURNING 1", [k, u.id, item, k])).length)
+      return { error: "На прилавке столько нет" };
+    await q("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count", [u.id, item, k]);
+  }
+  return { farm: await farmState(u) };
+}
+async function buyItem(u: any, seller: number, pub: string, item: string, myName: string) {
+  if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Урожай и продукты кладут в амбар — сначала построй его" };
+  const it = (await itemInfo([item])).info[item];
+  if (!it) return { error: "Такого товара нет" };
+  const price = sellerPrice(stallPrice(it.dust), (await ownPrices(seller))[item]);
+  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [price, u.id, price])).length)
+    return { error: "Не хватает звёздной пыли" };
+  if (!(await q("UPDATE f_stall SET listed = listed - 1 WHERE user = ? AND item = ? AND listed > 0 RETURNING 1", [seller, item])).length) {
+    await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [price, u.id]);
+    return { error: "Уже раскупили" };
+  }
+  await DB.batch([
+    DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(price, seller),
+    DB.prepare("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1").bind(u.id, item),
+    DB.prepare("INSERT INTO f_sales (seller, buyer_name, strain, price, at) VALUES (?, ?, ?, ?, ?)").bind(seller, myName, item, price, now()),
+  ]);
+  return { ok: true, price, ...(await visit(u, pub)), farm: await farmState(u) };
+}
+
+export async function buy(u: any, pub: string, strain: string, myName: string, kind = "seed") {
   const [f] = await q("SELECT user FROM f_farms WHERE pub = ?", [pub]);
   if (!f || Number(f[0]) === u.id) return { error: "Лавка не найдена" };
+  if (kind === "item") { await ensureFarm(u); return buyItem(u, Number(f[0]), pub, strain, myName); }
   if (CROPS[strain]) return { error: "Такого товара нет" };
   const s = (await strains([strain]))[strain];
   if (!s) return { error: "Такого товара нет" };
   await ensureFarm(u);
-  const price = s.price!;
+  const price = sellerPrice(s.price!, (await ownPrices(Number(f[0])))["s:" + strain]);
   if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [price, u.id, price])).length)
     return { error: "Не хватает звёздной пыли" };
   // товар забирает ровно один покупатель; не вышло — пыль возвращаем
@@ -586,13 +656,20 @@ export async function book(u: any) {
 
 // рынок: все семена, выставленные игроками (кроме своих). Наружу — публичное имя продавца и номер участка (pub), не аккаунт.
 export async function market(u: any, hidden: number[]) {
-  const rows = await q(`SELECT i.user, f.pub, i.strain, i.listed, p.name FROM f_inv i JOIN f_farms f ON f.user = i.user
-                        LEFT JOIN g_profiles p ON p.user = i.user WHERE i.listed > 0 AND i.user != ? LIMIT 200`, [u.id]);
+  const rows = await q(`SELECT i.user, f.pub, i.strain, i.listed, p.name, pr.price FROM f_inv i JOIN f_farms f ON f.user = i.user
+                        LEFT JOIN g_profiles p ON p.user = i.user LEFT JOIN f_prices pr ON pr.user = i.user AND pr.item = 's:' || i.strain
+                        WHERE i.listed > 0 AND i.user != ? LIMIT 200`, [u.id]);
   const ss = await strains(rows.map((r) => r[2]));
-  const offers = rows.map(([uid, pub, strain, n, name]) => ({ pub, strain, count: Number(n),
+  const offers = rows.map(([uid, pub, strain, n, name, own]) => ({ pub, strain, count: Number(n), price: ss[strain] ? sellerPrice(ss[strain].price!, own) : 0,
                                                                seller: hidden.includes(Number(uid)) ? "Сосед" : name || "Сосед" }))
-    .filter((o) => ss[o.strain]).sort((a, b) => (ss[b.strain].price || 0) - (ss[a.strain].price || 0));
-  return { offers, strains: ss, bonuses: BONUSES };
+    .filter((o) => ss[o.strain]).sort((a, b) => b.price - a.price);
+  const st = await q(`SELECT s.user, f.pub, s.item, s.listed, p.name, pr.price FROM f_stall s JOIN f_farms f ON f.user = s.user
+                      LEFT JOIN g_profiles p ON p.user = s.user LEFT JOIN f_prices pr ON pr.user = s.user AND pr.item = s.item
+                      WHERE s.listed > 0 AND s.user != ? LIMIT 300`, [u.id]);
+  const ii = await itemInfo(st.map((r) => String(r[2])));
+  const items = st.map(([uid, pub, item, n, name, own]) => ({ pub, item: String(item), count: Number(n), price: ii.info[String(item)] ? sellerPrice(stallPrice(ii.info[String(item)].dust), own) : 0,
+                                                          seller: hidden.includes(Number(uid)) ? "Сосед" : name || "Сосед" })).filter((o) => o.price);
+  return { offers, items, strains: { ...ss, ...ii.strains }, products: ii.products, bonuses: BONUSES };
 }
 
 export async function salesSeen(u: any) {
@@ -617,7 +694,7 @@ export async function setRain(_hours: number) {           // посты кана
 
 export async function forgetFarm(uid: number) {
   for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM g_items WHERE user = ? AND game = 'farm'",
-                     "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?",
+                     "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?", "DELETE FROM f_stall WHERE user = ?", "DELETE FROM f_prices WHERE user = ?",
                      "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?", "DELETE FROM f_builds WHERE user = ?", "DELETE FROM f_jobs WHERE user = ?"]) await q(sql, [uid]);
   await q("DELETE FROM f_given WHERE from_user = ? OR to_user = ?", [uid, uid]);
 }

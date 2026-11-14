@@ -414,10 +414,12 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/market": return json(await farm.market(user, await hiddenIds()));
     case "/api/farm/seeds": return json(await farm.buySeeds(user, String(body.crop || ""), Number(body.n || 1)));
     case "/api/farm/list": return json(await farm.list(user, String(body.strain || ""), Number(body.delta || 0)));
+    case "/api/farm/price": return json(await farm.setPrice(user, String(body.item || "").slice(0, 80), Number(body.price || 0), body.kind === "seed" ? "seed" : "item"));
+    case "/api/farm/stall": return json(await farm.listItem(user, String(body.item || "").slice(0, 80), Number(body.delta || 0)));
     case "/api/farm/sales/seen": return json(await farm.salesSeen(user));
     case "/api/farm/buy": {
       const [p] = await q("SELECT name FROM g_profiles WHERE user = ?", [user.id]);
-      return json(await farm.buy(user, String(body.pub || ""), String(body.strain || ""), p?.[0] || "Сосед"));
+      return json(await farm.buy(user, String(body.pub || ""), String(body.strain || ""), p?.[0] || "Сосед", body.kind === "item" ? "item" : "seed"));
     }
     case "/api/farm/gift": {
       // в подарке — публичное имя (как в «Звёздном зале»), а не имя из Телеграма

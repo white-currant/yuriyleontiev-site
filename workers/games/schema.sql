@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS f_jobs (user INTEGER NOT NULL, kind TEXT NOT NULL, re
 -- амбар стал покупным (2026-11-14): у кого в амбаре уже был урожай — амбар даётся бесплатно (повтор безвреден)
 INSERT OR IGNORE INTO f_builds (user, kind, at) SELECT DISTINCT user, 'barn', 0 FROM f_barn;
 CREATE INDEX IF NOT EXISTS f_inv_listed ON f_inv (user, listed);
+-- прилавок (2026-11-14): урожай и продукты из амбара, выставленные игрокам. Выставленное лежит тут, а не в амбаре
+-- (его нельзя ни смолоть, ни распылить); сняли с продажи — вернулось в амбар.
+CREATE TABLE IF NOT EXISTS f_stall (user INTEGER NOT NULL, item TEXT NOT NULL, listed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, item));
+CREATE INDEX IF NOT EXISTS f_stall_listed ON f_stall (listed);
+-- своя цена продавца (2026-11-14): на семена и товары прилавка, в пределах 70–130% от цены игры; нет строки — цена игры
+CREATE TABLE IF NOT EXISTS f_prices (user INTEGER NOT NULL, item TEXT NOT NULL, price INTEGER NOT NULL, PRIMARY KEY (user, item));
 CREATE TABLE IF NOT EXISTS f_sales (id INTEGER PRIMARY KEY AUTOINCREMENT, seller INTEGER NOT NULL, buyer_name TEXT, strain TEXT NOT NULL,
   price INTEGER NOT NULL, at INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0);
 -- коллекционные предметы всех игр (показываются и в игре, и в профиле гильдии).

@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611141022";
+    var BUILD = "202611141057";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -359,6 +359,34 @@
   .selnote { margin-top: 8px; min-height: 2.8em; font-size: 12.5px; line-height: 1.4; color: rgba(255, 255, 255, .82); }
   .sheet .selnote { color: var(--dim); }
   .salecount2 { color: var(--white); font-weight: 600; }
+  /* лавка — товары на деревянных полках с ценниками (не ячейки, как в инвентаре) */
+  .cats { margin-top: 14px; }
+  .cats button { flex: 1; }
+  .wares { margin-top: 18px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 10px; column-gap: 0; }
+  .ware { position: relative; height: 104px; display: flex; align-items: flex-end; justify-content: center; padding: 0 0 31px; border: 0; background: none; overflow: visible; }
+  .ware::after { content: ""; position: absolute; left: 0; right: 0; bottom: 22px; height: 9px; background: linear-gradient(#c58c54, #9a6438 60%, #6e4425); box-shadow: 0 4px 0 rgba(30, 15, 5, .45); }
+  .ware:nth-child(4n + 1)::after { left: 4px; border-radius: 3px 0 0 3px; }
+  .ware:nth-child(4n)::after, .ware:last-child::after { right: 4px; border-radius: 0 3px 3px 0; }
+  .ware canvas { width: 58%; height: auto; max-height: 58px; object-fit: contain; image-rendering: pixelated; margin-bottom: 1px; transition: transform .15s, filter .15s; filter: drop-shadow(0 3px 0 rgba(30, 15, 5, .35)); }
+  .ware:active canvas { transform: scale(.92); }
+  .ware.on canvas { transform: translateY(-4px) scale(1.06); filter: drop-shadow(0 0 8px rgba(255, 200, 110, .8)); }
+  .ware .tag { position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%) rotate(-3deg); z-index: 1; padding: 1px 6px 2px; border-radius: 3px;
+    background: #f3e2c0; color: #3a2414; font-size: 11px; font-weight: 750; white-space: nowrap; box-shadow: 0 1px 0 rgba(0, 0, 0, .35); }
+  .ware.on .tag { background: var(--gold); }
+  .ware .qty { position: absolute; right: 6px; top: 4px; font-size: 11px; font-weight: 750; color: rgba(255, 255, 255, .9); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+  .ware .qty.sale { color: #8ff0c4; left: 0; right: 0; text-align: center; white-space: nowrap; font-size: 10.5px; }
+  /* имя продавца под ценником; длинное — медленно прокручивается туда-обратно */
+  .ware.who { height: 122px; padding-bottom: 49px; }
+  .ware.who::after { bottom: 40px; }
+  .ware.who .tag { bottom: 20px; }
+  .ware .seller { position: absolute; left: 4px; right: 4px; bottom: 0; overflow: hidden; font-size: 10.5px; color: rgba(246, 239, 227, .7); white-space: nowrap; text-align: center; }
+  .ware .seller span { display: inline-block; }
+  .ware .seller.run { text-align: left; }
+  .ware .seller.run span { animation: sellerRun var(--t, 6s) ease-in-out infinite alternate; }
+  @keyframes sellerRun { 0%, 15% { transform: translateX(0); } 85%, 100% { transform: translateX(var(--d, 0px)); } }
+  .wareinfo { margin-top: 34px; }
+  .wareinfo h4 { font-size: 17px; letter-spacing: -.01em; }
+  .wareinfo .sub { margin-top: 4px; font-size: 13px; color: var(--dim); line-height: 1.4; }
   .list li.tappable { cursor: pointer; border-radius: 12px; transition: background .15s; }
   .list li.tappable:active { background: rgba(255, 255, 255, .07); }
   .pcard .phead { display: flex; align-items: center; gap: 14px; }
@@ -629,6 +657,7 @@
     <div class="farm-top"><button class="exit" type="button" data-go="farm">← На ферму</button><div class="dust-pill" id="shopdust">✦ 0</div></div>
     <h2 style="margin-top:16px;font-size:24px;letter-spacing:-.02em">Лавка</h2>
     <div class="tabs" id="shoptabs"><button type="button" data-st="buy" aria-pressed="true">Купить</button><button type="button" data-st="sell" aria-pressed="false">Продать</button></div>
+    <div class="seg cats" id="shopcats"><button type="button" data-cat="seed" aria-pressed="true">Семена</button><button type="button" data-cat="crop" aria-pressed="false">Урожай</button><button type="button" data-cat="food" aria-pressed="false">Продукты</button></div>
     <div id="shopview"></div>
   </section>
 
@@ -2000,9 +2029,10 @@
   function recKey(id) { var r = id.indexOf("p:") === 0 ? id.slice(2) : id, i = r.indexOf("@"); return i < 0 ? r : r.slice(0, i); }
   function sortKey(id) { var i = id.indexOf("@"); return i < 0 ? "" : id.slice(i + 1); }
   function itemOf(id) {
-    var s = F.state; if (id.indexOf("p:") !== 0) return s.strains[id];
-    var known = (s.products || {})[id]; if (known) return known;
-    var r = (s.recipes || {})[recKey(id)], g = s.strains[sortKey(id)]; if (!r) return null;
+    var s = F.state, ex = F.ext || { strains: {}, products: {} };
+    if (id.indexOf("p:") !== 0) return s.strains[id] || ex.strains[id];
+    var known = (s.products || {})[id] || ex.products[id]; if (known) return known;
+    var r = (s.recipes || {})[recKey(id)], g = s.strains[sortKey(id)] || ex.strains[sortKey(id)]; if (!r) return null;
     if (!g) return { name: r.name, dust: r.dust };
     var fd = g.dust + 2, nf = r.needs["p:flour"] || 0;
     return { name: r.name, dust: recKey(id) === "flour" ? fd : r.dust + nf * (fd - 7), sort: g.id, sort_name: g.name, color: g.color };
@@ -2461,69 +2491,188 @@
     F.shopTab = tab || F.shopTab; show("farm-shop");
     document.querySelectorAll("#shoptabs button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.st === F.shopTab)); });
     renderShopTab();
-    if (F.shopTab === "buy") call("/api/farm/market").then(function (m) { F.market = m; if (F.shopTab === "buy" && !$("farm-shop").hidden) renderShopTab(); }).catch(function () {});
+    if (F.shopTab === "buy" || F.shopCat !== "seed") call("/api/farm/market").then(function (m) { F.market = m; extend(m); if (F.shopTab === "buy" && !$("farm-shop").hidden) renderShopTab(); }).catch(function () {});
   }
+  // Разделы: семена · урожай · продукты (мука и еда). Цена урожая и продуктов у игроков — в 1,5 раза выше, чем дать пыль в амбаре.
+  F.shopCat = "seed";
+  function stallPrice(dust) { return Math.max(1, Math.ceil(dust * ((F.state && F.state.stall_markup) || 1.5))); }
+  function catOf(id) { return id.indexOf("p:") === 0 ? "food" : "crop"; }
+  function extend(r) {                                         // чужие сорта и продукты — чтобы рисовать и называть их товары
+    F.ext = F.ext || { strains: {}, products: {} };
+    Object.keys(r.strains || {}).forEach(function (k) { F.ext.strains[k] = r.strains[k]; });
+    Object.keys(r.products || {}).forEach(function (k) { F.ext.products[k] = r.products[k]; });
+  }
+  // своя цена продавца: 70–130% от цены игры (ключ семян — «s:<сорт>», товара прилавка — его код)
+  function rangeOf(base) { var r = (F.state && F.state.price_range) || [.7, 1.3]; return [Math.max(1, Math.floor(base * r[0])), Math.max(1, Math.ceil(base * r[1]))]; }
+  function priceFor(key, base) { var own = ((F.state && F.state.prices) || {})[key], r = rangeOf(base); return own ? Math.max(r[0], Math.min(r[1], own)) : base; }
+  function priceControl(d, key, base, item, kind) {
+    var cur = priceFor(key, base), r = rangeOf(base), stepN = Math.max(1, Math.round(base * .05));
+    d.appendChild(el("div", "sub", "Твоя цена — ✦ " + cur + (cur === base ? " (как у игры)" : " (у игры ✦ " + base + ")") + ". Можно от ✦ " + r[0] + " до ✦ " + r[1] + "."));
+    var set = function (v) {
+      v = Math.max(r[0], Math.min(r[1], v)); haptic("light");
+      F.state.prices = F.state.prices || {}; if (v === base) delete F.state.prices[key]; else F.state.prices[key] = v;
+      renderShopTab(); farmCall("/api/farm/price", { item: item, price: v, kind: kind }).catch(function () {});
+    };
+    var a = el("div", "invacts"), dn = btn("− дешевле", "ghost", function () { set(cur - stepN); }), up = btn("+ дороже", "ghost", function () { set(cur + stepN); });
+    dn.disabled = cur <= r[0]; up.disabled = cur >= r[1]; a.appendChild(dn); a.appendChild(up);
+    if (cur !== base) a.appendChild(btn("как у игры", "ghost", function () { set(base); }));
+    d.appendChild(a);
+  }
+  function stallOf(id) { var r = null; (F.state.stall || []).forEach(function (x) { if (x.item === id) r = x; }); return r; }
+  // полка: wares = [{ key, icon(cv), tag, qty, sale }]; выбранный товар — сведения и кнопки ниже (info)
+  function shelf(box, wares, selKey, pick) {
+    var g = el("div", "wares");
+    wares.forEach(function (w) {
+      var b = el("button", "ware" + (w.key === selKey ? " on" : "") + (w.seller != null ? " who" : "")); b.type = "button";
+      var cv = el("canvas", "pix"); w.icon(cv); b.appendChild(cv);
+      if (w.tag) b.appendChild(el("span", "tag", w.tag));
+      if (w.qty) b.appendChild(el("span", "qty" + (w.sale ? " sale" : ""), w.qty));
+      if (w.seller != null) { var sl = el("span", "seller"); sl.appendChild(el("span", "", w.seller)); b.appendChild(sl); }
+      b.onclick = function () { haptic("light"); pick(w.key === selKey ? null : w.key); };
+      g.appendChild(b);
+    });
+    box.appendChild(g);
+    requestAnimationFrame(function () {                         // имя не влезает — прокручиваем
+      g.querySelectorAll(".seller").forEach(function (sl) {
+        var over = sl.firstChild.offsetWidth - sl.clientWidth;
+        if (over > 2) { sl.classList.add("run"); sl.style.setProperty("--d", -over + "px"); sl.style.setProperty("--t", (2 + over / 12).toFixed(1) + "s"); }
+      });
+    });
+  }
+  function infoBox(box, title, lines) {
+    var d = el("div", "wareinfo"); d.appendChild(el("h4", "", title));
+    lines.forEach(function (t) { if (t) d.appendChild(el("div", "sub", t)); }); box.appendChild(d); return d;
+  }
+  function seedIconOf(st) { return function (cv) { cropIcon(cv, st, true); }; }
+  function itemIconOf(id) { return function (cv) { itemIcon(cv, id); }; }
   function renderShopTab() {
     var s = F.state, box = $("shopview"); if (!s) return;
     box.innerHTML = ""; $("shopdust").textContent = "✦ " + s.dust;
-    var h = function (t) { var x = el("div", "mono", t); x.style.marginTop = "22px"; box.appendChild(x); };
+    document.querySelectorAll("#shopcats button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.cat === F.shopCat)); });
+    var cat = F.shopCat, sel = F.shopSel, pick = function (k) { F.shopSel = k; renderShopTab(); };
+    var note = function (t) { box.appendChild(el("div", "farm-note left", t)); };
     if (F.shopTab === "buy") {
-      h("Станция");
-      box.appendChild(el("div", "farm-note left", "Купленные семена попадают в твой инвентарь. Каждый урожай возвращает 2–3 семени той же культуры, так что покупать нужно, только чтобы начать новую. Пшеница пойдёт на мельницу, в муку."));
-      ["moss", "berry", "crystal", "wheat"].forEach(function (k) {
-        var st = s.strains[k], have = bagOf(k); if (!st) return;
-        box.appendChild(seedRow(st, "", function () { seedSheet(st); }));
-        var acts = el("div", "invacts"), info = el("span", "invcount", "у тебя " + (have ? have.count : 0));
-        [1, 5].forEach(function (n) {
-          acts.appendChild(btn(n + " шт · ✦ " + st.cost * n, n === 1 ? "" : "ghost", function (ev) {
-            var cur = F.state, cost = st.cost * n;                 // состояние берём свежее: после ответа сервера оно заменяется
-            if (cur.dust < cost) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
-            haptic("success"); buyFx(ev.currentTarget, "+" + n + " " + plural(n, "семя", "семени", "семян"), "−✦ " + cost);
-            cur.dust -= cost; addToBag(k, n); renderFarm(); renderShopTab();
-            farmCall("/api/farm/seeds", { crop: k, n: n }).catch(function () {});
-          }));
+      var m = F.market, wares = [], act = {};
+      if (cat === "seed") {
+        ["moss", "berry", "crystal", "wheat"].forEach(function (k) {
+          var st = s.strains[k]; if (!st) return;
+          wares.push({ key: "st:" + k, icon: seedIconOf(st), tag: "✦ " + st.cost, seller: "станция" });
+          act["st:" + k] = function () {
+            var have = bagOf(k), d = infoBox(box, st.name, [describe(st), "Станция продаёт базовые семена всегда. У тебя: " + (have ? have.count : 0) + "."]);
+            var acts = el("div", "invacts");
+            [1, 5].forEach(function (n) {
+              acts.appendChild(btn(n + " шт · ✦ " + st.cost * n, n === 1 ? "" : "ghost", function (ev) {
+                var cur = F.state, cost = st.cost * n;
+                if (cur.dust < cost) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
+                haptic("success"); buyFx(ev.currentTarget, "+" + n + " " + plural(n, "семя", "семени", "семян"), "−✦ " + cost);
+                cur.dust -= cost; addToBag(k, n); renderFarm(); renderShopTab();
+                farmCall("/api/farm/seeds", { crop: k, n: n }).catch(function () {});
+              }));
+            });
+            acts.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st); })); d.appendChild(acts);
+          };
         });
-        acts.appendChild(info); box.appendChild(acts);
-      });
-      h("От игроков");
-      var m = F.market;
-      if (!m) { box.appendChild(el("div", "farm-note left", "Загружаю…")); return; }
-      if (!m.offers.length) { box.appendChild(el("div", "farm-note left", "Пока никто ничего не выставил. Выведи свой сорт скрещиванием и продай его во вкладке «Продать».")); return; }
-      m.offers.forEach(function (o) {
-        var st = m.strains[o.strain]; if (!st) return;
-        var b;
-        var buy = function () {
-          var cur = F.state;
-          if (cur.dust < st.price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
-          haptic("success"); buyFx(b, "+1 семя", "−✦ " + st.price);
-          cur.dust -= st.price; $("shopdust").textContent = "✦ " + cur.dust;     // баланс — сразу; сервер подтвердит
-          b.disabled = true; b.textContent = "Покупаю…";
-          call("/api/farm/buy", { pub: o.pub, strain: st.id }).then(function (r) {
-            if (r.error) { toast(r.error); call("/api/farm").then(setFarm); return openShop("buy"); }
-            toast("Куплено: " + st.name + " — семя в инвентаре"); setFarm(r.farm); openShop("buy");
-          }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; });
-        };
-        box.appendChild(seedRow(st, "×" + o.count, function () { seedSheet(st, { foreign: true, bonuses: m.bonuses, buy: buy }); }));
-        var tier = SEEDTIER[st.tier] || SEEDTIER.common, line = el("div", "invline"), tb = el("b", "", tier[0]); tb.style.color = tier[1];
-        line.appendChild(tb); line.append(" · продаёт " + o.seller); box.appendChild(line);
-        var acts = el("div", "invacts"); b = btn("Купить за ✦ " + st.price, "", buy); acts.appendChild(b); box.appendChild(acts);
-      });
+        (m ? m.offers : []).forEach(function (o, i) {
+          var st = m.strains[o.strain]; if (!st) return;
+          var key = "of:" + i + ":" + o.pub + ":" + o.strain;
+          var op = o.price || st.price;
+          wares.push({ key: key, icon: seedIconOf(st), tag: "✦ " + op, qty: "×" + o.count, seller: o.seller });
+          act[key] = function () {
+            var tier = SEEDTIER[st.tier] || SEEDTIER.common;
+            var d = infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · продаёт " + o.seller, describe(st)]);
+            var acts = el("div", "invacts"), b = btn("Купить за ✦ " + op, "", function () { buyWare(b, o.pub, st.id, "seed", op, "+1 семя", "Куплено: " + st.name + " — семя в инвентаре"); });
+            acts.appendChild(b); acts.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: m.bonuses, buy: function () { b.click(); } }); }));
+            d.appendChild(acts);
+          };
+        });
+      } else {
+        (m ? m.items || [] : []).forEach(function (o, i) {
+          if (catOf(o.item) !== cat) return;
+          var it = itemOf(o.item); if (!it) return;
+          var key = "it:" + i + ":" + o.pub + ":" + o.item;
+          wares.push({ key: key, icon: itemIconOf(o.item), tag: "✦ " + o.price, qty: "×" + o.count, seller: o.seller });
+          act[key] = function () {
+            var d = infoBox(box, itemName(o.item), ["Продаёт " + o.seller + ". Ляжет к тебе в амбар.", "В пыль в амбаре — ✦ " + it.dust + "."]);
+            var acts = el("div", "invacts"), b = btn("Купить за ✦ " + o.price, "", function () {
+              if (!hasBuild(F.state, "barn")) { haptic("error"); return toast("Урожай и продукты кладут в амбар — сначала построй его"); }
+              buyWare(b, o.pub, o.item, "item", o.price, "+1 в амбар", "Куплено: " + itemName(o.item).toLowerCase() + " — в амбаре");
+            });
+            acts.appendChild(b); d.appendChild(acts);
+          };
+        });
+      }
+      if (!m && cat !== "seed") { note("Загружаю…"); return; }
+      if (!wares.length) {
+        note(cat === "crop" ? "Урожай пока никто не выставил. Свой можно выставить во вкладке «Продать» — это выгоднее, чем превращать его в пыль."
+          : "Продуктов пока никто не выставил. Муку мелет мельница, еду печёт печь — продать их игрокам выгоднее всего.");
+        return;
+      }
+      if (sel && !act[sel]) sel = F.shopSel = null;
+      shelf(box, wares, sel, pick);
+      if (sel) act[sel](); else note(cat === "seed" ? "Нажми на товар, чтобы посмотреть и купить. Базовые семена — у станции, выведенные сорта продают игроки." : "Нажми на товар, чтобы посмотреть и купить.");
       return;
     }
-    // продать: свои сорта — игрокам (урожай превращается в пыль в амбаре, в инвентаре)
-    box.appendChild(el("div", "farm-note left", "Здесь выставляются на продажу выведенные тобой сорта. Их увидят все игроки во вкладке «Купить» и соседи у тебя в гостях. Цену считает игра по свойствам сорта, пыль приходит тебе сразу. Выставленные семена не посадить, пока не уберёшь их с продажи."));
-    var mine = s.inv.filter(function (it) { return it.count > 0 && s.strains[it.strain] && !s.strains[it.strain].base; });
-    if (!mine.length) { box.appendChild(el("div", "farm-note left", "Своих сортов пока нет. Посади разные культуры на соседние грядки — когда созреют обе, при сборе может выпасть семя-гибрид.")); return; }
-    mine.forEach(function (it) {
-      var st = s.strains[it.strain];
-      box.appendChild(seedRow(st, "×" + it.count, function () { seedSheet(st); }));
-      box.appendChild(el("div", "invline salecount2", "На продаже: " + it.listed + " из " + it.count + " · ✦ " + st.price + " за семя"));
-      var acts = el("div", "invacts");
-      var step = function (d) { haptic("light"); it.listed += d; renderShopTab(); renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: d }).catch(function () {}); };
-      var minus = btn("− убрать", "ghost", function () { step(-1); }), plus = btn("+ выставить", "", function () { step(1); });
-      minus.disabled = !it.listed; plus.disabled = it.listed >= it.count;
-      acts.appendChild(minus); acts.appendChild(plus); box.appendChild(acts);
-    });
+    // продать
+    var mine = [], acts2 = {};
+    if (cat === "seed") {
+      s.inv.filter(function (it) { return it.count > 0 && s.strains[it.strain] && !s.strains[it.strain].base; }).forEach(function (it) {
+        var st = s.strains[it.strain], key = "inv:" + it.strain;
+        var sp = priceFor("s:" + st.id, st.price);
+        mine.push({ key: key, icon: seedIconOf(st), tag: "✦ " + sp, qty: it.listed ? "в продаже " + it.listed + " из " + it.count : "×" + it.count, sale: !!it.listed });
+        acts2[key] = function () {
+          var d = infoBox(box, st.name + " · " + strainCode(st), ["У тебя " + it.count + ", на продаже " + it.listed + ". Цену семени игра считает по свойствам сорта — ✦ " + st.price + ".",
+            "Выставленные семена не посадить, пока не уберёшь их с продажи."]);
+          var step = function (dl) { haptic("light"); it.listed += dl; renderShopTab(); renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: dl }).catch(function () {}); };
+          var a = el("div", "invacts"), minus = btn("− убрать", "ghost", function () { step(-1); }), plus = btn("+ выставить", "", function () { step(1); });
+          minus.disabled = !it.listed; plus.disabled = it.listed >= it.count; a.appendChild(minus); a.appendChild(plus);
+          if (it.count - it.listed > 1) a.appendChild(btn("все", "ghost", function () { step(it.count - it.listed); }));
+          d.appendChild(a); priceControl(d, "s:" + st.id, st.price, st.id, "seed");
+        };
+      });
+    } else {
+      var ids = [];
+      (s.barn || []).forEach(function (it) { if (it.count > 0 && ids.indexOf(it.strain) < 0) ids.push(it.strain); });
+      (s.stall || []).forEach(function (x) { if (x.listed > 0 && ids.indexOf(x.item) < 0) ids.push(x.item); });
+      ids.filter(function (id) { return catOf(id) === cat && itemOf(id); }).forEach(function (id) {
+        var it = itemOf(id), inb = (barnOf(id) || { count: 0 }).count, ons = (stallOf(id) || { listed: 0 }).listed, base = stallPrice(it.dust), price = priceFor(id, base), key = "b:" + id;
+        mine.push({ key: key, icon: itemIconOf(id), tag: "✦ " + price, qty: ons ? "в продаже " + ons + " из " + (inb + ons) : "×" + inb, sale: !!ons });
+        acts2[key] = function () {
+          var d = infoBox(box, itemName(id), ["В амбаре " + inb + ", на прилавке " + ons + ". Игрокам — ✦ " + price + " за штуку, в пыль — ✦ " + it.dust + ".",
+            "Выставленное лежит на прилавке: его не смолоть, не испечь и не распылить, пока не уберёшь."]);
+          var step = function (dl) {
+            haptic("light");
+            var b0 = barnOf(id); if (dl > 0) { if (!b0 || b0.count < dl) return; b0.count -= dl; } else barnAdd(id, -dl);
+            var sx = stallOf(id); if (sx) sx.listed += dl; else (F.state.stall = F.state.stall || []).push({ item: id, listed: dl });
+            renderShopTab(); renderFarm(); farmCall("/api/farm/stall", { item: id, delta: dl }).catch(function () {});
+          };
+          var a = el("div", "invacts"), minus = btn("− убрать", "ghost", function () { step(-1); }), plus = btn("+ выставить", "", function () { step(1); });
+          minus.disabled = !ons; plus.disabled = !inb; a.appendChild(minus); a.appendChild(plus);
+          if (inb > 1) a.appendChild(btn("все " + inb, "ghost", function () { step(inb); }));
+          d.appendChild(a); priceControl(d, id, base, id, "item");
+        };
+      });
+    }
+    if (!mine.length) {
+      note(cat === "seed" ? "Своих сортов пока нет. Посади разные культуры на соседние грядки — когда созреют обе, при сборе может выпасть семя-гибрид."
+        : !hasBuild(s, "barn") ? "Чтобы продавать урожай и продукты, нужен амбар: без него урожай сразу превращается в пыль."
+        : cat === "crop" ? "В амбаре нет урожая. Собери грядки — урожай ляжет в амбар." : "Продуктов нет. Муку мелет мельница, еду печёт печь.");
+      return;
+    }
+    if (sel && !acts2[sel]) sel = F.shopSel = null;
+    shelf(box, mine, sel, pick);
+    if (sel) acts2[sel](); else note(cat === "seed" ? "Нажми на сорт, чтобы выставить его семена и назначить цену. Их увидят все игроки и соседи у тебя в гостях; пыль приходит сразу."
+      : "Нажми на товар, чтобы выставить его на прилавок. Продать игрокам выгоднее, чем распылить: игра ставит цену в полтора раза больше, а ты можешь её чуть подвинуть. Пыль приходит сразу.");
+  }
+  function buyWare(b, pub, id, kind, price, gain, done) {
+    var cur = F.state;
+    if (cur.dust < price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
+    haptic("success"); buyFx(b, gain, "−✦ " + price);
+    cur.dust -= price; $("shopdust").textContent = "✦ " + cur.dust;
+    b.disabled = true; b.textContent = "Покупаю…";
+    call("/api/farm/buy", { pub: pub, strain: id, kind: kind }).then(function (r) {
+      if (r.error) { toast(r.error); call("/api/farm").then(setFarm); return openShop("buy"); }
+      toast(done); F.shopSel = null; setFarm(r.farm); openShop("buy");
+    }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; });
   }
 
   // ---------- пластинки: одна пластинка — один трек; у каждого трека все варианты редкости и отделки ----------
@@ -2648,26 +2797,45 @@
 
   // ---------- лавка соседа: его выведенные семена по цене сорта ----------
   function renderShop(pub, v) {
-    var box = $("shopbody"); box.innerHTML = "";
+    var box = $("shopbody"); box.innerHTML = ""; extend(v);
     var h = el("div", "mono", "Лавка"); h.style.marginTop = "26px"; box.appendChild(h);
-    if (!v.shop.length) { box.appendChild(el("div", "farm-note left", "Сосед пока ничего не продаёт.")); return; }
     if (F.state) F.state.bonuses = F.state.bonuses || v.bonuses;
-    v.shop.forEach(function (it) {
+    var wares = [], act = {}, sel = F.visitSel, pick = function (k) { F.visitSel = k; renderShop(pub, v); };
+    (v.shop || []).forEach(function (it) {
       var st = v.strains[it.strain]; if (!st) return;
-      var buyNow = function () { b.click(); };
-      box.appendChild(seedRow(st, "×" + it.count, function () { seedSheet(st, { foreign: true, bonuses: v.bonuses, buy: buyNow }); }));
-      var tier = SEEDTIER[st.tier] || SEEDTIER.common, line = el("div", "invline"), tb = el("b", "", tier[0]); tb.style.color = tier[1]; line.appendChild(tb);
-      box.appendChild(line);
-      var acts = el("div", "invacts shopbuy"), b = btn("Купить за ✦ " + st.price, "", function () {
-        haptic("light"); b.disabled = true; b.textContent = "Покупаю…";
-        call("/api/farm/buy", { pub: pub, strain: st.id }).then(function (r) {
-          if (r.error) { toast(r.error); b.disabled = false; b.textContent = "Купить за ✦ " + st.price; return; }
-          haptic("success"); toast("Куплено: " + st.name + " — семя в инвентаре"); setFarm(r.farm);
-          F.visiting.strains = r.strains; renderShop(pub, r);
-        }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; b.textContent = "Купить за ✦ " + st.price; });
-      });
-      acts.appendChild(b); box.appendChild(acts);
+      var vp = it.price || st.price;
+      wares.push({ key: "s:" + it.strain, icon: seedIconOf(st), tag: "✦ " + vp, qty: "×" + it.count });
+      act["s:" + it.strain] = function () {
+        var tier = SEEDTIER[st.tier] || SEEDTIER.common, d = infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · семена", describe(st)]);
+        var a = el("div", "invacts"), b = btn("Купить за ✦ " + vp, "", function () { buyHere(b, st.id, "seed", vp, "Куплено: " + st.name + " — семя в инвентаре"); });
+        a.appendChild(b); a.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: v.bonuses, buy: function () { b.click(); } }); })); d.appendChild(a);
+      };
     });
+    (v.stall || []).forEach(function (x) {
+      var it = itemOf(x.item); if (!it) return;
+      wares.push({ key: "i:" + x.item, icon: itemIconOf(x.item), tag: "✦ " + x.price, qty: "×" + x.count });
+      act["i:" + x.item] = function () {
+        var d = infoBox(box, itemName(x.item), [(catOf(x.item) === "food" ? "Продукты" : "Урожай") + " · ляжет к тебе в амбар", "В пыль в амбаре — ✦ " + it.dust + "."]);
+        var a = el("div", "invacts"), b = btn("Купить за ✦ " + x.price, "", function () {
+          if (!hasBuild(F.state, "barn")) { haptic("error"); return toast("Урожай и продукты кладут в амбар — сначала построй его"); }
+          buyHere(b, x.item, "item", x.price, "Куплено: " + itemName(x.item).toLowerCase() + " — в амбаре");
+        });
+        a.appendChild(b); d.appendChild(a);
+      };
+    });
+    if (!wares.length) { box.appendChild(el("div", "farm-note left", "Сосед пока ничего не продаёт.")); return; }
+    if (sel && !act[sel]) sel = F.visitSel = null;
+    shelf(box, wares, sel, pick);
+    if (sel) act[sel](); else box.appendChild(el("div", "farm-note left", "Нажми на товар, чтобы посмотреть и купить."));
+    function buyHere(b, id, kind, price, done) {
+      if (F.state && F.state.dust < price) { haptic("error"); return toast("Не хватает звёздной пыли"); }
+      haptic("light"); b.disabled = true; b.textContent = "Покупаю…";
+      call("/api/farm/buy", { pub: pub, strain: id, kind: kind }).then(function (r) {
+        if (r.error) { toast(r.error); b.disabled = false; b.textContent = "Купить за ✦ " + price; return; }
+        haptic("success"); toast(done); setFarm(r.farm); F.visitSel = null;
+        F.visiting.strains = r.strains; renderShop(pub, r);
+      }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; b.textContent = "Купить за ✦ " + price; });
+    }
   }
 
   // ---------- соседи и гости ----------
@@ -2712,7 +2880,8 @@
   $("tofarm").onclick = openFarm;
   $("toneighbors").onclick = openNeighbors;
   $("toshop").onclick = function () { openShop("buy"); };
-  document.querySelectorAll("#shoptabs button").forEach(function (b) { b.onclick = function () { haptic("light"); openShop(b.dataset.st); }; });
+  document.querySelectorAll("#shoptabs button").forEach(function (b) { b.onclick = function () { haptic("light"); F.shopSel = null; openShop(b.dataset.st); }; });
+  document.querySelectorAll("#shopcats button").forEach(function (b) { b.onclick = function () { haptic("light"); F.shopCat = b.dataset.cat; F.shopSel = null; renderShopTab(); }; });
   document.querySelectorAll("[data-go]").forEach(function (b) {
     b.onclick = function () { var to = b.dataset.go; if (to === "home") home(); else if (to === "farm") openFarm(); else if (to === "farm-neighbors") openNeighbors(); };
   });
