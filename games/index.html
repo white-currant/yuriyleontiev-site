@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611141005";
+    var BUILD = "202611141006";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1506,7 +1506,7 @@
     q.forEach(function (p) { px(c, Math.round(p[0]), Math.round(p[1]) - 4, 1, 5, C.wdd); px(c, Math.round(p[0]), Math.round(p[1]) - 4, 1, 1, C.wdl); });
     if (own) { var cx = 0, cy = 0; q.forEach(function (p) { cx += p[0] / 4; cy += p[1] / 4; }); drawSign(c, Math.round(cx), Math.round(cy) + 3, own, price); }
   }
-  function lotPrice(kit, kind) { return ((kit && kit.build_list) || {})[kind] ? kit.build_list[kind].price : { barn: 50, mill: 60, oven: 150 }[kind]; }
+  function lotPrice(kit, kind) { return ((kit && kit.build_list) || {})[kind] ? kit.build_list[kind].price : { barn: 50, mill: 200, oven: 300 }[kind]; }
   var LOTS = { barn: [[82, 51], [100, 60], [116, 52], [98, 43]], mill: [[125, 62], [138, 67], [151, 62], [138, 57]], oven: [[26, 156], [40, 161], [54, 156], [40, 151]] };
   function drawMill(c, t, kit, own, now) {
     var x = MILL[0], y = MILL[1];

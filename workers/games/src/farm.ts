@@ -392,8 +392,8 @@ export async function sellCrop(u: any, strain: string, n: number) {
 // Готовое лежит в амбаре как «p:<рецепт>»: превращается в пыль по цене рецепта; дальше — заказы ресторанов.
 export const BUILDS: Record<string, { name: string; price: number; max: number }> = {
   barn: { name: "Амбар",    price: 50,  max: 0 },     // без амбара урожай сразу идёт в пыль; кухня без амбара не работает
-  mill: { name: "Мельница", price: 60,  max: 10 },
-  oven: { name: "Печь",     price: 150, max: 5 },
+  mill: { name: "Мельница", price: 200, max: 10 },
+  oven: { name: "Печь",     price: 300, max: 5 },
 };
 export const RECIPES: Record<string, { kind: string; name: string; needs: Record<string, number>; min: number; dust: number; points: number }> = {
   flour:  { kind: "mill", name: "Мука",               needs: { grain: 1 },                       min: 3,  dust: 7,   points: 0 },
