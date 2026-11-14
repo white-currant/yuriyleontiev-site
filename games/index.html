@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611142351";
+    var BUILD = "202611150004";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -491,9 +491,10 @@
   body[data-screen^="farm"] .exit, body[data-screen^="farm"] .dust-pill { white-space: nowrap; }
   body[data-screen^="farm"] .dust-pill.rainpill { min-width: 40px; justify-content: center; font-size: 17px; }
   body[data-screen^="farm"] .dust-pill.rainpill.calm { background: var(--wood2); color: var(--cream); animation: none; box-shadow: var(--frame), inset 0 2px 0 var(--wood3); }
-  body[data-screen^="farm"] .dust-pill.rainpill { color: #2b1a0e; background: linear-gradient(180deg, #ffe08f, #f2b950); font-weight: 800; font-size: 13.5px; padding: 0 8px;
-    box-shadow: var(--frame), 0 0 12px rgba(255, 208, 120, .6); animation: wglow 2.6s ease-in-out infinite; }
-  @keyframes wglow { 50% { filter: brightness(1.12); } }
+  /* особая погода: тёмное дерево, как у соседних плашек (его иконки светлые — на жёлтом пропадали), золотая рамка и мягкое свечение */
+  body[data-screen^="farm"] .dust-pill.rainpill { color: var(--cream); background: var(--wood2); font-weight: 800; font-size: 13.5px; padding: 0 8px;
+    box-shadow: var(--frame), inset 0 0 0 2px #f2b950, 0 0 12px rgba(255, 208, 120, .55); animation: wglow 2.6s ease-in-out infinite; }
+  @keyframes wglow { 50% { box-shadow: var(--frame), inset 0 0 0 2px #ffd98a, 0 0 18px rgba(255, 208, 120, .85); } }
   /* ячейки инвентаря: тёмное дерево, выбранная — светлая с уголками */
   body[data-screen^="farm"] .hotbar, body[data-screen^="farm"] .invgrid { gap: 12px; margin-top: 18px; padding: 0 3px; }
   body[data-screen^="farm"] .slot, body[data-screen^="farm"] .invgrid .slot { border-radius: 0; background: #47290f; box-shadow: var(--frame), inset 3px 3px 0 #33200f, inset -3px -3px 0 #6b4428; }
