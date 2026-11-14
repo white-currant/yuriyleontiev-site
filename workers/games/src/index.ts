@@ -399,6 +399,7 @@ async function handle(req: Request): Promise<Response> {
     case "/api/link/remove": return json(await linkRemove(user));
     // «Лунная ферма»
     case "/api/farm": return json(await farm.farmState(user));
+    case "/api/farm/dig": return json(await farm.dig(user, Number(body.idx)));
     case "/api/farm/plant": return json(await farm.plant(user, Number(body.idx), String(body.crop || "")));
     case "/api/farm/harvest": return json(await farm.harvest(user, Number(body.idx)));
     case "/api/farm/unlock": return json(await farm.unlock(user));

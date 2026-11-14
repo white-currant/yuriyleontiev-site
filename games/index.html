@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150012";
+    var BUILD = "202611150056";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -502,6 +502,15 @@
   body[data-screen^="farm"] .slot.on, body[data-screen^="farm"] .invgrid .slot.on { background: #c79a5e; box-shadow: 0 -3px 0 var(--cream), 0 3px 0 var(--cream), -3px 0 0 var(--cream), 3px 0 0 var(--cream),
     0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), inset 3px 3px 0 #e2bd86; }
   /* сорта с особым свойством — цветная рамка внутри ячейки и камешек в углу (его идея 2026-11-15) */
+  /* инструменты — две маленькие ячейки слева от семян: лейка и лопата (его решение 2026-11-15) */
+  /* маленькие, в самом низу левого угла — под печью, не налезают на неё (его правка 2026-11-15) */
+  .toolbox { position: absolute; left: 6px; bottom: 5px; z-index: 3; }
+  .tools { display: flex; gap: 6px; }
+  .tools .slot { width: 36px; height: 36px; aspect-ratio: 1; }
+  body[data-screen^="farm"] .tools .slot { box-shadow: 0 0 0 2px var(--ink), inset 2px 2px 0 #33200f, inset -2px -2px 0 #6b4428; }
+  body[data-screen^="farm"] .tools .slot.on { box-shadow: 0 0 0 2px var(--cream), 0 0 0 4px var(--ink), inset 2px 2px 0 #e2bd86; }
+  .tools .slot canvas, .tools .slot img { width: 72%; height: auto; image-rendering: pixelated; }
+  .tools .slot .n { font-size: 9px !important; right: 2px !important; bottom: -1px !important; }
   .slot.bn::after { content: ""; position: absolute; inset: 6px; border: 2px solid var(--bn); pointer-events: none; opacity: .9; }
   .slot.bn::before { content: ""; position: absolute; right: 4px; top: 4px; width: 6px; height: 6px; background: var(--bn); box-shadow: 0 0 0 2px var(--ink); pointer-events: none; z-index: 1; }
   .slot.bn .n, .slot.bn .vars { z-index: 2; }
@@ -674,7 +683,7 @@
   <section class="screen" id="farm" hidden>
     <div class="scene">
       <div class="farm-top"><button class="exit" type="button" data-go="home">← Гильдия</button><div class="pills"><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill blue" id="waterpill">💧 5</div><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
-      <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div>
+      <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div><div class="toolbox" id="toolbox"></div>
     </div>
     <div id="farmbanners"></div>
     <div class="hotbar" id="hotbar"></div>
@@ -1487,7 +1496,7 @@
     // деревья и цветы по углам луга
     tree(c, 10, 160, 9, TREES[0]); tree(c, 172, 166, 10, TREES[0]); tree(c, 181, 136, 7, TREES[1]); tree(c, 5, 96, 6, TREES[1]);
     for (i = 0; i < 26; i++) { x = 2 + (r() * (FW - 4) | 0); y = 150 + (r() * (FH - 154) | 0); if (Math.abs(x - YC[2][0]) < 14 || (x > 60 && y < 166)) continue; flower(c, x, y, C.flowers[(i * 7) % C.flowers.length]); }
-    if (typeof CANIMG !== "undefined" && CANIMG.n === 2) c.drawImage(CANIMG.full, 27, FH - 11); else spr(c, 28, FH - 6, CAN);
+    // лейка на лугу убрана: на её месте теперь настоящие ячейки лейки и лопаты
     spr(c, 138, FH - 5, PRODUCE);
     // передний забор с калиткой у ближнего угла — отдельным слоем, поверх урожая
     var gl = [YC[2][0] - 16, YC[2][1] - 8], gr = [YC[2][0] + 16, YC[2][1] - 8];
@@ -2151,7 +2160,7 @@
       });
     }
     if (!pl.crop) {
-      var picked = F.sel !== "can" && bagOf(F.sel);
+      var picked = !isTool(F.sel) && bagOf(F.sel);
       if (picked && picked.count - picked.listed > 0) return plantNow(pl, s.strains[F.sel], picked);
       return plantSheet(pl);
     }
@@ -2177,6 +2186,12 @@
         var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl); };
         if (r.hybrid) setTimeout(function () { showHybrid(r.hybrid, next); }, 500); else if (r.vinyl) setTimeout(next, 500);
       }).catch(function () {});
+    }
+    if (F.sel === "shovel") {                                                       // лопата — выкопать: семя обратно в инвентарь
+      haptic("light"); addFx("clear", pl.idx, inf.s);
+      s.plots[pl.idx] = { idx: pl.idx, crop: null }; addToBag(inf.s.id, 1); renderFarm();
+      floatText(pl.idx, "семя — в инвентарь", "seedf"); setTimeout(function () { flySeeds(pl.idx, inf.s); }, 120);
+      return farmCall("/api/farm/dig", { idx: pl.idx }).catch(function () {});
     }
     if (!inf.wet) {                                                                 // сухо — полить
       if (s.water <= 0) { haptic("error"); return toast("Лейка пуста — нажми на колодец, чтобы набрать воды"); }
@@ -2373,6 +2388,19 @@
       redraw(); renderHotbar();
     };
   }
+  function isTool(k) { return k === "can" || k === "shovel"; }
+  var SHOVEL = new Image(); SHOVEL.src = "art/shovel-v.png";   // его выбор: прямая лопата 16×16
+  function toolsCol(onPick) {                                   // лейка и лопата: свои маленькие ячейки, не среди семян
+    var col = el("div", "tools");
+    col.appendChild(makeSlot("can", onPick));
+    var b = el("button", "slot" + (F.sel === "shovel" ? " on" : "")); b.type = "button"; b.dataset.key = "shovel"; b.setAttribute("aria-label", "Лопата");
+    var im = SHOVEL.cloneNode(false); im.alt = ""; b.appendChild(im);
+    b.onclick = function () {
+      if (F.sel === "shovel") return toast("Лопата: нажми на посаженную грядку — растение выкопается, семя вернётся в инвентарь");
+      haptic("light"); F.sel = "shovel"; renderHotbar(); if (onPick) onPick();
+    };
+    col.appendChild(b); return col;
+  }
   function makeSlot(key, onPick) {
     var s = F.state, b = el("button", "slot" + (F.sel === key ? " on" : "")); b.type = "button"; b.dataset.key = key;
     var cv = el("canvas", "pix");
@@ -2392,6 +2420,7 @@
   }
   function selText() {
     var s = F.state;
+    if (F.sel === "shovel") return "Лопата: нажми на посаженную грядку, чтобы выкопать растение — семя вернётся в инвентарь. Созревшее лопата просто соберёт.";
     if (F.sel === "can") return "Лейка: воды на " + s.water + " " + plural(s.water, "полив", "полива", "поливов") + ". Сухие грядки поливаются тапом, набрать воду — колодец." + (seedItems().length ? " Выбери семена, чтобы сажать." : "");
     var sx = s.strains[F.sel];
     var vl = varLabel(sx.id);
@@ -2400,17 +2429,17 @@
   function renderHotbar() {
     var s = F.state, bar = $("hotbar"); if (!s || !bar) return;
     var groups = groupItems();
-    if (F.sel !== "can" && !groups.some(function (g) { return g.ids.indexOf(F.sel) >= 0; })) F.sel = groups.length ? groups[0].key : "can";   // кончились — берём следующие
-    if (F.sel !== "can") { var gs = groupOf(F.sel); if (gs) { F.pick[gs.name] = F.sel; gs.key = F.sel; } }
+    if (!isTool(F.sel) && !groups.some(function (g) { return g.ids.indexOf(F.sel) >= 0; })) F.sel = groups.length ? groups[0].key : "can";   // кончились — берём следующие
+    if (!isTool(F.sel)) { var gs = groupOf(F.sel); if (gs) { F.pick[gs.name] = F.sel; gs.key = F.sel; } }
     groups = groupItems();
     // в полоске: лейка, три сорта (выбранный — всегда виден) и «все»
-    var keys = groups.map(function (g) { return g.key; }), shown = keys.slice(0, 3);
-    if (F.sel !== "can" && shown.indexOf(F.sel) < 0) shown[2] = F.sel;
+    var keys = groups.map(function (g) { return g.key; }), shown = keys.slice(0, 4);
+    if (!isTool(F.sel) && shown.indexOf(F.sel) < 0) shown[3] = F.sel;
     bar.innerHTML = "";
-    bar.appendChild(makeSlot("can"));
+    var tb = $("toolbox"); if (tb) { tb.innerHTML = ""; tb.appendChild(toolsCol()); }   // лейка и лопата — на самой ферме, внизу слева (его решение 2026-11-15)
     shown.forEach(function (k) { bar.appendChild(makeSlot(k)); });
-    for (var k = shown.length; k < 3; k++) bar.appendChild(el("div", "slot empty"));
-    var more = el("button", "slot more", keys.length > 3 ? "ещё " + (keys.length - 3) : "все"); more.type = "button";
+    for (var k = shown.length; k < 4; k++) bar.appendChild(el("div", "slot empty"));
+    var more = el("button", "slot more", keys.length > 4 ? "ещё " + (keys.length - 4) : "все"); more.type = "button";
     more.onclick = function () { haptic("light"); invSheet(); }; bar.appendChild(more);
     setText($("selnote"), selText());
   }
@@ -2666,15 +2695,14 @@
       var note = el("div", "selnote"), grid = el("div", "invgrid");
       var draw = function () {
         grid.innerHTML = "";
-        grid.appendChild(makeSlot("can", draw));
-        var seeds = groupItems();
+        var seeds = groupItems();                                // лейка и лопата — в своих ячейках под фермой, не здесь
         seeds.forEach(function (g) { grid.appendChild(makeSlot(g.key, draw)); });
-        for (var k = seeds.length + 1; k < Math.max(15, Math.ceil((seeds.length + 1) / 5) * 5); k++) grid.appendChild(el("div", "slot empty"));
+        for (var k = seeds.length; k < Math.max(15, Math.ceil(seeds.length / 5) * 5); k++) grid.appendChild(el("div", "slot empty"));
         note.textContent = selText();
       };
       draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
       F.invRedraw = function () { if (document.body.contains(grid)) draw(); else F.invRedraw = null; };   // открытый инвентарь — перерисовать после распыления и ответа сервера
-      sh.appendChild(el("div", "sub", "Перетащи семена, чтобы расставить по порядку: первые три после лейки видны в полоске под фермой."));
+      sh.appendChild(el("div", "sub", "Перетащи семена, чтобы расставить по порядку: первые четыре видны в полоске под фермой."));
       var listed = s.inv.filter(function (it) { return it.listed > 0; });
       if (listed.length) sh.appendChild(el("div", "sub", "На продаже в лавке: " + listed.map(function (it) { return (s.strains[it.strain] || {}).name + " ×" + it.listed; }).join(", ") + "."));
       var acts = el("div", "salebtns sheetfoot");

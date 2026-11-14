@@ -330,6 +330,19 @@ export async function farmState(u: any) {
   };
 }
 
+// лопата (2026-11-15): выкопать посаженное — семя обратно в инвентарь, очко за посадку списывается (иначе сажай-копай ради очков)
+export async function dig(u: any, idx: number) {
+  if (!(idx >= 0 && idx < PLOTS_MAX)) return { error: "Нет такой грядки" };
+  await ensureFarm(u);
+  const del = await q("DELETE FROM f_plots WHERE user = ? AND idx = ? RETURNING crop", [u.id, idx]);
+  if (!del.length) return { error: "Тут ничего не растёт" };
+  const crop = String(del[0][0]), t = now();
+  await DB.batch([
+    DB.prepare("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1").bind(u.id, crop),
+    DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)").bind(u.id, nameOf(u), -POINTS_PLANT, "Лунная ферма", t),
+  ]);
+  return { crop, farm: await farmState(u) };
+}
 export async function plant(u: any, idx: number, crop: string) {
   if (!(idx >= 0 && idx < PLOTS_MAX) || !crop) return { error: "Нет такой грядки или семян" };
   await ensureFarm(u);
