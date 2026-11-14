@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150146";
+    var BUILD = "202611150150";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -453,7 +453,7 @@
     background: inherit; box-shadow: 0 -10px 14px -6px rgba(20, 10, 4, .55); z-index: 2; }
   .sheetfoot .sub:first-child { margin-top: 0; }
   html.locked, html.locked body { overflow: hidden; }
-  .invgrid .slot { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .invgrid.drag .slot { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   .slot.ghost { position: fixed; z-index: 60; transform: translate(-50%, -60%) scale(1.12); pointer-events: none; opacity: .95; margin: 0; }
   .slot.lifted { opacity: .35; }
   body[data-screen^="farm"] .invgrid .slot.drop { background: #8a6a3a; box-shadow: 0 -3px 0 var(--pgold), 0 3px 0 var(--pgold), -3px 0 0 var(--pgold), 3px 0 0 var(--pgold); opacity: 1; }
@@ -2791,7 +2791,7 @@
           f.style.width = (z.right - a.left + 14) + "px"; f.style.height = (a.height + 14) + "px"; grid.appendChild(f);
         });
       };
-      draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
+      grid.classList.add("drag"); draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
       F.invRedraw = function () { if (document.body.contains(grid)) draw(); else F.invRedraw = null; };   // открытый инвентарь — перерисовать после распыления и ответа сервера
       var acts = el("div", "salebtns sheetfoot");
       acts.appendChild(btn("Лавка", "ghost", function () { close(); openShop("buy"); }));
