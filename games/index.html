@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611141057";
+    var BUILD = "202611142220";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -359,9 +359,14 @@
   .selnote { margin-top: 8px; min-height: 2.8em; font-size: 12.5px; line-height: 1.4; color: rgba(255, 255, 255, .82); }
   .sheet .selnote { color: var(--dim); }
   .salecount2 { color: var(--white); font-weight: 600; }
+  /* пиксельные значки пыли и воды вместо ✦ и 💧 (его рисунки, art/) */
+  img.ico { display: inline-block; height: .9em; width: auto; image-rendering: pixelated; vertical-align: -.08em; margin: 0 .22em 0 .05em; }
+  .ware .tag img.ico, .btn:not(.ghost) img.ico, .badge img.ico { filter: drop-shadow(0 0 .6px #3a2414) drop-shadow(0 0 .6px #3a2414); }   /* на светлом — тёмная обводка */
   /* лавка — товары на деревянных полках с ценниками (не ячейки, как в инвентаре) */
   .cats { margin-top: 14px; }
-  .cats button { flex: 1; }
+  .cats button { flex: 1; position: relative; }
+  .cats .badge { position: absolute; top: -6px; right: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; display: grid; place-items: center;
+    background: var(--gold); color: #2a1406; font-size: 10.5px; font-weight: 800; line-height: 1; box-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
   .wares { margin-top: 18px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 10px; column-gap: 0; }
   .ware { position: relative; height: 104px; display: flex; align-items: flex-end; justify-content: center; padding: 0 0 31px; border: 0; background: none; overflow: visible; }
   .ware::after { content: ""; position: absolute; left: 0; right: 0; bottom: 22px; height: 9px; background: linear-gradient(#c58c54, #9a6438 60%, #6e4425); box-shadow: 0 4px 0 rgba(30, 15, 5, .45); }
@@ -1248,13 +1253,53 @@
   // неподвижная часть сцены — по одной на участок (seed: свой — 47, у соседей — из номера участка).
   // Два слоя: back — всё позади грядок, front — передний забор и калитка (рисуются поверх урожая).
   var statics = {};
+  // небо из картинок: звёзды — мелкие пятна (≤ 20 пикселей) слоя sky-stars, планеты — крупные; планеты в статику, звёзды мерцают
+  var SKY = { ready: false, stars: [] };
+  (function () {
+    var a = new Image(), b = new Image(), n = 0;
+    var done = function () {
+      if (++n < 2) return;
+      var w = b.width, h = b.height, cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      var c = cv.getContext("2d"); c.drawImage(b, 0, 0);
+      var d = c.getImageData(0, 0, w, h).data, seen = new Uint8Array(w * h), stars = [];
+      for (var i = 0; i < w * h; i++) {
+        if (seen[i] || d[i * 4 + 3] === 0) continue;
+        var comp = [], st = [i]; seen[i] = 1;
+        while (st.length) { var k = st.pop(), kx = k % w, ky = k / w | 0; comp.push(k);
+          [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (o) { var nx = kx + o[0], ny = ky + o[1], j = ny * w + nx;
+            if (nx >= 0 && ny >= 0 && nx < w && ny < h && !seen[j] && d[j * 4 + 3] > 0) { seen[j] = 1; st.push(j); } }); }
+        if (comp.length > 20) continue;                                   // планета (крупное пятно) — остаётся в картинке
+        var px0 = comp.map(function (k) { return [k % w, k / w | 0, "rgba(" + d[k * 4] + "," + d[k * 4 + 1] + "," + d[k * 4 + 2] + ","]; });
+        comp.forEach(function (k) { d[k * 4 + 3] = 0; });
+        var hs = comp[0] * 2654435761 >>> 0;
+        var ci = Math.round(comp.reduce(function (a, k) { return a + k % w; }, 0) / comp.length) + w * Math.round(comp.reduce(function (a, k) { return a + (k / w | 0); }, 0) / comp.length);
+        var cx0 = ci % w, cy0 = ci / w | 0; px0.forEach(function (p) { p[3] = Math.abs(p[0] - cx0) + Math.abs(p[1] - cy0); });   // расстояние от центра
+        stars.push({ px: px0, ph: (hs % 628) / 100, sp: .0018 + (hs % 97) / 97 * .003, big: comp.length > 2 });
+      }
+      c.putImageData(new ImageData(d, w, h), 0, 0);
+      SKY.sky = a; SKY.planets = cv; SKY.stars = stars; SKY.ready = true; statics = {};
+    };
+    a.onload = b.onload = done; a.src = "art/sky.png"; b.src = "art/sky-stars.png";
+  })();
+  function drawStars(c, t) {                                                         // мерцание: у каждой звезды свой ритм
+    SKY.stars.forEach(function (s) {
+      var v = .5 + .5 * Math.sin(t * s.sp + s.ph), a = .12 + .88 * v * v * v;                 // большую часть времени тусклее, вспыхивают
+      s.px.forEach(function (p) {                                       // у крупной звезды лучи вырастают на вспышке: ближние раньше, дальние позже
+        var k = !s.big || !p[3] ? (s.big ? Math.max(.45, a) : a) : p[3] === 1 ? (v - .3) / .7 : (v - .65) / .35;
+        if (k > .02) px(c, p[0], p[1], 1, 1, p[2] + Math.min(1, k).toFixed(2) + ")");
+      });
+    });
+  }
   function staticLayer(seed) {
     if (statics[seed]) return statics[seed];
     var back = document.createElement("canvas"), front = document.createElement("canvas"), shed = document.createElement("canvas"), back2 = document.createElement("canvas");
     back.width = front.width = shed.width = back2.width = FW; back.height = front.height = shed.height = back2.height = FH;   // shed — амбар (рисуется, если куплен)
     var c = back.getContext("2d"), f = front.getContext("2d"), r = rng(seed), x, y, i;
     var roof = ROOFS[seed === 47 ? 0 : seed % ROOFS.length];
-    // небо: закатные полосы с «лесенкой» на стыках, звёзды, Земля и планета с кольцом
+    // небо — его рисунки (art/sky.png и art/sky-stars.png): ночное небо, планеты; звёзды мерцают отдельно (drawStars)
+    if (SKY.ready) {
+      px(c, 0, 0, FW, 36, "#02054d"); c.drawImage(SKY.sky, 0, 0); c.drawImage(SKY.planets, 0, 0);
+    } else {
     for (y = 0; y < 36; y++) {
       var fq = y / 36 * (C.sky.length - 1), b0 = Math.floor(fq), fr = fq - b0;
       for (x = 0; x < FW; x++) px(c, x, y, 1, 1, C.sky[fr > .5 && (x + y) % 2 ? b0 + 1 : b0]);
@@ -1266,6 +1311,7 @@
       px(c, ex + x, ey + y, 1, 1, x + y > 5 ? (land ? "#2e7a3a" : "#1f4f9e") : land ? "#5cc26a" : x + y < -5 ? "#8fd0ff" : "#3b82f6"); }
     px(c, ex - 3, ey - 5, 3, 1, "#ffffff"); px(c, ex + 1, ey - 2, 2, 1, "#ffffff");
     disc(c, 26, 9, 3, "#ffb36b"); px(c, 24, 8, 2, 1, "#ffd9a8"); px(c, 20, 10, 13, 1, "#f6d7ff"); px(c, 22, 10, 9, 1, "#c99ae8");
+    }
     // луг
     px(c, 0, 32, FW, FH - 32, C.g);
     for (i = 0; i < 1000; i++) px(c, r() * FW | 0, 32 + (r() * (FH - 32) | 0), 1, 1, r() < .5 ? C.gl : C.gd);
@@ -1432,8 +1478,26 @@
   var DEAD = ["#5a4630", "#8a6a42", "#a88a5a", "#7a5a3a", "#b89a6a", "#4a3826"];
   var SIL = ["#c4ad80", "#d2bd92", "#dccaa2", "#d2bd92", "#dccaa2", "#c4ad80"];     // силуэт ненайденного вида — едва заметный на пергаменте
   var SEEDTIER = { common: ["Обычный сорт", "#c9c3e0"], rare: ["Хороший сорт", "#60a5fa"], epic: ["Редкий сорт", "#c084fc"], legendary: ["Легендарный сорт", "#ffc469"] };
+  // у каждого выведенного сорта — свой оттенок раскраски по его коду (его решение 2026-11-14: одинаковые на вид сорта путались в инвентаре)
+  var VARS = {};
+  function hsl(hex) { var r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255,
+    mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn, h = 0, sa = 0;
+    if (d) { sa = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; }
+    return [h, sa, l]; }
+  function hex(h, sa, l) { var f = function (n) { var k = (n + h / 30) % 12, a = sa * Math.min(l, 1 - l); return Math.round((l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255); };
+    return "#" + [f(0), f(8), f(4)].map(function (v) { return ("0" + v.toString(16)).slice(-2); }).join(""); }
+  function palOf(s) {
+    var base = PAL[s.color] || PAL.moss; if (!s.id || s.base || CROPS0[s.id]) return base;
+    var key = s.id + s.color; if (VARS[key]) return VARS[key];
+    var hsh = 0; for (var i = 0; i < s.id.length; i++) hsh = (hsh * 31 + s.id.charCodeAt(i)) >>> 0;
+    // подмес одного из шести тонов + чуть светлее/темнее: заметно даже на белых раскрасках
+    var TONES = ["#ff7eb6", "#5fe0b0", "#ffc94a", "#b18cff", "#5cc8ff", "#ff9a6b"], tone = TONES[hsh % 6], dl = [-.06, 0, .05][Math.floor(hsh / 6) % 3];
+    return VARS[key] = base.map(function (c) { var x = hsl(mixHex(c, tone, .3).replace(/rgb\((\d+),(\d+),(\d+)\)/, function (_, r, g, b) { return "#" + [r, g, b].map(function (v) { return ("0" + (+v).toString(16)).slice(-2); }).join(""); }));
+      return hex(x[0], x[1], Math.max(.08, Math.min(.96, x[2] + dl))); });
+  }
+  var CROPS0 = { moss: 1, berry: 1, crystal: 1, wheat: 1, millet: 1, rye: 1 };
   function sprS(c, x, yb, rows, s, dead) {
-    var roles = ROLES[s.shape] || DIG, pal = dead ? DEAD : s.color === "_sil" ? SIL : PAL[s.color] || PAL.moss, h = rows.length;
+    var roles = ROLES[s.shape] || DIG, pal = dead ? DEAD : s.color === "_sil" ? SIL : palOf(s), h = rows.length;
     for (var j = 0; j < h; j++) for (var i = 0; i < rows[j].length; i++) {
       var ch = rows[j][i]; if (ch === ".") continue;
       px(c, x + i, yb - h + 1 + j, 1, 1, roles[ch] != null ? pal[roles[ch]] : SPR[ch]);
@@ -1614,7 +1678,7 @@
   function drawFarm(cv, seed, plots, now, t, rain, ss, dryLim, own, kit) {
     if (cv.width !== FW) { cv.width = FW; cv.height = FH; }
     var c = cv.getContext("2d"), i, L = staticLayer(seed);
-    c.drawImage(L.back, 0, 0);
+    c.drawImage(L.back, 0, 0); drawStars(c, t);
     if (hasBuild(kit, "barn")) c.drawImage(L.shed, 0, 0); else drawLot(c, LOTS.barn, own, lotPrice(kit, "barn"));
     c.drawImage(L.back2, 0, 0);
     drawMill(c, t, kit, own, now);
@@ -1724,7 +1788,7 @@
     a.onfinish = function () { node.remove(); };
   }
   function seedIcon(cv, s) {                                                         // семечко: овал в цвет сорта, блик, тёмный край
-    var pal = PAL[s.color] || PAL.moss, c = cv.getContext("2d"), rows = [".00.", "0120", "0110", "0115", "0115", ".55."];
+    var pal = palOf(s), c = cv.getContext("2d"), rows = [".00.", "0120", "0110", "0115", "0115", ".55."];
     cv.width = 4; cv.height = 6; c.clearRect(0, 0, 4, 6);
     rows.forEach(function (r, y) { for (var x = 0; x < 4; x++) if (r[x] !== ".") px(c, x, y, 1, 1, pal[+r[x]]); });
   }
@@ -1820,7 +1884,7 @@
     var h = Math.max(10, rows.length + 2);
     cv.width = 12; cv.height = h; c.clearRect(0, 0, 12, h);
     px(c, 2, h - 1, 8, 1, "rgba(40,25,10,.35)");                                 // тень под плодом
-    sprS(c, 2, h - 2, rows, { shape: "_fruit", color: s.color });
+    sprS(c, 2, h - 2, rows, { shape: "_fruit", color: s.color, id: s.id, base: s.base });
   }
   function canIcon(cv) { var c = cv.getContext("2d"); cv.width = 12; cv.height = 9; c.clearRect(0, 0, 12, 9); spr(c, 1, 8, CAN); }
   function farmNow() { return F.state ? F.state.now + (Date.now() - F.fetched) / 1000 : Date.now() / 1000; }
@@ -1936,6 +2000,29 @@
     renderPlots($("plots"), s.plots, now, true, s.strains, s.dry_limit);
     renderHotbar();
   }
+  // ✦ и 💧 в тексте интерфейса → его пиксельные значки (art/dust.png, art/water.png); копируется как прежний знак
+  var ICONS = { "✦": "art/dust.png", "💧": "art/water.png" }, ICON_RE = /✦|💧/;
+  function iconize(root) {
+    if (!root || !document.body.contains(root)) return;
+    var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), list = [], n;
+    if (root.nodeType === 3) list.push(root); else while ((n = w.nextNode())) if (ICON_RE.test(n.nodeValue)) list.push(n);
+    list.forEach(function (tn) {
+      var p = tn.parentNode; if (!p || /^(SCRIPT|STYLE|TEXTAREA|OPTION)$/.test(p.nodeName) || !ICON_RE.test(tn.nodeValue)) return;
+      var f = document.createDocumentFragment();
+      var parts = tn.nodeValue.split(/(✦|💧)/);
+      parts.forEach(function (part, i) {
+        if (i > 0 && ICONS[parts[i - 1]] && part.charAt(0) === " ") part = part.slice(1);   // пробел после значка — его заменяет отступ
+        if (ICONS[part]) { var im = document.createElement("img"); im.className = "ico"; im.src = ICONS[part]; im.alt = part; f.appendChild(im); }
+        else if (part) f.appendChild(document.createTextNode(part));
+      });
+      if (/flex|grid/.test(getComputedStyle(p).display)) { var sp = document.createElement("span"); sp.appendChild(f); f = sp; }   // в кнопке-флексе — одним куском, без зазоров
+      p.replaceChild(f, tn);
+    });
+  }
+  new MutationObserver(function (ms) { ms.forEach(function (m) {
+    if (m.type === "characterData") iconize(m.target); else m.addedNodes.forEach(function (x) { if (x.nodeType === 1 || x.nodeType === 3) iconize(x); });
+  }); }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  iconize(document.body);
   function setFarm(st) {
     F.state = st; F.fetched = Date.now(); renderFarm();
     if (!$("farm-shop").hidden) { $("shopdust").textContent = "✦ " + st.dust; if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
@@ -2548,7 +2635,15 @@
   function renderShopTab() {
     var s = F.state, box = $("shopview"); if (!s) return;
     box.innerHTML = ""; $("shopdust").textContent = "✦ " + s.dust;
-    document.querySelectorAll("#shopcats button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.cat === F.shopCat)); });
+    // в «Купить» — кружок: сколько штук игроки выставили в разделе
+    var cnt = { seed: 0, crop: 0, food: 0 }, mk = F.market;
+    if (mk) { mk.offers.forEach(function (o) { cnt.seed += o.count; }); (mk.items || []).forEach(function (o) { cnt[catOf(o.item)] += o.count; }); }
+    document.querySelectorAll("#shopcats button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.cat === F.shopCat));
+      var old = b.querySelector(".badge"); if (old) old.remove();
+      var n = F.shopTab === "buy" ? cnt[b.dataset.cat] : 0;
+      if (n) b.appendChild(el("span", "badge", n > 99 ? "99+" : String(n)));
+    });
     var cat = F.shopCat, sel = F.shopSel, pick = function (k) { F.shopSel = k; renderShopTab(); };
     var note = function (t) { box.appendChild(el("div", "farm-note left", t)); };
     if (F.shopTab === "buy") {
