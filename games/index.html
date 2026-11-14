@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150004";
+    var BUILD = "202611150006";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2086,7 +2086,7 @@
   // ✦ и 💧 в тексте интерфейса → его пиксельные значки (art/dust.png, art/water.png); копируется как прежний знак
   // погода — его иконки 16×16 (2026-11-14): значки погоды приходят с сервера символами и тоже заменяются картинками
   var ICONS = { "✦": "art/dust.png", "💧": "art/water.png", "☾": "art/weather-clear.png", "✨": "art/weather-stardust.png", "🌧": "art/weather-shower.png",
-                "☀": "art/weather-drought.png", "🌬": "art/weather-wind.png", "🌕": "art/weather-fullmoon.png" }, ICON_RE = /✦|💧|☾|✨|🌧|☀|🌬|🌕/;
+                "☀": "art/weather-drought.png", "🌬": "art/weather-wind.png", "🌕": "art/weather-fullmoon.png", "⏱": "art/clock.png" }, ICON_RE = /✦|💧|☾|✨|🌧|☀|🌬|🌕|⏱/;
   function iconize(root) {
     if (!root || !document.body.contains(root)) return;
     var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), list = [], n;
@@ -2094,7 +2094,7 @@
     list.forEach(function (tn) {
       var p = tn.parentNode; if (!p || /^(SCRIPT|STYLE|TEXTAREA|OPTION)$/.test(p.nodeName) || !ICON_RE.test(tn.nodeValue)) return;
       var f = document.createDocumentFragment();
-      var parts = tn.nodeValue.replace(/\uFE0F/g, "").split(/(✦|💧|☾|✨|🌧|☀|🌬|🌕)/);
+      var parts = tn.nodeValue.replace(/\uFE0F/g, "").split(/(✦|💧|☾|✨|🌧|☀|🌬|🌕|⏱)/);
       parts.forEach(function (part, i) {
         if (i > 0 && ICONS[parts[i - 1]] && part.charAt(0) === " ") part = part.slice(1);   // пробел после значка — его заменяет отступ
         if (ICONS[part]) { var im = document.createElement("img"); im.className = "ico"; im.src = ICONS[part]; im.alt = part; f.appendChild(im); }
