@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150113";
+    var BUILD = "202611150118";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -359,6 +359,8 @@
   .selnote { margin-top: 8px; min-height: 2.8em; font-size: 12.5px; line-height: 1.4; color: rgba(255, 255, 255, .82); }
   .sheet .selnote { color: var(--dim); }
   .salecount2 { color: var(--white); font-weight: 600; }
+  .invgrid { position: relative; }
+  .invgrid .hot4 { position: absolute; border: 3px solid var(--gold); pointer-events: none; z-index: 3; box-shadow: 0 0 10px rgba(255, 196, 105, .35); }
   .bnrow { display: grid; grid-template-columns: 46px 1fr; gap: 12px; align-items: center; margin-top: 10px; }
   .bnrow .slot { width: 46px; height: 46px; aspect-ratio: 1; }
   .bnrow .slot canvas { width: 70%; height: auto; image-rendering: pixelated; }
@@ -589,7 +591,7 @@
   /* справочник — книжка: пергаментный разворот, чернильный текст */
   body[data-screen^="farm"] .sheet.book { background: #f4e4bd; color: #3b2614; box-shadow: 0 -4px 0 #c9a86a, 0 -8px 0 var(--ink);
     background-image: linear-gradient(90deg, rgba(120, 80, 30, .12), rgba(120, 80, 30, 0) 14px, rgba(120, 80, 30, 0) calc(100% - 14px), rgba(120, 80, 30, .12)); }
-  .book .bpage { height: 408px; padding: 4px 6px 0; opacity: 0; overflow: hidden; }
+  .book .bpage { height: 408px; padding: 4px 6px 12px; opacity: 0; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }   /* длинные страницы листаются пальцем */
   .book .bpage.in { opacity: 1; transform: none; transition: opacity .22s, transform .22s; }
   .book .bpage.fwd { transform: translateX(18px); } .book .bpage.back { transform: translateX(-18px); }
   .book .bpage.fwd.in, .book .bpage.back.in { transform: none; }
@@ -2497,7 +2499,7 @@
       var rules = function (list) { list.forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); }); };
       var draw = function (dir) {
         var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage)), SH = SHAPES.length;
-        page.innerHTML = ""; page.className = "bpage" + (dir ? (dir > 0 ? " fwd" : " back") : "");
+        page.innerHTML = ""; page.scrollTop = 0; page.className = "bpage" + (dir ? (dir > 0 ? " fwd" : " back") : "");
         void page.offsetWidth; page.classList.add("in");
         if (p === 0) {
           page.appendChild(el("h3", "", "Справочник лунного садовода"));
@@ -2767,12 +2769,17 @@
         seeds.forEach(function (g) { grid.appendChild(makeSlot(g.key, draw)); });
         for (var k = seeds.length; k < Math.max(15, Math.ceil(seeds.length / 5) * 5); k++) grid.appendChild(el("div", "slot empty"));
         note.textContent = selText();
+        // первые четыре — те, что в полоске под фермой: жёлтая рамка вокруг них (его решение 2026-11-15)
+        requestAnimationFrame(function () {
+          var sl = grid.querySelectorAll(".slot"), old = grid.querySelector(".hot4"); if (old) old.remove();
+          var n = Math.min(4, seeds.length); if (!n) return;
+          var g = grid.getBoundingClientRect(), a = sl[0].getBoundingClientRect(), z = sl[n - 1].getBoundingClientRect(), f = el("div", "hot4");
+          f.style.left = (a.left - g.left - 7) + "px"; f.style.top = (a.top - g.top - 7) + "px";
+          f.style.width = (z.right - a.left + 14) + "px"; f.style.height = (a.height + 14) + "px"; grid.appendChild(f);
+        });
       };
       draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
       F.invRedraw = function () { if (document.body.contains(grid)) draw(); else F.invRedraw = null; };   // открытый инвентарь — перерисовать после распыления и ответа сервера
-      sh.appendChild(el("div", "sub", "Перетащи семена, чтобы расставить по порядку: первые четыре видны в полоске под фермой."));
-      var listed = s.inv.filter(function (it) { return it.listed > 0; });
-      if (listed.length) sh.appendChild(el("div", "sub", "На продаже в лавке: " + listed.map(function (it) { return (s.strains[it.strain] || {}).name + " ×" + it.listed; }).join(", ") + "."));
       var acts = el("div", "salebtns sheetfoot");
       acts.appendChild(btn("Лавка", "ghost", function () { close(); openShop("buy"); }));
       if (CHEST_ON) acts.appendChild(btn("Сундук", "ghost", function () { close(); chestSheet(); }));
