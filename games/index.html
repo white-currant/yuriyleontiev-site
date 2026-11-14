@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150118";
+    var BUILD = "202611150122";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2026,7 +2026,12 @@
     var shut = function () { w.remove(); if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked"); };
     w.appendChild(sh); w.onclick = function (e) { if (e.target === w) shut(); }; build(sh, shut);
     // палец по окну не должен прокручивать страницу под ним: гасим жест, кроме прокрутки самого окна, если оно длинное
-    w.addEventListener("touchmove", function (e) { if (!sh.contains(e.target) || sh.scrollHeight <= sh.clientHeight + 1) e.preventDefault(); }, { passive: false });
+    // (прокручиваемые блоки внутри окна — страница справочника — тоже листаются: их жест не гасим)
+    w.addEventListener("touchmove", function (e) {
+      if (!sh.contains(e.target)) return e.preventDefault();
+      for (var n = e.target; n && n !== w; n = n.parentNode) if (n.nodeType === 1 && n.scrollHeight > n.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(n).overflowY)) return;
+      e.preventDefault();
+    }, { passive: false });
     document.documentElement.classList.add("locked");
     document.body.appendChild(w); return w;
   }
@@ -2768,7 +2773,8 @@
         var seeds = groupItems();                                // лейка и лопата — в своих ячейках под фермой, не здесь
         seeds.forEach(function (g) { grid.appendChild(makeSlot(g.key, draw)); });
         for (var k = seeds.length; k < Math.max(15, Math.ceil(seeds.length / 5) * 5); k++) grid.appendChild(el("div", "slot empty"));
-        note.textContent = selText();
+        // в инвентаре — только про семена: выбран инструмент — короткая подсказка, а не текст про лейку
+        note.textContent = isTool(F.sel) ? "Нажми на семена, чтобы выбрать их для посадки. Ещё раз на ячейку — свойства." : selText();
         // первые четыре — те, что в полоске под фермой: жёлтая рамка вокруг них (его решение 2026-11-15)
         requestAnimationFrame(function () {
           var sl = grid.querySelectorAll(".slot"), old = grid.querySelector(".hot4"); if (old) old.remove();
