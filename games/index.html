@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611142227";
+    var BUILD = "202611142233";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1274,8 +1274,12 @@
         var hs = comp[0] * 2654435761 >>> 0;
         var ci = Math.round(comp.reduce(function (a, k) { return a + k % w; }, 0) / comp.length) + w * Math.round(comp.reduce(function (a, k) { return a + (k / w | 0); }, 0) / comp.length);
         var cx0 = ci % w, cy0 = ci / w | 0; px0.forEach(function (p) { p[3] = Math.abs(p[0] - cx0) + Math.abs(p[1] - cy0); });   // расстояние от центра
-        stars.push({ px: px0, ph: (hs % 628) / 100, sp: .0004 + (hs % 97) / 97 * .0007, big: comp.length > 2 });
+        stars.push({ px: px0, ph: (hs % 628) / 100, sp: .0004 + (hs % 97) / 97 * .0007, big: comp.length > 2,
+                     r: comp.length > 2 ? [1, 1, 0, 1][hs % 4] : 0, x: comp[0] % w });          // размер: лучи 2 / 1 / только точка — звёзды мельче и разные (его просьба 2026-11-14)
       }
+      // пара звёзд — как в его рисунке, с длинными лучами (его просьба 2026-11-14); разнесены по небу
+      var bigs = stars.filter(function (s) { return s.big; }).sort(function (a2, b2) { return a2.x - b2.x; });
+      if (bigs.length) { bigs[Math.floor(bigs.length / 4)].r = 2; bigs[Math.min(bigs.length - 1, Math.floor(bigs.length * 3 / 4))].r = 2; }
       c.putImageData(new ImageData(d, w, h), 0, 0);
       SKY.sky = a; SKY.planets = cv; SKY.stars = stars; SKY.ready = true; statics = {};
     };
@@ -1286,7 +1290,8 @@
       // ненавязчиво, фоном (его просьба 2026-11-14): медленно и неглубоко, лучи не гаснут, а чуть тускнеют
       var v = .5 + .5 * Math.sin(t * s.sp + s.ph), a = .55 + .45 * v;
       s.px.forEach(function (p) {
-        var k = !s.big || !p[3] ? a : p[3] === 1 ? .6 + .35 * v : .35 + .45 * v;
+        if (p[3] > s.r) return;
+        var k = !s.big || !p[3] ? a : p[3] === 1 ? (s.r === 1 ? .45 + .3 * v : .6 + .35 * v) : .35 + .45 * v;
         if (k > .02) px(c, p[0], p[1], 1, 1, p[2] + Math.min(1, k).toFixed(2) + ")");
       });
     });
@@ -1490,14 +1495,23 @@
     return "#" + [f(0), f(8), f(4)].map(function (v) { return ("0" + v.toString(16)).slice(-2); }).join(""); }
   function palOf(s) {
     var base = PAL[s.color] || PAL.moss; if (!s.id || s.base || CROPS0[s.id]) return base;
-    var key = s.id + s.color; if (VARS[key]) return VARS[key];
     var hsh = 0; for (var i = 0; i < s.id.length; i++) hsh = (hsh * 31 + s.id.charCodeAt(i)) >>> 0;
-    // подмес одного из шести тонов + чуть светлее/темнее: заметно даже на белых раскрасках
-    var TONES = ["#ff7eb6", "#5fe0b0", "#ffc94a", "#b18cff", "#5cc8ff", "#ff9a6b"], tone = TONES[hsh % 6], dl = [-.06, 0, .05][Math.floor(hsh / 6) % 3];
-    return VARS[key] = base.map(function (c) { var x = hsl(mixHex(c, tone, .3).replace(/rgb\((\d+),(\d+),(\d+)\)/, function (_, r, g, b) { return "#" + [r, g, b].map(function (v) { return ("0" + (+v).toString(16)).slice(-2); }).join(""); }));
+    // подмес одного из шести тонов + чуть светлее/темнее: заметно даже на белых раскрасках.
+    // Сорта с одним названием у игрока (SIBL) получают тона по порядку — гарантированно разные (одинаковые «Щедрые ягоды» путались).
+    var TONES = ["#ff6fae", "#3fe0a6", "#ffc23a", "#9b7bff", "#43b8ff", "#ff8a4a"], sib = SIBL[s.id];
+    var ti = sib != null ? sib % 6 : hsh % 6, dl = sib != null ? [0, -.07, .06][Math.floor(sib / 6) % 3] : [-.06, 0, .05][Math.floor(hsh / 6) % 3], mixK = sib != null ? .38 : .3;
+    var key = s.id + s.color + ":" + ti + ":" + dl; if (VARS[key]) return VARS[key];
+    var tone = TONES[ti];
+    return VARS[key] = base.map(function (c) { var x = hsl(mixHex(c, tone, mixK).replace(/rgb\((\d+),(\d+),(\d+)\)/, function (_, r, g, b) { return "#" + [r, g, b].map(function (v) { return ("0" + (+v).toString(16)).slice(-2); }).join(""); }));
       return hex(x[0], x[1], Math.max(.08, Math.min(.96, x[2] + dl))); });
   }
   var CROPS0 = { moss: 1, berry: 1, crystal: 1, wheat: 1, millet: 1, rye: 1 };
+  var SIBL = {};
+  function siblings(st) {                                     // свои сорта с одинаковым названием → номер по порядку
+    var by = {}; SIBL = {};
+    Object.keys((st && st.strains) || {}).forEach(function (id) { var x = st.strains[id]; if (x && !x.base && !CROPS0[id]) (by[x.name] = by[x.name] || []).push(id); });
+    Object.keys(by).forEach(function (n) { if (by[n].length > 1) by[n].sort().forEach(function (id, i) { SIBL[id] = i; }); });
+  }
   function sprS(c, x, yb, rows, s, dead) {
     var roles = ROLES[s.shape] || DIG, pal = dead ? DEAD : s.color === "_sil" ? SIL : palOf(s), h = rows.length;
     for (var j = 0; j < h; j++) for (var i = 0; i < rows[j].length; i++) {
@@ -2034,6 +2048,7 @@
   }); }).observe(document.body, { childList: true, subtree: true, characterData: true });
   iconize(document.body);
   function setFarm(st) {
+    siblings(st);
     F.state = st; F.fetched = Date.now(); renderFarm();
     if (!$("farm-shop").hidden) { $("shopdust").textContent = "✦ " + st.dust; if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
   }
@@ -2281,7 +2296,8 @@
   function selText() {
     var s = F.state;
     if (F.sel === "can") return "Лейка: воды на " + s.water + " " + plural(s.water, "полив", "полива", "поливов") + ". Сухие грядки поливаются тапом, набрать воду — колодец." + (seedItems().length ? " Выбери семена, чтобы сажать." : "");
-    return s.strains[F.sel].name + " — нажми на пустую грядку, чтобы посадить. Ещё раз на ячейку — свойства.";
+    var sx = s.strains[F.sel];
+    return sx.name + (SIBL[sx.id] != null ? " (" + strainCode(sx) + ")" : "") + " — нажми на пустую грядку, чтобы посадить. Ещё раз на ячейку — свойства.";
   }
   function renderHotbar() {
     var s = F.state, bar = $("hotbar"); if (!s || !bar) return;
