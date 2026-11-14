@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611142257";
+    var BUILD = "202611142312";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1594,7 +1594,7 @@
   var HEN = [["..R...", ".wwwY.", "wwwww.", "wwwww.", ".y.y.."], ["..R...", ".wwwY.", "wwwww.", "wwwww.", "y...y."]];
   var HENPAL = { w: "#fff6e6", R: "#e2492b", Y: "#ffb627", y: "#e08a1c" };
   // ---------- мельница и печь (2026-11-14): рисуются поверх сцены, т.к. зависят от того, построены ли и работают ли ----------
-  var MILL = [138, 62], OVEN = [40, 160], CHEST = [17, 95], CHEST_ON = false;   // сундук готов, но выключен (его решение 2026-11-14: ждёт спрайта художника)
+  var MILL = [138, 62], OVEN = [40, 160], CHEST = [17, 95], CHEST_ON = true;   // сундук включён со спрайтом художника (2026-11-14)
   function jobOf(kit, kind) { var j = null; ((kit && kit.jobs) || []).forEach(function (x) { if (x.kind === kind) j = x; }); return j; }
   function hasBuild(kit, kind) { return !!(kit && kit.builds && kit.builds.indexOf(kind) >= 0); }
   var DIG3 = ["111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001", "111100111001111", "111100111101111", "111001010010010", "111101111101111", "111101111001111"];   // цифры 3×5
@@ -1619,7 +1619,11 @@
   function lotPrice(kit, kind) { return ((kit && kit.build_list) || {})[kind] ? kit.build_list[kind].price : { barn: 50, mill: 200, oven: 300 }[kind]; }
   var LOTS = { barn: [[82, 51], [100, 60], [116, 52], [98, 43]], mill: [[125, 62], [138, 67], [151, 62], [138, 57]], oven: [[26, 156], [40, 161], [54, 156], [40, 151]] };
   // сундук у домика в изометрии, как амбар и печь: светлая левая грань, тень справа, крышка, железные полосы, замок
+  // картинки художника (Evilin, 2026-11-14): сундук и печь с кадрами огня — ставим как есть
+  var ARTS = { ok: false }, ARTN = ["chest", "oven", "oven-fire-1", "oven-fire-2", "oven-fire-3"];
+  (function () { var n = 0; ARTN.forEach(function (k) { var im = new Image(); im.onload = function () { if (++n === ARTN.length) ARTS.ok = true; }; im.src = "art/" + k + ".png"; ARTS[k] = im; }); })();
   function drawChest(c, own, n) {
+    if (ARTS.ok) { var ci = ARTS.chest; c.drawImage(ci, CHEST[0] + 4 - (ci.width >> 1), CHEST[1] + 1 - ci.height); return; }
     var x = CHEST[0] + 4, y = CHEST[1] - 1, H = 4, L = 3;
     var A = [x - 6, y - 3], B = [x, y], Cc = [x + 6, y - 3], D = [x, y - 6];
     var up = function (p, h) { return [p[0], p[1] - h]; }, lerp = function (p, q, t2) { return [p[0] + (q[0] - p[0]) * t2, p[1] + (q[1] - p[1]) * t2]; };
@@ -1667,6 +1671,12 @@
     var x = OVEN[0], y = OVEN[1];
     if (!hasBuild(kit, "oven")) return drawLot(c, LOTS.oven, own, lotPrice(kit, "oven"));
     var job = jobOf(kit, "oven"), busy = job && job.ready > now, ready = job && job.ready <= now, i, j;
+    if (ARTS.ok) {                                                     // печь художника: погасшая или три кадра огня по кругу, пока печёт
+      var im = busy ? ARTS["oven-fire-" + (1 + Math.floor((F.frame || 0) / 2) % 3)] : ARTS.oven;
+      c.drawImage(im, x - 14, y + 4 - im.height);
+      if (ready && own && (t / 400 | 0) % 2) { px(c, x - 1, y - 28, 3, 1, "#ffffff"); px(c, x, y - 29, 1, 3, "#ffffff"); }   // готово — искорка
+      return;
+    }
     poly(c, [[x - 15, y + 1], [x + 1, y + 6], [x + 27, y + 3], [x + 12, y - 3]], "rgba(30,55,15,.32)");     // тень
     // основание: верхняя грань и две боковые, камни
     poly(c, [[x - 14, y - 4], [x, y + 1], [x + 14, y - 4], [x, y - 9]], "#c9bda9");
@@ -1941,7 +1951,7 @@
       var scr = document.body.dataset.screen;
       if (scr !== "farm" && scr !== "farm-visit") { F.anim = 0; return; }
       F.anim = requestAnimationFrame(step);
-      if (ts - last < 120) return; last = ts;
+      if (ts - last < 120) return; last = ts; F.frame = (F.frame || 0) + 1;      // счётчик перерисовок — ровный шаг для покадровых анимаций
       var t = Date.now();
       if (scr === "farm" && F.state) drawFarm($("scenecv"), 47, F.state.plots, farmNow(), t, F.state.rain_until > farmNow(), F.state.strains, F.state.dry_limit, true, F.state);
       if (scr === "farm-visit" && F.visiting) { var v = F.visiting, vn = v.now + (Date.now() - v.fetched) / 1000;
@@ -2075,7 +2085,7 @@
   iconize(document.body);
   function setFarm(st) {
     siblings(st);
-    F.state = st; F.fetched = Date.now(); renderFarm();
+    F.state = st; F.fetched = Date.now(); renderFarm(); if (F.invRedraw) F.invRedraw();
     if (!$("farm-shop").hidden) { $("shopdust").textContent = "✦ " + st.dust; if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
   }
   function farmLoop() {
@@ -2449,7 +2459,7 @@
     var s = F.state, st = s.strains[id], got = n * seedDustOf(st);
     if (from === "chest") chestOf(id).count -= n; else bagOf(id).count -= n;
     if (F.sel === id && freeOf(bagOf(id)) <= 0) F.sel = "can";
-    s.dust += got; haptic("success"); toast("+✦ " + got + " звёздной пыли"); renderFarm();
+    s.dust += got; haptic("success"); toast("+✦ " + got + " звёздной пыли"); renderFarm(); if (F.invRedraw) F.invRedraw();
     farmCall("/api/farm/seed-dust", { strain: id, n: n, from: from }).catch(function () {});
   }
   function chestOf(id) { var r = null; (F.state.chest || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
@@ -2518,6 +2528,7 @@
         note.textContent = selText();
       };
       draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
+      F.invRedraw = function () { if (document.body.contains(grid)) draw(); else F.invRedraw = null; };   // открытый инвентарь — перерисовать после распыления и ответа сервера
       sh.appendChild(el("div", "sub", "Перетащи семена, чтобы расставить по порядку: первые три после лейки видны в полоске под фермой."));
       var listed = s.inv.filter(function (it) { return it.listed > 0; });
       if (listed.length) sh.appendChild(el("div", "sub", "На продаже в лавке: " + listed.map(function (it) { return (s.strains[it.strain] || {}).name + " ×" + it.listed; }).join(", ") + "."));
