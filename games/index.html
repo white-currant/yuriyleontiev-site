@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150056";
+    var BUILD = "202611150109";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -359,6 +359,14 @@
   .selnote { margin-top: 8px; min-height: 2.8em; font-size: 12.5px; line-height: 1.4; color: rgba(255, 255, 255, .82); }
   .sheet .selnote { color: var(--dim); }
   .salecount2 { color: var(--white); font-weight: 600; }
+  .bnrow { display: grid; grid-template-columns: 46px 1fr; gap: 12px; align-items: center; margin-top: 10px; }
+  .bnrow .slot { width: 46px; height: 46px; aspect-ratio: 1; }
+  .bnrow .slot canvas { width: 70%; height: auto; image-rendering: pixelated; }
+  .bnrow .brule { margin: 0; }
+  .recipes { margin-top: 12px; display: grid; gap: 8px; }
+  .rrow { display: grid; grid-template-columns: 36px 1fr; gap: 10px; align-items: center; }
+  .rrow canvas { width: 36px; height: auto; image-rendering: pixelated; }
+  .rrow .rneed { font-size: 13px; opacity: .8; margin-top: 2px; }
   .credit { margin-top: 20px; display: flex; align-items: baseline; justify-content: center; gap: 14px; }
   .credit .cname { font-size: 24px; font-weight: 900; letter-spacing: -.01em; color: #6a3fb0; text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 5px; white-space: nowrap; }
   .credit .cwhat { font-size: 16px; }
@@ -511,8 +519,18 @@
   body[data-screen^="farm"] .tools .slot.on { box-shadow: 0 0 0 2px var(--cream), 0 0 0 4px var(--ink), inset 2px 2px 0 #e2bd86; }
   .tools .slot canvas, .tools .slot img { width: 72%; height: auto; image-rendering: pixelated; }
   .tools .slot .n { font-size: 9px !important; right: 2px !important; bottom: -1px !important; }
-  .slot.bn::after { content: ""; position: absolute; inset: 6px; border: 2px solid var(--bn); pointer-events: none; opacity: .9; }
-  .slot.bn::before { content: ""; position: absolute; right: 4px; top: 4px; width: 6px; height: 6px; background: var(--bn); box-shadow: 0 0 0 2px var(--ink); pointer-events: none; z-index: 1; }
+  /* вариант А: рамка шире — по краю ячейки, число внутри неё */
+  .slot.bn::after { content: ""; position: absolute; inset: 3px; border: 2px solid var(--bn); pointer-events: none; opacity: .95; }
+  .slot.bn::before { content: ""; position: absolute; right: 7px; top: 7px; width: 5px; height: 5px; background: var(--bn); box-shadow: 0 0 0 2px var(--ink); pointer-events: none; z-index: 1; }
+  .slot.bn .n { right: 8px !important; bottom: 5px !important; }
+  /* вариант Б: только уголки цвета свойства */
+  body.bnB .slot.bn::after { inset: 4px; border: 0;
+    background: linear-gradient(var(--bn), var(--bn)) 0 0 / 9px 2px no-repeat, linear-gradient(var(--bn), var(--bn)) 0 0 / 2px 9px no-repeat,
+      linear-gradient(var(--bn), var(--bn)) 100% 0 / 9px 2px no-repeat, linear-gradient(var(--bn), var(--bn)) 100% 0 / 2px 9px no-repeat,
+      linear-gradient(var(--bn), var(--bn)) 0 100% / 9px 2px no-repeat, linear-gradient(var(--bn), var(--bn)) 0 100% / 2px 9px no-repeat,
+      linear-gradient(var(--bn), var(--bn)) 100% 100% / 9px 2px no-repeat, linear-gradient(var(--bn), var(--bn)) 100% 100% / 2px 9px no-repeat; }
+  body.bnB .slot.bn::before { display: none; }
+  body.bnB .slot.bn .n { right: 4px !important; bottom: 1px !important; }
   .slot.bn .n, .slot.bn .vars { z-index: 2; }
   .bn-rain { --bn: #6fc8ff; } .bn-lucky { --bn: #7ce38f; } .bn-hardy { --bn: #c9d3df; } .bn-rich { --bn: #ffcf4a; } .bn-seedy { --bn: #ff8fd0; }
   .bnswatch { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--bn); margin-right: 6px; vertical-align: -1px; }
@@ -2456,7 +2474,7 @@
     { name: "Evilin", what: "за помощь с графикой", url: "https://t.me/EVILINSTUDIO" },
   ];
   var BONUS_SHORT = { rain: "в звёздный дождь урожай ×3", lucky: "артефакты вдвое чаще", hardy: "не засыхает без воды", rich: "иногда двойной урожай", seedy: "даёт больше семян" };
-  var BN_FRAMES = false;   // рамки сортов с особыми свойствами: готовы, ждут его «пуш»
+  var BN_FRAMES = true;   // рамки сортов с особыми свойствами: готовы, ждут его «пуш»
   var BONUS_NAME = { rain: "Дождевой", lucky: "Счастливый", hardy: "Стойкий", rich: "Щедрый", seedy: "Плодовитый" };
   F.bookPage = 0;
   function bookIcon(cv, s) {                                  // значок в справочнике: холст одного размера у всех форм, растение по центру внизу
@@ -2474,24 +2492,38 @@
         var m = {}; data.strains.forEach(function (st) { var k = st.shape + "/" + st.color, e = m[k] = m[k] || { best: null, n: 0 }; e.n++; if (!e.best || (st.price || 0) > (e.best.price || 0)) e.best = st; });
         return m;
       };
-      var N = SHAPES.length + 4;                                // + страница благодарностей
+      // страницы: как играть, гибриды, формы растений, погода, особые свойства, кухня, лавка и пыль, благодарности
+      var N = SHAPES.length + 7;
+      var rules = function (list) { list.forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); }); };
       var draw = function (dir) {
-        var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage));
+        var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage)), SH = SHAPES.length;
         page.innerHTML = ""; page.className = "bpage" + (dir ? (dir > 0 ? " fwd" : " back") : "");
         void page.offsetWidth; page.classList.add("in");
         if (p === 0) {
           page.appendChild(el("h3", "", "Справочник лунного садовода"));
           page.appendChild(el("div", "bsub", "Найдено видов: " + Object.keys(kn).length + " из " + SHAPES.length * COLORS.length));
-          [["Рост", "Растение растёт, только пока грядка полита. Без воды оно просто ждёт. Засыхает, только если не поливать двое суток — за ночь ничего не пропадёт. В лунный ливень поливает небо."],
-           ["Урожай", "Собранное ложится в амбар, там его можно превратить в звёздную пыль. За сбор — очки для звания и пара семян на следующую посадку."],
-           ["Зерно", "У станции есть пшеница. Другие колосья выводятся скрещиванием, как всё остальное. Зерно пойдёт на мельницу, в муку."],
-           ["Скрещивание", "Когда рядом созрели два разных сорта, при сборе может выпасть семя-гибрид."],
-           ["Мутации", "Иногда гибрид выходит совсем не похожим на родителей: с новой формой или новым цветом. Так находятся звездоцветы, грибы, тыквы, кактусы и редкие расцветки — в том числе колосьев."]]
-            .forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); });
-        } else if (p <= SHAPES.length) {
-          var sh2 = SHAPES[p - 1], found = COLORS.filter(function (c) { return kn[sh2[0] + "/" + c[0]]; }).length;
+          rules([
+            ["Посадка", "Выбери семена в полоске под фермой и нажми на пустую грядку. На старте есть мох и ягоды, остальное продаёт станция в лавке."],
+            ["Полив", "Нажми на сухую грядку — польёшь её. Воды в лейке на 5 поливов, набрать снова — нажми на колодец. За полив сухой грядки — очко."],
+            ["Рост", "Растение растёт, только пока грядка полита; без воды оно ждёт и ничего не теряет. Засыхает, только если не поливать двое суток. В лунный ливень грядки поливает небо."],
+            ["Урожай", "Нажми на созревшее растение. Если построен амбар, урожай ложится туда; если нет — сразу превращается в звёздную пыль. За сбор — очки для звания и 2–3 семени на следующую посадку."],
+            ["Лопата", "Внизу слева — лейка и лопата. Лопатой можно выкопать растение, посаженное по ошибке: семя вернётся в инвентарь, очко за посадку уйдёт обратно."],
+            ["Грядки", "Сначала открыты три грядки, остальные покупаются за звёздную пыль — каждая следующая дороже."],
+          ]);
+        } else if (p === 1) {
+          page.appendChild(el("h3", "", "Гибриды и мутации"));
+          page.appendChild(el("div", "bsub", "Как выводить новые сорта"));
+          rules([
+            ["Скрещивание", "Посади два разных сорта на соседние грядки — рядом по стороне, не по диагонали. Когда оба созреют, при сборе одного из них с шансом 40% выпадет семя-гибрид. В солнечный ветер — вдвое чаще."],
+            ["Свойства гибрида", "Рост, пыль, полив и шанс артефакта — среднее родителей с небольшим разбросом. Иногда одно свойство выходит заметно лучше. Форма растения — от того, что собираешь, расцветка — от соседа."],
+            ["Мутации", "Примерно у каждого восьмого гибрида новая форма, у каждого восьмого — новая расцветка, которых не было у родителей. Так находятся звездоцветы, грибы, тыквы, кактусы и редкие цвета."],
+            ["Особые свойства", "Если у родителя есть особое свойство, гибрид унаследует его чаще чем в половине случаев. Если нет — новое свойство иногда появляется само, примерно у одного гибрида из семи."],
+            ["Варианты сорта", "Гибриды с одинаковым названием могут чуть отличаться свойствами. В инвентаре они лежат в одной ячейке с пометкой «N сорта»; нажми на неё дважды — сравнишь варианты и оставишь лучшие, а остальные распылишь или продашь."],
+          ]);
+        } else if (p <= SH + 1) {
+          var sh2 = SHAPES[p - 2], found = COLORS.filter(function (c) { return kn[sh2[0] + "/" + c[0]]; }).length;
           page.appendChild(el("h3", "", sh2[1]));
-          page.appendChild(el("div", "bsub", "Найдено расцветок: " + found + " из " + COLORS.length + (p > 4 ? " · только мутацией" : "")));
+          page.appendChild(el("div", "bsub", "Найдено расцветок: " + found + " из " + COLORS.length + (p > 5 ? " · только мутацией" : "")));
           var grid = el("div", "bgrid"), info = el("div", "binfo", "Нажми на растение, чтобы узнать о нём.");
           COLORS.forEach(function (c) {
             var e = kn[sh2[0] + "/" + c[0]], cell = el("button", "bcell" + (e ? "" : " unknown")); cell.type = "button";
@@ -2508,7 +2540,7 @@
             grid.appendChild(cell);
           });
           page.appendChild(grid); page.appendChild(info);
-        } else if (p === SHAPES.length + 1) {
+        } else if (p === SH + 2) {
           var wv = (F.state && F.state.weather) || {};
           page.appendChild(el("h3", "", "Погода"));
           page.appendChild(el("div", "bsub", wv.today ? "Сегодня: " + wv.today.icon + " " + wv.today.name + " · завтра: " + wv.tomorrow.icon + " " + wv.tomorrow.name : "Каждый день — своя погода"));
@@ -2523,10 +2555,46 @@
             });
           page.appendChild(tb);
           page.appendChild(el("div", "bdim wfoot", "Погода одна на всех и меняется в полночь. Особая погода не повторяется два дня подряд."));
-        } else if (p === SHAPES.length + 2) {
+        } else if (p === SH + 3) {
           page.appendChild(el("h3", "", "Особые свойства"));
-          page.appendChild(el("div", "bsub", "Бывают у гибридов и передаются потомкам." + (BN_FRAMES ? " В инвентаре такие семена — в цветной рамке." : "")));
-          Object.keys(BONUS_NAME).forEach(function (k) { var d = el("p", "brule"); if (BN_FRAMES) d.appendChild(el("span", "bnswatch bn-" + k)); d.appendChild(el("b", "", BONUS_NAME[k] + ". ")); d.append((data.bonuses[k] || "").replace(/^./, function (ch) { return ch.toUpperCase(); }) + "."); page.appendChild(d); });
+          page.appendChild(el("div", "bsub", "Бывают у гибридов и передаются потомкам"));
+          if (BN_FRAMES) page.appendChild(el("p", "brule", "В инвентаре такие семена — в рамке своего цвета."));
+          Object.keys(BONUS_NAME).forEach(function (k) {
+            var d = el("div", "bnrow");
+            if (BN_FRAMES) { var sl = el("div", "slot bn bn-" + k), cv = el("canvas", "pix"); cropIcon(cv, { shape: "moss", color: "moss" }); sl.appendChild(cv); d.appendChild(sl); }
+            var t = el("p", "brule"); t.appendChild(el("b", "", BONUS_NAME[k] + ". ")); t.append((data.bonuses[k] || "").replace(/^./, function (ch) { return ch.toUpperCase(); }) + ".");
+            d.appendChild(t); page.appendChild(d);
+          });
+        } else if (p === SH + 4) {
+          page.appendChild(el("h3", "", "Кухня"));
+          page.appendChild(el("div", "bsub", "Постройки на ферме покупаются за звёздную пыль"));
+          rules([
+            ["Амбар", "Хранит урожай, муку и еду. Без амбара урожай сразу превращается в пыль, а мельница и печь не работают."],
+            ["Мельница", "Мелет колосья в муку: один сноп — одна мука. У каждого сорта колосьев своя мука — дороже, если дорогой колос."],
+            ["Печь", "Печёт еду из урожая и муки. Выпечка помнит сорт муки: из разных колосьев выходит разный хлеб. Пока печь работает, в ней горит огонь."],
+            ["Готовое", "Мука и еда ложатся в амбар. Их можно превратить в пыль — еда стоит дороже, чем продукты по отдельности, — или продать другим игрокам в лавке. За выпечку дают очки."],
+          ]);
+          var rs = (F.state && F.state.recipes) || {}, NEEDW = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука" };
+          var rl = el("div", "recipes");
+          Object.keys(rs).forEach(function (k) {
+            var r = rs[k], row = el("div", "rrow"), cv = el("canvas", "pix"); itemIcon(cv, "p:" + k); row.appendChild(cv);
+            var tx = el("div"); tx.appendChild(el("b", "", r.name + (r.kind === "mill" ? " · мельница" : "")));
+            tx.appendChild(el("div", "rneed", Object.keys(r.needs).map(function (n) { return (NEEDW[n] || n) + " ×" + r.needs[n]; }).join(" + ") + " · ⏱ " + fmtLeft(r.min * 60) + " · ✦ " + r.dust));
+            row.appendChild(tx); rl.appendChild(row);
+          });
+          page.appendChild(rl);
+        } else if (p === SH + 5) {
+          page.appendChild(el("h3", "", "Лавка и пыль"));
+          page.appendChild(el("div", "bsub", "Звёздная пыль — деньги фермы"));
+          rules([
+            ["Станция", "Всегда продаёт базовые семена: мох, ягоды, хрусталь, пшеницу."],
+            ["Своя лавка", "Выведенные тобой семена, урожай и еду можно выставить на продажу другим игрокам. Цену считает игра, а ты можешь подвинуть её немного дешевле или дороже. Пыль приходит сразу после покупки."],
+            ["Выставленное", "Пока товар на продаже, его нельзя посадить, смолоть или распылить — сначала сними с продажи."],
+            ["В пыль", "Урожай и еду можно превратить в пыль в амбаре, лишние семена — в окне семян. Это самый невыгодный способ: продать игрокам выгоднее, а приготовить еду — ещё выгоднее."],
+            ["Сундук", "Лишние семена можно убрать в сундук у домика, чтобы не мешали в инвентаре. Оттуда их не посадить, пока не достанешь."],
+            ["Соседи", "Загляни на фермы других игроков и оставь подарок — 5 пыли. Подарков пять в день, каждому соседу — не чаще раза в день."],
+            ["Артефакты", "При сборе иногда выпадает пластинка с треком — это коллекция, она хранится в профиле. В полнолуние и у счастливых сортов — вдвое чаще."],
+          ]);
         } else {
           // благодарности — отдельная страница; новых людей дописывать в CREDITS
           page.appendChild(el("h3", "", "Благодарности"));
