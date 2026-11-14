@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611141006";
+    var BUILD = "202611141018";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1762,17 +1762,28 @@
     "p:bread":   ["..............", "....kkkkkk....", "..kkhhyhhbkk..", ".khhyhhbhhbbk.", "khyhbhhyhbbbBk", "kbhhbbhhbbbbBk", "kbbbbbbbbbbBBk", ".kBbbbbbbbBBk.", "..kkkkkkkkkk.."],
     "p:soup":    ["...s....s.....", "....s....s....", "...s....s.....", ".kkkkkkkkkkkk.", "kegGgeggGgegGk", "kcccccccccccCk", ".kcuuuuuuuuCk.", "..kcccccccCk..", "...kkkkkkkk..."],
     "p:bun":     ["..............", ".....kkkk.....", "...kkhyyhkk...", "..khyRphhbbk..", ".khhRrhhRpbbk.", ".kbhhhhhRrbBk.", ".kbbhhbbbbbBk.", "..kBbbbbbbBk..", "...kkkkkkkk..."],
-    "p:pie":     ["..............", "...kkkkkkkk...", ".kkhRhRhRhRkk.", "khRhRhRhRhRhbk", "khhRhRhRhRhbbk", "kbhhhhhhhhbbBk", ".kBbbbbbbbbBk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],
-    "p:pumpkin": ["..............", "...kkkkkkkk...", ".kkhohohohokk.", "khohohohohohbk", "khhohohohohbbk", "kbhhhhhhhhbbBk", ".kBbbbbbbbbBk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],
+    "p:pie":     ["..............", "...kkkkkkkk...", ".kkhRhRhRhRkk.", "khRhRhRhRhRhbk", "khhRhRhRhRhbbk", "kbhyhhyhhyhbBk", ".kBbbbbbbbbBk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],
+    "p:pumpkin": ["..............", "...kkkkkkkk...", ".kkhohohohokk.", "khohohohohohbk", "khhohohohohbbk", "kbhyhhyhhyhbBk", ".kBbbbbbbbbBk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],
     "p:stew":    ["...s.....s....", "....s.....s...", ".kkkkkkkkkkkk.", "knNcnRnNcnRnNk", "kNnnNnnNnnNnNk", ".kBBmBBBBmBBk.", ".kBBBBBBBBBBk.", "..kmmmmmmmmk..", "...kkkkkkkk..."],
     "p:tea":     ["....s..s......", ".....s..s.....", "...kkkkkkkk...", "...kvvVvvVk...", "...kcccccckkk.", "...kcuuuuck.k.", "...kccccccckk.", "....kcccCk....", ".kkkkkkkkkkkk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],
     "p:jam":     ["....kkkkkk....", "....kmmmmk....", "...kkkkkkkk...", "...kWRRRRrk...", "...kRRpRRrk...", "...kRRRRRrk...", "...kRyyyyrk...", "...kRyyyyrk...", "...krRRRrrk...", "....kkkkkk...."],
   };
-  function dishDraw(c, x, yb, rows) { var h = rows.length; for (var j = 0; j < h; j++) for (var i = 0; i < rows[j].length; i++) { var ch = rows[j][i]; if (ch !== ".") px(c, x + i, yb - h + 1 + j, 1, 1, PP[ch]); } }
+  // pal — палитра сорта колосьев: корочка и метка на мешке муки берут его цвет (пшеница — как есть)
+  function mixHex(a, b, t) { var p = function (h, k) { return parseInt(h.slice(1 + k * 2, 3 + k * 2), 16); }; return "rgb(" + [0, 1, 2].map(function (k) { return Math.round(p(a, k) * (1 - t) + p(b, k) * t); }).join(",") + ")"; }
+  var TINT = { y: [1, 1], h: [2, .28], b: [1, .18], w: [2, .35], x: [5, .3] };
+  function dishDraw(c, x, yb, rows, pal) {
+    var h = rows.length;
+    for (var j = 0; j < h; j++) for (var i = 0; i < rows[j].length; i++) {
+      var ch = rows[j][i]; if (ch === ".") continue;
+      var col = PP[ch]; if (pal && TINT[ch] && pal[TINT[ch][0]]) col = mixHex(PP[ch], pal[TINT[ch][0]], TINT[ch][1]);
+      px(c, x + i, yb - h + 1 + j, 1, 1, col);
+    }
+  }
   function itemIcon(cv, id) {
     if (id.indexOf("p:") !== 0) return fruitIcon(cv, itemOf(id));
-    var rows = DISH[id] || DISH["p:bread"], c = cv.getContext("2d"), h = rows.length + 2; cv.width = 16; cv.height = Math.max(12, h); c.clearRect(0, 0, 16, cv.height);
-    px(c, 2, cv.height - 1, 12, 1, "rgba(40,25,10,.3)"); dishDraw(c, 1, cv.height - 2, rows);
+    var rows = DISH["p:" + recKey(id)] || DISH["p:bread"], c = cv.getContext("2d"), h = rows.length + 2; cv.width = 16; cv.height = Math.max(12, h); c.clearRect(0, 0, 16, cv.height);
+    var it = F.state && itemOf(id), pal = it && it.color && it.color !== "sun" ? PAL[it.color] : null;
+    px(c, 2, cv.height - 1, 12, 1, "rgba(40,25,10,.3)"); dishDraw(c, 1, cv.height - 2, rows, pal);
   }
   function fruitIcon(cv, s) {
     var rows = FRUIT[s.shape] || FRUIT.moss, c = cv.getContext("2d");
@@ -1984,7 +1995,18 @@
     cur.dust += gain; renderFarm(); toast("+✦ " + gain + " звёздной пыли");
     farmCall("/api/farm/sell", { strain: strain, n: n || 0 }).catch(function () {});
   }
-  function itemOf(id) { var s = F.state; return id.indexOf("p:") === 0 ? (s.products || {})[id] : s.strains[id]; }   // сорт или продукт кухни
+  // мука помнит сорт колосьев, выпечка — сорт муки: «p:bread@<сорт>» (цена и цвет — от сорта, как на сервере)
+  function recKey(id) { var r = id.indexOf("p:") === 0 ? id.slice(2) : id, i = r.indexOf("@"); return i < 0 ? r : r.slice(0, i); }
+  function sortKey(id) { var i = id.indexOf("@"); return i < 0 ? "" : id.slice(i + 1); }
+  function itemOf(id) {
+    var s = F.state; if (id.indexOf("p:") !== 0) return s.strains[id];
+    var known = (s.products || {})[id]; if (known) return known;
+    var r = (s.recipes || {})[recKey(id)], g = s.strains[sortKey(id)]; if (!r) return null;
+    if (!g) return { name: r.name, dust: r.dust };
+    var fd = g.dust + 2, nf = r.needs["p:flour"] || 0;
+    return { name: r.name, dust: recKey(id) === "flour" ? fd : r.dust + nf * (fd - 7), sort: g.id, sort_name: g.name, color: g.color };
+  }
+  function itemName(id) { var it = itemOf(id); return it ? it.name + (it.sort_name ? " · " + it.sort_name.toLowerCase() : "") : ""; }   // сорт или продукт кухни
   function barnItems() { return (F.state.barn || []).filter(function (it) { return it.count > 0 && itemOf(it.strain); }); }
   function bagOf(id) { var r = null; (F.state.inv || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
   function addToBag(id, n) { var it = bagOf(id); if (it) it.count += n; else F.state.inv.push({ strain: id, count: n, listed: 0 }); }
@@ -2120,7 +2142,7 @@
     var s = F.state, b = el("button", "slot" + (F.sel === key ? " on" : "")); b.type = "button"; b.dataset.key = key;
     var cv = el("canvas", "pix");
     if (key === "can") { canIcon(cv); b.setAttribute("aria-label", "Лейка"); b.appendChild(cv); b.appendChild(el("span", "n", s.water + "/" + s.can_max)); }
-    else { var st = s.strains[key], it = bagOf(key); cropIcon(cv, st); b.setAttribute("aria-label", st.name); b.appendChild(cv); b.appendChild(el("span", "n", freeOf(it))); }
+    else { var st = s.strains[key], it = bagOf(key); cropIcon(cv, st); b.setAttribute("aria-label", itemName(it.strain)); b.appendChild(cv); b.appendChild(el("span", "n", freeOf(it))); }
     b.onclick = function () {
       if (F.dragged && Date.now() - F.dragged < 400) return;      // только что перетаскивали
       if (F.sel === key) return key === "can" ? canSheet() : seedSheet(s.strains[key]);
@@ -2294,7 +2316,7 @@
         var sel = F.barnSel && barnOf(F.barnSel), acts = el("div", "invacts");
         if (sel) {
           var st = itemOf(sel.strain);
-          barnBox.appendChild(el("div", "sub", st.name + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли."));
+          barnBox.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли."));
           acts.appendChild(btn("1 в пыль · ✦ " + st.dust, "ghost", function () { toDust(sel.strain, 1, st.dust); drawBarn(); renderFarm(); }));
           if (sel.count > 1) acts.appendChild(btn("все " + sel.count + " · ✦ " + st.dust * sel.count, "", function () { toDust(sel.strain, sel.count, st.dust * sel.count); drawBarn(); }));
         } else {
@@ -2309,16 +2331,26 @@
   }
   // мельница и печь: построить → выбрать рецепт → ждать → забрать в амбар
   var NEED = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука" };
-  function haveFor(need) {
-    var s = F.state, n = 0;
-    (s.barn || []).forEach(function (it) { if (it.count <= 0) return; if (need.indexOf("p:") === 0 ? it.strain === need : (s.strains[it.strain] && s.strains[it.strain].shape === need)) n += it.count; });
-    return n;
+  function fitsNeed(id, need, recipe, sort) {
+    var s = F.state;
+    if (need === "p:flour") return id === (sort ? "p:flour@" + sort : "p:flour");
+    if (need.indexOf("p:") === 0) return id === need;
+    if (recipe === "flour" && sort) return id === sort;
+    return !!(s.strains[id] && s.strains[id].shape === need);
+  }
+  function haveFor(need, recipe, sort) {
+    var n = 0; (F.state.barn || []).forEach(function (it) { if (it.count > 0 && fitsNeed(it.strain, need, recipe, sort)) n += it.count; }); return n;
+  }
+  function takeFor(need, recipe, sort, n) {                     // сразу убрать из амбара то, что ушло в печь (сервер подтвердит)
+    var s = F.state, fit = (s.barn || []).filter(function (it) { return it.count > 0 && fitsNeed(it.strain, need, recipe, sort); })
+      .sort(function (a, b) { return ((itemOf(a.strain) || {}).dust || 0) - ((itemOf(b.strain) || {}).dust || 0); });
+    fit.forEach(function (it) { var t = Math.min(n, it.count); it.count -= t; n -= t; });
   }
   function kitchenSheet(kind) {
     var s = F.state; if (!s) return;
     var b = (s.build_list || {})[kind] || { name: kind, price: 0, max: 1 };
     var about = kind === "barn" ? "Пока амбара нет, урожай сразу превращается в звёздную пыль. В амбаре он копится: из него мельница делает муку, а печь — еду." :
-                kind === "mill" ? "Мелет колосья в муку: один сноп — одна мука." : "Печёт из урожая и муки хлеб, супы и пироги. Готовое стоит дороже, чем продукты по отдельности, а за выпечку дают очки.";
+                kind === "mill" ? "Мелет колосья в муку: один сноп — одна мука. У каждого сорта колосьев — своя мука, а из неё своя выпечка: другого цвета и дороже, если колос дорогой." : "Печёт из урожая и муки хлеб, супы и пироги. Готовое стоит дороже, чем продукты по отдельности, а за выпечку дают очки.";
     sheet(function (sh, close) {
       sh.appendChild(el("h3", "", b.name));
       if (!hasBuild(s, kind)) {
@@ -2334,7 +2366,7 @@
       }
       var job = jobOf(s, kind), tn = farmNow();
       if (job) {
-        var r = s.recipes[job.recipe] || {}, cv = el("canvas", "pix bigseed"); itemIcon(cv, "p:" + job.recipe); sh.appendChild(cv);
+        var r = { name: itemName("p:" + job.recipe) || (s.recipes[recKey(job.recipe)] || {}).name, points: (s.recipes[recKey(job.recipe)] || {}).points }, cv = el("canvas", "pix bigseed"); itemIcon(cv, "p:" + job.recipe); sh.appendChild(cv);
         if (job.ready <= tn) {
           sh.appendChild(el("div", "sub", "Готово: " + r.name + " ×" + job.n + "."));
           sh.appendChild(btn("Забрать в амбар", "", function () {
@@ -2353,21 +2385,37 @@
         sh.appendChild(el("div", "sub", "Без амбара не работает: продуктам негде лежать. Амбар — красный сарай наверху, за двором."));
         sh.appendChild(btn("Понятно", "ghost", close)); return;
       }
-      sh.appendChild(el("div", "sub", about + " Продукты берутся из амбара — сначала самые дешёвые."));
+      sh.appendChild(el("div", "sub", about + " Продукты берутся из амбара — сначала самые дешёвые." + (kind === "oven" ? " Выпечка помнит сорт муки: из разных колосьев выходит разный хлеб." : "")));
+      // рецепты с мукой и сама мука — отдельной строкой на каждый сорт, что есть в амбаре
+      var rows2 = [];
       Object.keys(s.recipes).filter(function (k) { return s.recipes[k].kind === kind; }).forEach(function (k) {
-        var r = s.recipes[k], can = b.max;
-        var parts = Object.keys(r.needs).map(function (nd) { var have = haveFor(nd); can = Math.min(can, Math.floor(have / r.needs[nd])); return NEED[nd] + " ×" + r.needs[nd] + " (есть " + have + ")"; });
-        var row = el("div", "seed"), cv = el("canvas", "pix"); itemIcon(cv, "p:" + k); row.appendChild(cv);
-        var tx = el("span"); tx.appendChild(el("b", "", r.name));
-        var s1 = el("small", "", parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + r.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : ""));
+        var r = s.recipes[k], sorts = [];
+        if (k === "flour") (s.barn || []).forEach(function (it) { var g = s.strains[it.strain]; if (it.count > 0 && g && g.shape === "grain") sorts.push(it.strain); });
+        else if (r.needs["p:flour"]) (s.barn || []).forEach(function (it) { if (it.count > 0 && recKey(it.strain) === "flour") sorts.push(sortKey(it.strain)); });
+        sorts.sort(function (a, c) { return ((s.strains[a] || {}).dust || 0) - ((s.strains[c] || {}).dust || 0); });
+        if (!sorts.length) sorts = [""];
+        sorts.forEach(function (sort) { rows2.push([k, sort]); });
+      });
+      rows2.forEach(function (q) {
+        var k = q[0], sort = q[1], r = s.recipes[k], can = b.max, pid = "p:" + k + (sort ? "@" + sort : ""), info = itemOf(pid) || r;
+        var parts = Object.keys(r.needs).map(function (nd) {
+          var have = haveFor(nd, k, sort), lbl = NEED[nd];
+          if (sort && (nd === "p:flour" || (k === "flour" && nd === "grain"))) lbl = (nd === "p:flour" ? "мука · " : "") + (s.strains[sort] ? s.strains[sort].name.toLowerCase() : lbl);
+          can = Math.min(can, Math.floor(have / r.needs[nd])); return lbl + " ×" + r.needs[nd] + " (есть " + have + ")";
+        });
+        var row = el("div", "seed"), cv = el("canvas", "pix"); itemIcon(cv, pid); row.appendChild(cv);
+        var tx = el("span"); tx.appendChild(el("b", "", itemName(pid) || r.name));
+        var s1 = el("small", "", parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : ""));
         s1.style.display = s2.style.display = "block"; tx.appendChild(s1); tx.appendChild(s2);
         row.appendChild(tx); sh.appendChild(row);
         var acts = el("div", "invacts");
         var go = function (n) {
           haptic("success"); close();
-          var t0 = farmNow(); s.jobs = (s.jobs || []).concat([{ kind: kind, recipe: k, n: n, started: t0, ready: t0 + r.min * 60 * n }]); renderFarm();
-          toast((kind === "mill" ? "Мельница мелет: " : "В печи: ") + r.name.toLowerCase() + " ×" + n);
-          farmCall("/api/farm/cook", { recipe: k, n: n }).catch(function () {});
+          var t0 = farmNow(), rk = sort ? k + "@" + sort : k;
+          s.jobs = (s.jobs || []).concat([{ kind: kind, recipe: rk, n: n, started: t0, ready: t0 + r.min * 60 * n }]);
+          Object.keys(r.needs).forEach(function (nd) { takeFor(nd, k, sort, r.needs[nd] * n); }); renderFarm();
+          toast((kind === "mill" ? "Мельница мелет: " : "В печи: ") + (itemName(pid) || r.name).toLowerCase() + " ×" + n);
+          farmCall("/api/farm/cook", { recipe: k, n: n, sort: sort }).catch(function () {});
         };
         if (can < 1) { var no = btn("не хватает", "ghost", function () {}); no.disabled = true; acts.appendChild(no); }
         else { acts.appendChild(btn("1 шт", "ghost", function () { go(1); })); if (can > 1) acts.appendChild(btn("все " + can + " · ⏱ " + fmtLeft(r.min * 60 * can), "", function () { go(can); })); }

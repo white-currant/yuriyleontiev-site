@@ -255,8 +255,8 @@ export async function farmState(u: any) {
   return {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked))),
-    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...barn.map((b) => b.strain).filter((x) => !x.startsWith("p:"))]),
-    ...(await kitchenOf(u.id)), recipes: RECIPES, products: PRODUCTS, build_list: BUILDS,
+    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...barn.map((b) => b.strain).filter((x) => !x.startsWith("p:")), ...barn.map((b) => sortOf(b.strain)).filter(Boolean)]),
+    ...(await kitchenOf(u.id)), recipes: RECIPES, products: (await productsFor([...barn.map((b) => b.strain), ...(await q("SELECT recipe FROM f_jobs WHERE user = ?", [u.id])).map((x) => "p:" + x[0])])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY),
     vinyls, inv, barn, gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })),
@@ -372,7 +372,7 @@ export async function sellCrop(u: any, strain: string, n: number) {
   const rows = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
   const pick = strain === "*" ? rows : rows.filter((r) => r[0] === strain);
   if (!pick.length) return { error: "В амбаре этого нет" };
-  const ss: Record<string, { dust: number }> = { ...(await strains(pick.map((r) => r[0]).filter((x) => !String(x).startsWith("p:")))), ...PRODUCTS };
+  const ss: Record<string, { dust: number }> = { ...(await strains(pick.map((r) => r[0]).filter((x) => !String(x).startsWith("p:")))), ...(await productsFor(pick.map((r) => String(r[0])))).products };
   let got = 0, sold = 0;
   for (const [id, have] of pick) {
     const s = ss[id]; if (!s) continue;
@@ -407,6 +407,24 @@ export const RECIPES: Record<string, { kind: string; name: string; needs: Record
   jam:    { kind: "oven", name: "Кактусовый джем",    needs: { cactus: 2, berry: 1 },            min: 20, dust: 75,  points: 3 },
 };
 const PRODUCTS: Record<string, { name: string; dust: number }> = Object.fromEntries(Object.entries(RECIPES).map(([k, r]) => ["p:" + k, { name: r.name, dust: r.dust }]));
+// Мука помнит сорт колосьев («p:flour@<сорт>»), а выпечка — сорт муки («p:bread@<сорт>», его просьба 2026-11-14):
+// из разной пшеницы — разная мука и разная выпечка. Цена: мука = цена колоса + 2; выпечка = рецепт + разница муки от пшеничной.
+const BASE_FLOUR = 7;
+export function sortOf(id: string) { const i = id.indexOf("@"); return i < 0 ? "" : id.slice(i + 1); }
+function recipeOf(id: string) { const r = id.startsWith("p:") ? id.slice(2) : id, i = r.indexOf("@"); return i < 0 ? r : r.slice(0, i); }
+export function productInfo(id: string, ss: Record<string, Strain>) {
+  const r = RECIPES[recipeOf(id)]; if (!r) return null;
+  const g = ss[sortOf(id)], nf = r.needs["p:flour"] || 0;
+  if (!g) return { name: r.name, dust: r.dust };
+  const fd = g.dust + 2, dust = recipeOf(id) === "flour" ? fd : r.dust + nf * (fd - BASE_FLOUR);
+  return { name: r.name, dust, sort: g.id, sort_name: g.name, color: g.color };
+}
+function productIds(ids: string[]) { return ids.filter((x) => String(x).startsWith("p:")); }
+async function productsFor(ids: string[]) {
+  const ss = await strains(productIds(ids).map(sortOf).filter(Boolean)), out: Record<string, any> = { ...PRODUCTS };
+  for (const id of productIds(ids)) { const p = productInfo(id, ss); if (p) out[id] = p; }
+  return { products: out, sorts: ss };
+}
 async function kitchenOf(uid: number) {
   const builds = (await q("SELECT kind FROM f_builds WHERE user = ?", [uid])).map((r) => String(r[0]));
   const jobs = (await q("SELECT kind, recipe, n, started, ready FROM f_jobs WHERE user = ?", [uid]))
@@ -423,7 +441,7 @@ export async function build(u: any, kind: string) {
   return { farm: await farmState(u) };
 }
 // загрузить n порций рецепта: ингредиенты списываются из амбара сразу (самые дешёвые подходящие)
-export async function cook(u: any, recipe: string, n: number) {
+export async function cook(u: any, recipe: string, n: number, sort = "") {
   const r = RECIPES[recipe]; if (!r) return { error: "Такого рецепта нет" };
   const b = BUILDS[r.kind], k = Math.max(1, Math.min(b.max, Math.round(n) || 1));
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, r.kind])).length) return { error: b.name + " ещё не построена" };
@@ -432,9 +450,19 @@ export async function cook(u: any, recipe: string, n: number) {
   const barn = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
   const ss = await strains(barn.map((x) => x[0]).filter((x) => !String(x).startsWith("p:")));
   const plan: [string, number][] = [];
+  // сорт: мельница мелет один сорт колосьев, печь берёт муку одного сорта; без сорта — как раньше (старая «p:flour»)
+  const sorted = recipe === "flour" || !!r.needs["p:flour"];
+  if (sorted && !sort) {                                  // не выбран — берём тот, которого хватает и который дешевле
+    const want = recipe === "flour" ? k : r.needs["p:flour"] * k;
+    const opts = barn.filter(([id, c]) => Number(c) >= want && (recipe === "flour" ? ss[id]?.shape === "grain" : String(id).startsWith("p:flour")))
+      .sort((a, c) => (ss[a[0]]?.dust || 0) - (ss[c[0]]?.dust || 0));
+    if (opts.length) sort = recipe === "flour" ? String(opts[0][0]) : sortOf(String(opts[0][0]));
+  }
   for (const [need, per] of Object.entries(r.needs)) {
     let left = per * k;
-    const fit = barn.filter(([id]) => need.startsWith("p:") ? id === need : ss[id] && ss[id].shape === need)
+    const flourId = sort ? "p:flour@" + sort : "p:flour";
+    const fit = barn.filter(([id]) => need === "p:flour" ? id === flourId : need.startsWith("p:") ? id === need
+      : recipe === "flour" && sort ? id === sort : ss[id] && ss[id].shape === need)
       .sort((a, c) => (ss[a[0]]?.dust || 0) - (ss[c[0]]?.dust || 0));
     for (const [id, have] of fit) { const take = Math.min(left, Number(have)); if (take > 0) { plan.push([id, take]); left -= take; } }
     if (left > 0) return { error: "Не хватает продуктов в амбаре" };
@@ -445,7 +473,7 @@ export async function cook(u: any, recipe: string, n: number) {
     else { for (const [id2, t2] of done) await q("UPDATE f_barn SET count = count + ? WHERE user = ? AND strain = ?", [t2, u.id, id2]); return { error: "Не хватает продуктов в амбаре" }; }
   }
   const t = now();
-  if (!(await q("INSERT OR IGNORE INTO f_jobs (user, kind, recipe, n, started, ready) VALUES (?, ?, ?, ?, ?, ?) RETURNING 1", [u.id, r.kind, recipe, k, t, t + r.min * 60 * k])).length) {
+  if (!(await q("INSERT OR IGNORE INTO f_jobs (user, kind, recipe, n, started, ready) VALUES (?, ?, ?, ?, ?, ?) RETURNING 1", [u.id, r.kind, sorted && sort ? recipe + "@" + sort : recipe, k, t, t + r.min * 60 * k])).length) {
     for (const [id2, t2] of done) await q("UPDATE f_barn SET count = count + ? WHERE user = ? AND strain = ?", [t2, u.id, id2]);
     return { error: b.name + " занята" };
   }
@@ -456,7 +484,7 @@ export async function collect(u: any, kind: string) {
   if (!j) return { error: "Нечего забирать" };
   if (Number(j[2]) > now()) return { error: "Ещё не готово" };
   if (!(await q("DELETE FROM f_jobs WHERE user = ? AND kind = ? RETURNING 1", [u.id, kind])).length) return { error: "Уже забрано" };
-  const r = RECIPES[String(j[0])], n = Number(j[1]), pts = (r?.points || 0) * n;
+  const r = RECIPES[recipeOf(String(j[0]))], n = Number(j[1]), pts = (r?.points || 0) * n;
   const writes = [DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, "p:" + j[0], n)];
   if (pts) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)").bind(u.id, nameOf(u), pts, "Лунная ферма", now()));
   await DB.batch(writes);
