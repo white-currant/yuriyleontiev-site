@@ -74,3 +74,5 @@ CREATE TABLE IF NOT EXISTS f_feed (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTE
 CREATE INDEX IF NOT EXISTS f_feed_at ON f_feed (at);
 -- игрок разрешил боту писать ему в личку о событиях своей фермы
 CREATE TABLE IF NOT EXISTS f_notify (user INTEGER PRIMARY KEY, on_ INTEGER NOT NULL DEFAULT 1, at INTEGER NOT NULL);
+-- магазин станции (2026-11-15): у каждого игрока своя доска из трёх заказов на блюда; slot 0 — простой, 1 — сложный, 2 — особый
+CREATE TABLE IF NOT EXISTS f_orders (user INTEGER NOT NULL, slot INTEGER NOT NULL, items TEXT NOT NULL, reward INTEGER NOT NULL, until INTEGER NOT NULL, ready INTEGER NOT NULL, PRIMARY KEY (user, slot));

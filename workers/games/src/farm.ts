@@ -543,6 +543,7 @@ export async function farmState(u: any) {
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY),
     vinyls, inv, barn, stall, chest, seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })), ...(await monoView(u.id)), feed_top: await feedTop(u.id),
+    orders: await ordersOf(u.id, (await kitchenOf(u.id)).builds),
   };
 }
 
@@ -760,6 +761,7 @@ export const BUILDS: Record<string, { name: string; price: number; max: number }
   barn: { name: "Амбар",    price: 50,  max: 0 },     // без амбара урожай сразу идёт в пыль; кухня без амбара не работает
   mill: { name: "Мельница", price: 200, max: 10 },
   oven: { name: "Печь",     price: 300, max: 5 },
+  shop: { name: "Магазин",  price: 500, max: 0 },     // заказы жителей станции на блюда (2026-11-15)
 };
 export const RECIPES: Record<string, { kind: string; name: string; needs: Record<string, number>; min: number; dust: number; points: number }> = {
   flour:  { kind: "mill", name: "Мука",               needs: { grain: 1 },                       min: 3,  dust: 7,   points: 0 },
@@ -802,6 +804,8 @@ async function kitchenOf(uid: number) {
 export async function build(u: any, kind: string) {
   const b = BUILDS[kind]; if (!b) return { error: "Такого строения нет" };
   await ensureFarm(u);
+  if (kind === "shop" && !(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind IN ('mill', 'oven')", [u.id])).length)
+    return { error: "Сначала построй мельницу или печь: магазин заказывает блюда" };
   if ((await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, kind])).length) return { error: "Уже построено" };
   if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [b.price, u.id, b.price])).length)
     return { error: "Не хватает звёздной пыли" };
@@ -813,7 +817,7 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
   const r = RECIPES[recipe]; if (!r) return { error: "Такого рецепта нет" };
   const b = BUILDS[r.kind], k = Math.max(1, Math.min(b.max, Math.round(n) || 1));
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, r.kind])).length) return { error: b.name + " ещё не построена" };
-  if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Сначала нужен амбар: продуктам негде лежать" };
+  if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Сначала нужен амбар: блюдам негде лежать" };
   if ((await q("SELECT 1 FROM f_jobs WHERE user = ? AND kind = ?", [u.id, r.kind])).length) return { error: b.name + " занята" };
   const barn = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
   const ss = await strains(barn.map((x) => x[0]).filter((x) => !String(x).startsWith("p:")));
@@ -845,6 +849,79 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
     for (const [id2, t2] of done) await q("UPDATE f_barn SET count = count + ? WHERE user = ? AND strain = ?", [t2, u.id, id2]);
     return { error: b.name + " занята" };
   }
+  return { farm: await farmState(u) };
+}
+// ---------- магазин: заказы на блюда (его решения 2026-11-15) ----------
+// Магазин покупается за пыль. У каждого своя доска из трёх заказов: простой, сложный и особый. Заказ — несколько блюд
+// по рецептам (сорт муки неважен); платит пылью в 1,5 / 1,7 / 2 раза больше, чем стоят эти блюда. Срок — от суток до трёх
+// (простой — сутки, сложный — двое, особый — трое; его правка 2026-11-15);
+// выполнил — новый заказ через полчаса, срок вышел — сразу новый. Раз в сутки можно заменить неудобный заказ.
+const ORDER_FOR = [DAY, 2 * DAY, 3 * DAY], ORDER_NEXT = 30 * 60, ORDER_X = [1.5, 1.7, 2], ORDER_TIER = ["Простой", "Сложный", "Особый"];
+function genOrder(slot: number, builds: string[]) {
+  const can = Object.keys(RECIPES).filter((k) => builds.includes(RECIPES[k].kind) && !(k === "flour" && builds.includes("oven")));   // мука — только пока нет печи
+  if (!can.length) return null;
+  const r = Math.random, pool = slot === 2 ? can.slice().sort((a, b) => RECIPES[b].dust - RECIPES[a].dust).slice(0, Math.max(3, Math.ceil(can.length / 2))) : can;
+  const types = Math.min(pool.length, slot === 0 ? 1 + Math.floor(r() * 2) : slot === 1 ? 2 + Math.floor(r() * 2) : 3);
+  const pick = pool.slice().sort(() => r() - 0.5).slice(0, types);
+  const items = pick.map((k) => ({ r: k, n: slot === 0 ? 1 + Math.floor(r() * 3) : slot === 1 ? 2 + Math.floor(r() * 3) : 2 + Math.floor(r() * 2) }));
+  const base = items.reduce((a, it) => a + it.n * RECIPES[it.r].dust, 0);
+  return { items, reward: Math.max(10, Math.round(base * ORDER_X[slot] / 5) * 5) };
+}
+async function ordersOf(uid: number, builds: string[]) {
+  if (!builds.includes("shop")) return null;
+  const t = now(), rows = new Map((await q("SELECT slot, items, reward, until, ready FROM f_orders WHERE user = ?", [uid])).map((r) => [Number(r[0]), r]));
+  const out = [];
+  for (let slot = 0; slot < 3; slot++) {
+    let row = rows.get(slot), items = row ? JSON.parse(String(row[1])) : [];
+    const stale = !row || (items.length && Number(row[3]) <= t) || (!items.length && Number(row[4]) <= t);
+    if (stale) {
+      const g = genOrder(slot, builds); if (!g) continue;
+      await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [uid, slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]);
+      row = [slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]; items = g.items;
+    }
+    out.push({ slot, tier: ORDER_TIER[slot], items: items.map((it: any) => ({ recipe: it.r, n: it.n, name: RECIPES[it.r]?.name || it.r })),
+               reward: Number(row![2]), until: Number(row![3]), ready: Number(row![4]) });
+  }
+  const day = Math.floor((t + TZ) / DAY);
+  return { list: out, skip_left: (await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?", [uid, "ordskip:" + day])).length ? 0 : 1 };
+}
+export async function fulfil(u: any, slot: number) {
+  await ensureFarm(u);
+  const t = now(), [row] = await q("SELECT items, reward, until FROM f_orders WHERE user = ? AND slot = ?", [u.id, slot]);
+  const items = row ? JSON.parse(String(row[0])) : [];
+  if (!row || !items.length) return { error: "Заказа пока нет" };
+  if (Number(row[2]) <= t) return { error: "Срок заказа вышел" };
+  const barn = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0 AND strain LIKE 'p:%'", [u.id]);
+  const prices = (await productsFor(barn.map((x) => String(x[0])))).products;
+  const plan: [string, number][] = [];
+  for (const it of items) {                                  // берём сначала самые дешёвые блюда этого рецепта
+    let left = Number(it.n);
+    for (const [id, c] of barn.filter((x) => recipeOf(String(x[0])) === it.r).sort((a, b) => (prices[String(a[0])]?.dust || 0) - (prices[String(b[0])]?.dust || 0))) {
+      const take = Math.min(left, Number(c)); if (take > 0) { plan.push([String(id), take]); left -= take; }
+    }
+    if (left > 0) return { error: "Не хватает блюд: " + (RECIPES[it.r]?.name || it.r) };
+  }
+  if (!(await q("DELETE FROM f_orders WHERE user = ? AND slot = ? AND items = ? RETURNING 1", [u.id, slot, String(row[0])])).length) return { error: "Заказ уже сдан" };
+  const done: [string, number][] = [];
+  for (const [id, k] of plan) {
+    if ((await q("UPDATE f_barn SET count = count - ? WHERE user = ? AND strain = ? AND count >= ? RETURNING 1", [k, u.id, id, k])).length) { done.push([id, k]); continue; }
+    for (const [id2, k2] of done) await q("UPDATE f_barn SET count = count + ? WHERE user = ? AND strain = ?", [k2, u.id, id2]);   // не вышло — всё вернуть
+    await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [u.id, slot, String(row[0]), Number(row[1]), Number(row[2]), t]);
+    return { error: "Не хватает блюд в амбаре" };
+  }
+  await DB.batch([DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(Number(row[1]), u.id),
+                  DB.prepare("INSERT INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, '[]', 0, 0, ?)").bind(u.id, slot, t + ORDER_NEXT)]);
+  await logFeed("order", u.id, null, null, Number(row[1]));
+  return { dust: Number(row[1]), farm: await farmState(u) };
+}
+export async function skipOrder(u: any, slot: number) {
+  await ensureFarm(u);
+  const t = now(), day = Math.floor((t + TZ) / DAY);
+  if (!(await q("INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?) RETURNING 1", [u.id, "ordskip:" + day, t, u.id, "ordskip:" + day])).length)
+    return { error: "Заменить заказ можно раз в сутки" };
+  const { builds } = await kitchenOf(u.id), g = genOrder(slot, builds);
+  if (!g) return { error: "Нет блюд для заказа" };
+  await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [u.id, slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]);
   return { farm: await farmState(u) };
 }
 export async function collect(u: any, kind: string) {
@@ -1151,7 +1228,7 @@ export async function monoFeed(after: number) {                 // для бот
 }
 export async function forgetFarm(uid: number) {
   for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM g_items WHERE user = ? AND game = 'farm'",
-                     "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?", "DELETE FROM f_stall WHERE user = ?", "DELETE FROM f_plotev WHERE user = ?", "DELETE FROM f_evlog WHERE user = ?", "DELETE FROM f_stars WHERE user = ?", "DELETE FROM f_cratercrop WHERE user = ?", "DELETE FROM f_mono WHERE user = ?", "DELETE FROM f_monomark WHERE user = ?", "DELETE FROM f_clumps WHERE user = ?", "DELETE FROM f_notify WHERE user = ?", "DELETE FROM f_chest WHERE user = ?", "DELETE FROM f_prices WHERE user = ?",
+                     "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?", "DELETE FROM f_stall WHERE user = ?", "DELETE FROM f_plotev WHERE user = ?", "DELETE FROM f_evlog WHERE user = ?", "DELETE FROM f_stars WHERE user = ?", "DELETE FROM f_cratercrop WHERE user = ?", "DELETE FROM f_mono WHERE user = ?", "DELETE FROM f_monomark WHERE user = ?", "DELETE FROM f_clumps WHERE user = ?", "DELETE FROM f_notify WHERE user = ?", "DELETE FROM f_orders WHERE user = ?", "DELETE FROM f_chest WHERE user = ?", "DELETE FROM f_prices WHERE user = ?",
                      "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?", "DELETE FROM f_builds WHERE user = ?", "DELETE FROM f_jobs WHERE user = ?"]) await q(sql, [uid]);
   await q("DELETE FROM f_given WHERE from_user = ? OR to_user = ?", [uid, uid]);
   await q("DELETE FROM f_feed WHERE actor = ? OR target = ?", [uid, uid]);              // из ленты новостей — тоже
