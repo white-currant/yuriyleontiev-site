@@ -938,7 +938,7 @@ async function ordersOf(uid: number, builds: string[]) {
   const day = Math.floor((t + TZ) / DAY);
   return { list: out, skip_left: (await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?", [uid, "ordskip:" + day])).length ? 0 : 1 };
 }
-export async function fulfil(u: any, slot: number) {
+export async function fulfil(u: any, slot: number, pick?: Record<string, number>) {   // pick — что именно отдать в простой заказ (выбирает игрок)
   await ensureFarm(u);
   const t = now(), [row] = await q("SELECT items, reward, until FROM f_orders WHERE user = ? AND slot = ?", [u.id, slot]);
   const items = row ? JSON.parse(String(row[0])) : [];
@@ -947,6 +947,16 @@ export async function fulfil(u: any, slot: number) {
   const barn = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0 AND strain LIKE 'p:%'", [u.id]);
   const prices = (await productsFor(barn.map((x) => String(x[0])))).products;
   const plan: [string, number][] = [];
+  if (items.length === 1 && String(items[0].r).startsWith("*")) {            // простой заказ: игрок сам выбрал блюда (его решение 2026-11-15)
+    if (!pick || typeof pick !== "object") return { error: "Выбери, какие блюда отдать" };
+    const have = new Map(barn.map((x) => [String(x[0]), Number(x[1])])); let sum = 0;
+    for (const [id, k0] of Object.entries(pick)) {
+      const k = Math.max(0, Math.floor(Number(k0) || 0)); if (!k) continue;
+      if (!orderFits(items[0].r, recipeOf(id)) || (have.get(id) || 0) < k) return { error: "Таких блюд в амбаре нет" };
+      plan.push([id, k]); sum += k;
+    }
+    if (sum !== Number(items[0].n)) return { error: "Нужно выбрать ровно " + items[0].n };
+  } else
   for (const it of items) {                                  // берём сначала самые дешёвые блюда этого рецепта
     let left = Number(it.n);
     for (const [id, c] of barn.filter((x) => orderFits(it.r, recipeOf(String(x[0]))) && !plan.some((p) => p[0] === String(x[0]) && p[1] >= Number(x[1]))).sort((a, b) => (prices[String(a[0])]?.dust || 0) - (prices[String(b[0])]?.dust || 0))) {
