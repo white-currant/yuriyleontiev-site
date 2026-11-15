@@ -1072,13 +1072,14 @@ export async function openGifts(u: any) {
 // ---------- соседи ----------
 // Соседи видны под тем же именем, что в «Звёздном зале» (как их показывает бот); хозяин и анонимные — скрыты.
 // Наружу уходит только случайный номер участка (pub), а не номер аккаунта.
+// Порядок — по звёздной пыли на руках, пыль видна у каждого (его просьба 2026-11-15).
 export async function neighbors(u: any, hidden: number[]) {
   const not = hidden.length ? ` AND f.user NOT IN (${hidden.map(() => "?").join(",")})` : "";
-  const rows = await q(`SELECT f.pub, p.name, p.title, p.avatar,
+  const rows = await q(`SELECT f.pub, p.name, p.title, p.avatar, f.dust,
                           (SELECT COUNT(*) FROM f_given g WHERE g.from_user = ? AND g.to_user = f.user AND g.day = ?)
                         FROM f_farms f JOIN g_profiles p ON p.user = f.user
-                        WHERE f.user != ?${not} ORDER BY p.points DESC LIMIT 30`, [u.id, today(), u.id, ...hidden]);
-  return { neighbors: rows.map(([pub, name, title, avatar, given]) => ({ pub, name, title, avatar: avatar ? `/avatar/${avatar}` : null, gifted: Number(given) > 0 })),
+                        WHERE f.user != ?${not} ORDER BY f.dust DESC LIMIT 30`, [u.id, today(), u.id, ...hidden]);
+  return { neighbors: rows.map(([pub, name, title, avatar, dust, given]) => ({ pub, name, title, avatar: avatar ? `/avatar/${avatar}` : null, dust: Number(dust) || 0, gifted: Number(given) > 0 })),
            gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY };
 }
 

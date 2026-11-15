@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151921";
+    var BUILD = "202611152314";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -259,6 +259,8 @@
   .nlist li { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--card-line); }
   .nlist .av { width: 36px; height: 36px; }
   .nlist .t { display: block; font-size: 12px; color: var(--dim); }
+  .nlist .nn { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .nlist .nd { font-weight: 700; color: var(--gold); white-space: nowrap; }
   .nlist button { padding: 8px 12px; border-radius: 10px; background: rgba(255, 196, 105, .16); color: var(--gold); font-size: 13px; font-weight: 600; }
   .toast { position: fixed; left: 50%; top: calc(70px + var(--top)); transform: translateX(-50%); z-index: 40; padding: 10px 16px; border-radius: 12px;
     background: #241e3f; border: 1px solid rgba(255, 196, 105, .4); color: var(--white); font-size: 14px; animation: up .2s ease-out; max-width: 90%; text-align: center; }
@@ -4407,7 +4409,7 @@
       r.neighbors.forEach(function (n) {
         var li = el("li"); var av = el("span", "av"); av.className = "av"; av.style.cssText = "border-radius:50%;display:grid;place-items:center;font-weight:650;background:radial-gradient(circle at 35% 30%,#fff1d2,#ffc469 35%,#8a4a14);color:#2a1406";
         av.textContent = initial(n.name); setPhoto(av, n.avatar); li.appendChild(av);
-        var t = el("span"); t.appendChild(el("span", "", n.name)); t.appendChild(el("span", "t", n.title + (n.gifted ? " · подарок оставлен" : ""))); li.appendChild(t);
+        var t = el("span"), nm = el("span", "nn"); nm.appendChild(el("span", "", n.name)); if (n.dust != null) nm.appendChild(el("b", "nd", "✦ " + n.dust)); t.appendChild(nm); t.appendChild(el("span", "t", n.title + (n.gifted ? " · подарок оставлен" : ""))); li.appendChild(t);
         li.appendChild(btn("В гости", "", function () { visit(n.pub); })); li.lastChild.className = "";
         ul.appendChild(li);
       });
