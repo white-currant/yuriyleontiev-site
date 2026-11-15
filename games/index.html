@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151646";
+    var BUILD = "202611151720";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -237,8 +237,9 @@
   .pm button:disabled { opacity: .35; }
   .pm button:active { transform: translateY(1px); }
   .qty { display: grid; grid-template-columns: 46px 52px 46px 1fr; gap: 8px; align-items: center; margin: 12px 3px 0; }   /* − N + рядом, «все» — на остаток (его эскиз) */
-  .qty .btn { margin: 0; min-height: 42px; padding: 0 10px; width: auto; font-size: 20px; }
-  .qty .btn:last-child { font-size: 14px; }
+  .qty .btn { margin: 0; min-height: 46px; padding: 0 10px; width: auto; font-size: 20px; }
+  .qty .btn:last-child { font-size: 15px; }
+  .qty.price { grid-template-columns: 46px 64px 46px 1fr; }   /* цена — тем же счётчиком: − ✦ N + · как у игры */
   .qval { text-align: center; font-family: var(--pix); font-size: 22px; font-weight: 700; color: var(--cream); }
   .feednote { margin: 12px 3px 0; font-size: 13.5px; line-height: 1.4; color: rgba(246, 239, 227, .75); }
   #toneighbors.dot, #ntabs button.dot { position: relative; }
@@ -1349,7 +1350,7 @@
       var box = el("div"); sh.appendChild(box);
       var pick = roofKey(s);
       var draw = function () {
-        box.innerHTML = "";
+        box.innerHTML = ""; s = F.state;                            // всегда свежее состояние: ответ сервера мог прийти, пока окно открыто
         var owned = s.roofs_owned || ["orange"], g = el("div", "invgrid roofgrid");
         keys.forEach(function (k) {
           var has = owned.indexOf(k) >= 0, cell = el("div", "slot" + (k === pick ? " on" : "")); cell.setAttribute("aria-label", cols[k] || k);
@@ -2343,14 +2344,20 @@
   }
   // ответы сервера приходят по очереди; применяем состояние только когда ответов больше не ждём — иначе старый ответ затрёт новое нажатие
   F.pending = 0;
+  // загрузка фермы без действия: если пока она шла, игрок что-то сделал (купил, посадил) — старый ответ не затирает сделанное
+  // (баг 2026-11-15: купил крышу сразу после входа на ферму — ответ на вход пришёл позже и вернул старую крышу)
+  function loadFarm() {
+    var t0 = Date.now();
+    return call("/api/farm").then(function (st) { if (!F.pending && (F.mutAt || 0) <= t0) setFarm(st); return st; });
+  }
   function farmCall(path, body) {
-    F.pending++;
+    F.pending++; F.mutAt = Date.now();
     return call(path, body).then(function (r) {
       F.pending--;
-      if (r.error) { toast(r.error); if (!F.pending) call("/api/farm").then(setFarm); return r; }
+      if (r.error) { toast(r.error); if (!F.pending) loadFarm(); return r; }
       if (r.farm && !F.pending) setFarm(r.farm);
       return r;
-    }, function (e) { F.pending--; toast("Не получилось: " + e.message); if (!F.pending) call("/api/farm").then(setFarm).catch(function () {}); throw e; });
+    }, function (e) { F.pending--; toast("Не получилось: " + e.message); if (!F.pending) loadFarm().catch(function () {}); throw e; });
   }
   function cropIcon(cv, s, bare) {                                                // значок сорта: созревшее растение на земле (bare — без земли)
     cv.classList.toggle("myth", !!(s && s.myth));                                 // мифическое — фиолетовое сияние
@@ -2810,7 +2817,7 @@
     show("farm"); haptic("light");
     loadReleases();
     if (F.state) { renderFarm(); farmAnim(); }
-    call("/api/farm").then(function (st) { setFarm(st); farmLoop(); farmAnim(); })
+    loadFarm().then(function () { farmLoop(); farmAnim(); })
       .catch(function (e) { toast("Не получилось: " + e.message); });
   }
 
@@ -3012,15 +3019,11 @@
       }
       if (mine && !st.base) {                                                       // продажа: сколько семян лежит в твоей лавке
         var h = el("div", "mono", "Твоя лавка"); h.style.marginTop = "18px"; sh.appendChild(h);
-        sh.appendChild(el("div", "sub", "Соседи, которые зайдут к тебе в гости, смогут купить выставленные семена по ✦ " + st.price +
-          ". Пыль придёт тебе сразу. Выставленные семена не посадить, пока не уберёшь их с продажи."));
-        var stat = el("div", "salecount"), upd = function () { stat.textContent = "На продаже: " + mine.listed + " из " + mine.count; };
-        var step = function (d) { haptic("light"); mine.listed += d; upd(); renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: d }).catch(function () {}); };
-        upd(); sh.appendChild(stat);
-        var lq = qtyBox(sh, { key: "list:" + st.id, max: function () { return mine.count; },
-          acts: [{ t: function (n) { return "Выставить " + n; }, max: function () { return mine.count - mine.listed; }, run: function (n) { step(n); } },
-                 { t: function (n) { return "Убрать " + n; }, cls: "ghost", max: function () { return mine.listed; }, run: function (n) { step(-n); } }] });
-        lavDraw = function () { upd(); lq.draw(); };
+        sh.appendChild(el("div", "sub", "Соседи, которые зайдут к тебе в гости, смогут купить выставленные семена. Пыль придёт тебе сразу. Выставленные семена не посадить, пока не уберёшь их с продажи."));
+        var lq = saleBox(sh, { key: "sale:s:" + st.id, listed: function () { return mine.listed; }, total: function () { return mine.count; },
+          step: function (d) { haptic("light"); mine.listed += d; renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: d }).catch(function () {}); },
+          priceKey: "s:" + st.id, base: st.price, item: st.id, kind: "seed" });
+        lavDraw = function () { lq.draw(); };
       } else if (mine && st.base) sh.appendChild(el("div", "sub", "Семена станции в своей лавке не продаются — только выведенные тобой сорта."));
       if (opt.buy) sh.appendChild(btn("Купить за ✦ " + st.price, "", function () { close(); opt.buy(); }));
       if (opt.back) sh.appendChild(btn("Назад", "ghost", function () { close(); opt.back(); }));
@@ -3378,8 +3381,8 @@
       var row = el("div", "qty");
       var minus = btn("−", "ghost", function () { haptic("light"); n = Math.max(1, n - 1); draw(); });
       var plus = btn("+", "ghost", function () { haptic("light"); n = Math.min(mx, n + 1); draw(); });
-      var all = btn(n === mx ? "по одному" : "все " + mx, "ghost", function () { haptic("light"); n = n === mx ? 1 : mx; draw(); });
-      minus.disabled = n <= 1; plus.disabled = n >= mx; if (mx === 1) all.style.visibility = "hidden";   // одна штука — «все» не нужна
+      var all = btn("все " + mx, "ghost", function () { haptic("light"); n = mx; draw(); });
+      minus.disabled = n <= 1; plus.disabled = n >= mx; all.disabled = n >= mx; if (mx === 1) all.style.visibility = "hidden";   // одна штука — «все» не нужна
       row.appendChild(minus); row.appendChild(el("div", "qval", String(n))); row.appendChild(plus); row.appendChild(all); wrap.appendChild(row);
       var a = el("div", "invacts");
       o.acts.forEach(function (x) {
@@ -3931,18 +3934,30 @@
   // своя цена продавца: 70–130% от цены игры (ключ семян — «s:<сорт>», товара прилавка — его код)
   function rangeOf(base) { var r = (F.state && F.state.price_range) || [.7, 1.3]; return [Math.max(1, Math.floor(base * r[0])), Math.max(1, Math.ceil(base * r[1]))]; }
   function priceFor(key, base) { var own = ((F.state && F.state.prices) || {})[key], r = rangeOf(base); return own ? Math.max(r[0], Math.min(r[1], own)) : base; }
-  function priceControl(d, key, base, item, kind) {
+  function priceControl(d, key, base, item, kind, redraw) {
     var cur = priceFor(key, base), r = rangeOf(base), stepN = Math.max(1, Math.round(base * .05));
-    d.appendChild(el("div", "sub", "Твоя цена — ✦ " + cur + (cur === base ? " (как у игры)" : " (у игры ✦ " + base + ")") + ". Можно от ✦ " + r[0] + " до ✦ " + r[1] + "."));
+    var pl = el("div", "sub", "Цена за штуку" + (cur === base ? " — как у игры" : " (у игры ✦ " + base + ")") + ". Можно от ✦ " + r[0] + " до ✦ " + r[1] + "."); pl.style.marginTop = "16px"; d.appendChild(pl);
     var set = function (v) {
       v = Math.max(r[0], Math.min(r[1], v)); haptic("light");
       F.state.prices = F.state.prices || {}; if (v === base) delete F.state.prices[key]; else F.state.prices[key] = v;
-      renderShopTab(); farmCall("/api/farm/price", { item: item, price: v, kind: kind }).catch(function () {});
+      if (redraw) redraw(); else renderShopTab(); farmCall("/api/farm/price", { item: item, price: v, kind: kind }).catch(function () {});
     };
-    var a = el("div", "invacts"), dn = btn("− дешевле", "ghost", function () { set(cur - stepN); }), up = btn("+ дороже", "ghost", function () { set(cur + stepN); });
-    dn.disabled = cur <= r[0]; up.disabled = cur >= r[1]; a.appendChild(dn); a.appendChild(up);
-    if (cur !== base) a.appendChild(btn("как у игры", "ghost", function () { set(base); }));
-    d.appendChild(a);
+    var row = el("div", "qty price"), dn = btn("−", "ghost", function () { set(cur - stepN); }), up = btn("+", "ghost", function () { set(cur + stepN); }),
+        same = btn("как у игры", "ghost", function () { set(base); });
+    dn.disabled = cur <= r[0]; up.disabled = cur >= r[1]; same.disabled = cur === base;
+    row.appendChild(dn); row.appendChild(el("div", "qval", "✦ " + cur)); row.appendChild(up); row.appendChild(same); d.appendChild(row);
+  }
+  // выставление на продажу — один вид везде (его правка 2026-11-15): «На продаже X из Y», счётчик «Выставить / Убрать», цена счётчиком
+  // o: { key, listed(), total(), step(d), priceKey, base, item, kind, redraw() }
+  function saleBox(d, o) {
+    var stat = el("div", "salecount"); d.appendChild(stat);
+    var upd = function () { stat.textContent = "На продаже: " + o.listed() + " из " + o.total(); }; upd();
+    var q = qtyBox(d, { key: o.key, max: function () { return o.total(); },
+      acts: [{ t: function (n) { return "Выставить " + n; }, max: function () { return o.total() - o.listed(); }, run: function (n) { o.step(n); if (o.after) o.after(); else upd(); } },
+             { t: function (n) { return "Убрать " + n; }, cls: "ghost", max: function () { return o.listed(); }, run: function (n) { o.step(-n); if (o.after) o.after(); else upd(); } }] });
+    var pr = el("div"); d.appendChild(pr);
+    var drawPrice = function () { pr.innerHTML = ""; priceControl(pr, o.priceKey, o.base, o.item, o.kind, o.after || drawPrice); }; drawPrice();
+    return { draw: function () { upd(); q.draw(); drawPrice(); } };
   }
   function stallOf(id) { var r = null; (F.state.stall || []).forEach(function (x) { if (x.item === id) r = x; }); return r; }
   // полка: wares = [{ key, icon(cv), tag, qty, sale }]; выбранный товар — сведения и кнопки ниже (info)
@@ -4058,13 +4073,11 @@
         var sp = priceFor("s:" + st.id, st.price);
         mine.push({ key: key, icon: seedIconOf(st), tag: "✦ " + sp, qty: it.listed ? "в продаже " + it.listed + " из " + it.count : "×" + it.count, sale: !!it.listed });
         acts2[key] = function () {
-          var d = infoBox(box, st.name + " · " + strainCode(st), ["У тебя " + it.count + ", на продаже " + it.listed + ". Цену семени игра считает по свойствам сорта — ✦ " + st.price + ".",
+          var d = infoBox(box, st.name + " · " + strainCode(st), ["Цену семени игра считает по свойствам сорта — ✦ " + st.price + ".",
             "Выставленные семена не посадить, пока не уберёшь их с продажи."]);
-          var step = function (dl) { haptic("light"); it.listed += dl; renderShopTab(); renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: dl }).catch(function () {}); };
-          qtyBox(d, { key: "shs:" + st.id, max: function () { return it.count; },
-            acts: [{ t: function (n) { return "Выставить " + n; }, max: function () { return it.count - it.listed; }, run: function (n) { step(n); } },
-                   { t: function (n) { return "Убрать " + n; }, cls: "ghost", max: function () { return it.listed; }, run: function (n) { step(-n); } }] });
-          priceControl(d, "s:" + st.id, st.price, st.id, "seed");
+          saleBox(d, { key: "sale:s:" + st.id, listed: function () { return it.listed; }, total: function () { return it.count; },
+            step: function (dl) { haptic("light"); it.listed += dl; renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: dl }).catch(function () {}); },
+            priceKey: "s:" + st.id, base: st.price, item: st.id, kind: "seed", after: renderShopTab });
         };
       });
     } else {
@@ -4075,18 +4088,16 @@
         var it = itemOf(id), inb = (barnOf(id) || { count: 0 }).count, ons = (stallOf(id) || { listed: 0 }).listed, base = stallPrice(it.dust), price = priceFor(id, base), key = "b:" + id;
         mine.push({ key: key, icon: itemIconOf(id), tag: "✦ " + price, qty: ons ? "в продаже " + ons + " из " + (inb + ons) : "×" + inb, sale: !!ons });
         acts2[key] = function () {
-          var d = infoBox(box, itemName(id), ["В амбаре " + inb + ", на прилавке " + ons + ". Игрокам — ✦ " + price + " за штуку, в пыль — ✦ " + it.dust + ".",
+          var d = infoBox(box, itemName(id), ["Игрокам — ✦ " + price + " за штуку, в пыль — ✦ " + it.dust + ".",
             "Выставленное лежит на прилавке: его не смолоть, не испечь и не распылить, пока не уберёшь."]);
-          var step = function (dl) {
-            haptic("light");
-            var b0 = barnOf(id); if (dl > 0) { if (!b0 || b0.count < dl) return; b0.count -= dl; } else barnAdd(id, -dl);
-            var sx = stallOf(id); if (sx) sx.listed += dl; else (F.state.stall = F.state.stall || []).push({ item: id, listed: dl });
-            renderShopTab(); renderFarm(); farmCall("/api/farm/stall", { item: id, delta: dl }).catch(function () {});
-          };
-          qtyBox(d, { key: "shi:" + id, max: function () { return Math.max(inb, ons); },
-            acts: [{ t: function (n) { return "Выставить " + n; }, max: function () { return inb; }, run: function (n) { step(n); } },
-                   { t: function (n) { return "Убрать " + n; }, cls: "ghost", max: function () { return ons; }, run: function (n) { step(-n); } }] });
-          priceControl(d, id, base, id, "item");
+          saleBox(d, { key: "sale:" + id, listed: function () { return (stallOf(id) || { listed: 0 }).listed; },
+            total: function () { return (barnOf(id) || { count: 0 }).count + (stallOf(id) || { listed: 0 }).listed; },
+            step: function (dl) {
+              haptic("light");
+              var b0 = barnOf(id); if (dl > 0) { if (!b0 || b0.count < dl) return; b0.count -= dl; } else barnAdd(id, -dl);
+              var sx = stallOf(id); if (sx) sx.listed += dl; else (F.state.stall = F.state.stall || []).push({ item: id, listed: dl });
+              renderFarm(); farmCall("/api/farm/stall", { item: id, delta: dl }).catch(function () {});
+            }, priceKey: id, base: base, item: id, kind: "item", after: renderShopTab });
         };
       });
     }
@@ -4108,7 +4119,7 @@
     cur.dust -= price; setText($("shopdust"), "✦ " + cur.dust);
     b.disabled = true; b.textContent = "Покупаю…";
     call("/api/farm/buy", { pub: pub, strain: id, kind: kind }).then(function (r) {
-      if (r.error) { toast(r.error); call("/api/farm").then(setFarm); return openShop("buy"); }
+      if (r.error) { toast(r.error); loadFarm(); return openShop("buy"); }
       toast(done); F.shopSel = null; setFarm(r.farm); openShop("buy");
     }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; });
   }
@@ -4353,7 +4364,7 @@
       F.pingSince = fresh[fresh.length - 1].id;
       var touchesMe = false;
       fresh.forEach(function (x) { if (x.actor && x.actor.me) return; if (x.target && x.target.me) touchesMe = true; showPing(x); });
-      if (touchesMe && !F.pending) call("/api/farm").then(setFarm).catch(function () {});   // у тебя купили / тебе подарили — сразу видно пыль и подарок
+      if (touchesMe && !F.pending) loadFarm().catch(function () {});   // у тебя купили / тебе подарили — сразу видно пыль и подарок
     }).catch(function () {});
   }
   function showPing(x) {
