@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151249";
+    var BUILD = "202611151251";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2597,7 +2597,7 @@
       var nch = (F.state.chest || []).reduce(function (a, it) { return a + it.count; }, 0);
       ch.appendChild(el("span", "lbl water", nch ? "сундук · " + nch : "сундук")); ch.onclick = function () { haptic("light"); chestSheet(); }; box.appendChild(ch); }
       var sb = document.createElement("button"); sb.type = "button"; sb.className = "plot well kitchen";       // магазин: заказы на блюда
-      var shopUp = hasBuild(F.state, "shop") ? 42 : 18;                                                     // подпись — над навесом, у пустого участка — над ним
+      var shopUp = hasBuild(F.state, "shop") ? 42 : 30;                                                     // подпись — над навесом, у пустого участка — над ним
       sb.style.left = (SHOP[0] - 24) / FW * 100 + "%"; sb.style.top = (SHOP[1] - shopUp) / FH * 100 + "%"; sb.style.width = 48 / FW * 100 + "%"; sb.style.height = (shopUp + 4) / FH * 100 + "%";
       var so = F.state.orders, sready = so && so.list ? so.list.filter(function (q) { return q.items.length && orderReady(q); }).length : 0;
       sb.appendChild(el("span", "lbl water" + (sready ? " ready" : ""), !hasBuild(F.state, "shop") ? "магазин" : sready ? "заказ готов!" : "заказы"));
