@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150429";
+    var BUILD = "202611151042";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1400,7 +1400,7 @@
     var back = document.createElement("canvas"), front = document.createElement("canvas"), shed = document.createElement("canvas"), back2 = document.createElement("canvas");
     back.width = front.width = shed.width = back2.width = FW; back.height = front.height = shed.height = back2.height = FH;   // shed — амбар (рисуется, если куплен)
     var c = back.getContext("2d"), f = front.getContext("2d"), r = rng(seed), x, y, i;
-    var roof = ROOFS[seed === 47 ? 0 : seed % ROOFS.length];
+    var roof = ROOFS[0];   // крыши у всех одного цвета: раньше в гостях цвет брался из номера фермы, и сосед видел чужой дом не таким, каким его видит хозяин (жалоба в чате 2026-11-15)
     // небо — его рисунки (art/sky.png и art/sky-stars.png): ночное небо, планеты; звёзды мерцают отдельно (drawStars)
     if (SKY.ready) {
       px(c, 0, 0, FW, 36, "#02054d"); c.drawImage(SKY.sky, 0, 0); c.drawImage(SKY.planets, 0, 0);
