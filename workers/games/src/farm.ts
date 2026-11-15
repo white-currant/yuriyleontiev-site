@@ -1222,8 +1222,8 @@ async function feedTop(uid: number) {                          // самая с�
   return r && r[0] ? Number(r[0]) : 0;
 }
 export async function monoFeed(after: number) {                 // для бота: новые большие события; dm — игрок разрешил писать ему в личку
-  return (await q("SELECT e.rowid, e.user, e.kind, e.at, n.on_ FROM f_evlog e LEFT JOIN f_notify n ON n.user = e.user WHERE e.kind LIKE 'mono_%' AND e.rowid > ? ORDER BY e.rowid LIMIT 50", [after]))
-    .map(([id, user, kind, at, on]) => { const k = String(kind).slice(5); return { id: Number(id), user: Number(user), kind: k, at: Number(at), dm: !!Number(on || 0),
+  return (await q("SELECT e.rowid, e.user, e.kind, e.at, n.on_ FROM f_evlog e LEFT JOIN f_notify n ON n.user = e.user WHERE substr(e.kind, 1, 5) = 'mono_' AND e.rowid > ? ORDER BY e.rowid LIMIT 50", [after]))   // не LIKE 'mono_%': «_» там — любой символ, и туда попадал служебный «monoroll:…»
+    .map(([id, user, kind, at, on]) => { const k = String(kind).slice(5); return { id: Number(id), user: Number(user), kind: k, at: Number(at), dm: !!Number(on || 0) && !!MONO_NAMES[k],
       name: (MONO_NAMES[k] || [k])[0], text: (MONO_NAMES[k] || ["", ""])[1] }; });
 }
 export async function forgetFarm(uid: number) {
