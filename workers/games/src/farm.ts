@@ -516,8 +516,32 @@ async function mythTick(uid: number) {
       DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'myth_lost', ?)").bind(uid, t)]);
   }
 }
+// мука и выпечка, смолотые до сортов, — разложить по новым ключам (раз для каждого игрока; ничего не теряется, одинаковое складывается)
+async function normFlour(uid: number) {
+  const old = "LIKE '%@%' AND {c} NOT LIKE '%@g:%'";
+  const rows = [...(await q(`SELECT 'barn', strain, count FROM f_barn WHERE user = ? AND strain ${old.replace("{c}", "strain")}`, [uid])),
+                ...(await q(`SELECT 'stall', item, listed FROM f_stall WHERE user = ? AND item ${old.replace("{c}", "item")}`, [uid])),
+                ...(await q(`SELECT 'job', recipe, 0 FROM f_jobs WHERE user = ? AND recipe ${old.replace("{c}", "recipe")}`, [uid])),
+                ...(await q(`SELECT 'price', item, 0 FROM f_prices WHERE user = ? AND item ${old.replace("{c}", "item")}`, [uid]))];
+  if (!rows.length) return;
+  const ss = await strains(rows.map((r) => sortOf(String(r[1]))));
+  const conv = (id: string) => { const rec = recipeOf(id), r = RECIPES[rec], g = ss[sortOf(id)];
+    if (!r || !g || !(rec === "flour" || r.needs["p:flour"])) return null;
+    return (id.startsWith("p:") ? "p:" : "") + rec + "@" + flourKey(g); };
+  for (const [where, id, n] of rows) {
+    const to = conv(String(id)); if (!to || to === id) continue;
+    if (where === "barn") await DB.batch([DB.prepare("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count").bind(uid, to, Number(n)),
+                                          DB.prepare("DELETE FROM f_barn WHERE user = ? AND strain = ?").bind(uid, id)]);
+    if (where === "stall") await DB.batch([DB.prepare("INSERT INTO f_stall (user, item, listed) VALUES (?, ?, ?) ON CONFLICT(user, item) DO UPDATE SET listed = listed + excluded.listed").bind(uid, to, Number(n)),
+                                           DB.prepare("DELETE FROM f_stall WHERE user = ? AND item = ?").bind(uid, id)]);
+    if (where === "job") await q("UPDATE f_jobs SET recipe = ? WHERE user = ? AND recipe = ?", [to, uid, id]);
+    if (where === "price") await DB.batch([DB.prepare("UPDATE OR IGNORE f_prices SET item = ? WHERE user = ? AND item = ?").bind(to, uid, id),
+                                           DB.prepare("DELETE FROM f_prices WHERE user = ? AND item = ?").bind(uid, id)]);
+  }
+}
 export async function farmState(u: any) {
   await ensureFarm(u);
+  await normFlour(u.id);
   await mythTick(u.id); await mossEnd(u.id);
   const EVS = await plotEvents(u.id);
   const [[dust, unlocked, pub, water]] = await q("SELECT dust, unlocked, pub, water FROM f_farms WHERE user = ?", [u.id]);
@@ -781,9 +805,25 @@ PRODUCTS["p:coal"] = { name: "Звёздный уголь", dust: 120 };        
 const BASE_FLOUR = 7;
 export function sortOf(id: string) { const i = id.indexOf("@"); return i < 0 ? "" : id.slice(i + 1); }
 function recipeOf(id: string) { const r = id.startsWith("p:") ? id.slice(2) : id, i = r.indexOf("@"); return i < 0 ? r : r.slice(0, i); }
+// Сорт муки (его правка 2026-11-15: «повторы с одинаковым названием, но разной ценой»): мука помнит расцветку колосьев
+// и получает сорт по их цене — второй (колосья до ✦7), первый (до ✦10), высший (дороже). Одинаковая мука — одна ячейка.
+// Ключ сорта: «g:<расцветка>:<сорт>[:m]» (m — мифическая), мука «p:flour@g:frost:0», хлеб «p:bread@g:frost:0».
+const FLOUR_PRICE = [15, 11, 7], GRADE_NAME = ["высший сорт", "первый сорт", "второй сорт"];
+function gradeOf(dust: number) { return dust <= 7 ? 2 : dust <= 10 ? 1 : 0; }
+export function flourKey(g: Strain) { return "g:" + g.color + ":" + gradeOf(g.myth ? g.dust / 3 : g.dust) + (g.myth ? ":m" : ""); }
+function parseFlour(k: string) { const [, color, gr, m] = k.split(":"); return { color, grade: Math.max(0, Math.min(2, Number(gr) || 0)), myth: m === "m" }; }
 export function productInfo(id: string, ss: Record<string, Strain>) {
   const r = RECIPES[recipeOf(id)]; if (!r) return null;
-  const g = ss[sortOf(id)], nf = r.needs["p:flour"] || 0;
+  const sort = sortOf(id), nf = r.needs["p:flour"] || 0, isFlour = recipeOf(id) === "flour";
+  if (isFlour || nf) {                                                   // мука и выпечка — по сорту муки
+    const f = sort.startsWith("g:") ? parseFlour(sort) : ss[sort] ? parseFlour(flourKey(ss[sort])) : null;
+    if (!f) return { name: r.name, dust: r.dust };
+    const fd = FLOUR_PRICE[f.grade], base = isFlour ? fd : r.dust + nf * (fd - BASE_FLOUR), dust = Math.round(base * (f.myth ? 3 : 1));
+    const adj = f.myth ? MYTH_ADJ[2] : (ADJ[f.color] || ["", "", ""])[2], key = "g:" + f.color + ":" + f.grade + (f.myth ? ":m" : "");
+    return { name: isFlour ? adj + " мука" : r.name, dust, sort: key, sort_name: isFlour ? GRADE_NAME[f.grade] : adj.toLowerCase() + " мука, " + GRADE_NAME[f.grade],
+             color: f.color, grade: f.grade, ...(f.myth ? { myth: true } : {}) };
+  }
+  const g = ss[sort];
   if (!g) return { name: r.name, dust: r.dust };
   const gd = g.myth ? g.dust / 3 : g.dust, fd = gd + 2, base = recipeOf(id) === "flour" ? fd : r.dust + nf * (fd - BASE_FLOUR);
   const dust = Math.round(base * (g.myth ? 3 : 1));                     // еда с мифическим — ×3
@@ -845,7 +885,7 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
     else { for (const [id2, t2] of done) await q("UPDATE f_barn SET count = count + ? WHERE user = ? AND strain = ?", [t2, u.id, id2]); return { error: "Не хватает продуктов в амбаре" }; }
   }
   const t = now();
-  if (!(await q("INSERT OR IGNORE INTO f_jobs (user, kind, recipe, n, started, ready) VALUES (?, ?, ?, ?, ?, ?) RETURNING 1", [u.id, r.kind, sorted && sort ? recipe + "@" + sort : !sorted && plan.some(([id]) => ss[id]?.myth) ? recipe + "@" + plan.find(([id]) => ss[id]?.myth)![0] : recipe, k, t, t + r.min * 60 * k])).length) {
+  if (!(await q("INSERT OR IGNORE INTO f_jobs (user, kind, recipe, n, started, ready) VALUES (?, ?, ?, ?, ?, ?) RETURNING 1", [u.id, r.kind, sorted && sort ? recipe + "@" + (recipe === "flour" && ss[sort] ? flourKey(ss[sort]) : sort) : !sorted && plan.some(([id]) => ss[id]?.myth) ? recipe + "@" + plan.find(([id]) => ss[id]?.myth)![0] : recipe, k, t, t + r.min * 60 * k])).length) {
     for (const [id2, t2] of done) await q("UPDATE f_barn SET count = count + ? WHERE user = ? AND strain = ?", [t2, u.id, id2]);
     return { error: b.name + " занята" };
   }

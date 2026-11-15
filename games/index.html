@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151307";
+    var BUILD = "202611151358";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2310,6 +2310,11 @@
     var rows = DISH["p:" + recKey(id)] || DISH["p:bread"], c = cv.getContext("2d"), h = rows.length + 2; cv.width = 16; cv.height = Math.max(12, h); c.clearRect(0, 0, 16, cv.height);
     var it = F.state && itemOf(id), pal = it && it.color && it.color !== "sun" ? PAL[it.color] : null;
     px(c, 2, cv.height - 1, 12, 1, "rgba(40,25,10,.3)"); dishDraw(c, 1, cv.height - 2, rows, pal);
+    if (it && it.grade != null) {                                                 // сорт муки: высший — золото, первый — серебро, второй — без метки
+      var gc = it.grade === 0 ? ["#ffd166", "#b07a1a"] : it.grade === 1 ? ["#e6ecf5", "#8a94a8"] : null, top = cv.height - 2 - rows.length + 1;
+      if (gc && recKey(id) === "flour") { px(c, 6, top + 1, 4, 1, gc[1]); px(c, 6, top + 2, 4, 1, gc[0]); px(c, 5, top + 2, 1, 1, gc[1]); px(c, 10, top + 2, 1, 1, gc[1]); }   // лента на горловине мешка
+      else if (gc) { px(c, 12, top, 3, 3, gc[1]); px(c, 13, top + 1, 1, 1, gc[0]); px(c, 12, top + 1, 3, 1, gc[0]); px(c, 13, top, 1, 3, gc[0]); }   // звёздочка сорта на выпечке
+    }
   }
   function fruitIcon(cv, s) {
     cv.classList.toggle("myth", !!(s && s.myth));
@@ -2835,10 +2840,20 @@
     if (id.indexOf("p:") !== 0) return s.strains[id] || ex.strains[id];
     var known = (s.products || {})[id] || ex.products[id]; if (known) return known;
     var r = (s.recipes || {})[recKey(id)], g = s.strains[sortKey(id)] || ex.strains[sortKey(id)]; if (!r) return null;
+    var fk = sortKey(id); if (fk.indexOf("g:") !== 0 && g && g.shape === "grain" && (recKey(id) === "flour" || r.needs["p:flour"])) fk = flourKey(g);
+    if (fk.indexOf("g:") === 0) {                                                  // сорт муки (как на сервере): расцветка + сорт по цене колосьев
+      var fp = fk.split(":"), gr = Math.max(0, Math.min(2, +fp[2] || 0)), my = fp[3] === "m", adj = my ? "Мифическая" : (FLOUR_ADJ[fp[1]] || ""), fd = [15, 11, 7][gr], nf2 = r.needs["p:flour"] || 0;
+      var dd = Math.round((recKey(id) === "flour" ? fd : r.dust + nf2 * (fd - 7)) * (my ? 3 : 1));
+      return recKey(id) === "flour" ? { name: adj + " мука", dust: dd, sort: fk, sort_name: GRADE_NAMES[gr], color: fp[1], grade: gr, myth: my }
+                                    : { name: r.name, dust: dd, sort: fk, sort_name: adj.toLowerCase() + " мука, " + GRADE_NAMES[gr], color: fp[1], grade: gr, myth: my };
+    }
     if (!g) return { name: r.name, dust: r.dust };
     var fd = g.dust + 2, nf = r.needs["p:flour"] || 0;
     return { name: r.name, dust: recKey(id) === "flour" ? fd : r.dust + nf * (fd - 7), sort: g.id, sort_name: g.name, color: g.color };
   }
+  var FLOUR_ADJ = { moss: "Лунная", berry: "Звёздная", crystal: "Кометная", sun: "Солнечная", nebula: "Туманная", ember: "Огненная", frost: "Ледяная", night: "Полуночная", aurora: "Сияющая" },
+      GRADE_NAMES = ["высший сорт", "первый сорт", "второй сорт"];
+  function flourKey(g) { var d = g.myth ? g.dust / 3 : g.dust; return "g:" + g.color + ":" + (d <= 7 ? 2 : d <= 10 ? 1 : 0) + (g.myth ? ":m" : ""); }   // как на сервере
   function itemName(id) { var it = itemOf(id); return it ? it.name + (it.sort_name ? " · " + it.sort_name.toLowerCase() : "") : ""; }   // сорт или продукт кухни
   function barnItems() { return (F.state.barn || []).filter(function (it) { return it.count > 0 && itemOf(it.strain); }); }
   function bagOf(id) { var r = null; (F.state.inv || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
@@ -3199,8 +3214,8 @@
           page.appendChild(el("div", "bsub", "Постройки на ферме покупаются за звёздную пыль"));
           rules([
             ["Амбар", "Хранит урожай, муку и еду. Без амбара урожай сразу превращается в пыль, а мельница и печь не работают."],
-            ["Мельница", "Мелет колосья в муку: один сноп — одна мука. У каждого сорта колосьев своя мука — дороже, если дорогой колос."],
-            ["Печь", "Печёт еду из урожая и муки. Выпечка помнит сорт муки: из разных колосьев выходит разный хлеб. Пока печь работает, в ней горит огонь."],
+            ["Мельница", "Мелет колосья в муку: один сноп — одна мука. Мука берёт расцветку колосьев, а сорт — по их цене: колосья до ✦7 дают муку второго сорта (✦7), до ✦10 — первого (✦11), дороже — высшего (✦15). Одинаковая мука лежит в одной ячейке."],
+            ["Печь", "Печёт еду из урожая и муки. Выпечка помнит муку — её расцветку и сорт: из муки высшего сорта хлеб дороже. Пока печь работает, в ней горит огонь."],
             ["Готовое", "Мука и блюда ложатся в амбар. Их можно превратить в пыль — блюдо стоит дороже, чем урожай, из которого оно приготовлено, — продать другим игрокам в лавке или сдать по заказу в магазин. За выпечку дают очки."],
           ]);
           var rs = (F.state && F.state.recipes) || {}, NEEDW = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука" };
@@ -3548,7 +3563,7 @@
     var b = (s.build_list || {})[kind] || { name: kind, price: 0, max: 1 };
     var about = kind === "shop" ? "Жители станции заказывают здесь блюда. За заказ платят пылью больше, чем стоят эти блюда по отдельности: простой — в полтора раза, сложный — почти вдвое, особый — вдвое. На доске три заказа: на простой — сутки, на сложный — двое, на особый — трое." :
                 kind === "barn" ? "Пока амбара нет, урожай сразу превращается в звёздную пыль. В амбаре он копится: из него мельница делает муку, а печь — еду." :
-                kind === "mill" ? "Мелет колосья в муку: один сноп — одна мука. У каждого сорта колосьев — своя мука, а из неё своя выпечка: другого цвета и дороже, если колос дорогой." : "Печёт из урожая и муки хлеб, супы и пироги. Готовое стоит дороже, чем блюда по отдельности, а за выпечку дают очки.";
+                kind === "mill" ? "Мелет колосья в муку: один сноп — одна мука. Мука берёт расцветку колосьев, а сорт — по их цене: второй, первый или высший. Из муки высшего сорта выпечка дороже." : "Печёт из урожая и муки хлеб, супы и пироги. Готовое стоит дороже, чем блюда по отдельности, а за выпечку дают очки.";
     sheet(function (sh, close) {
       sh.appendChild(el("h3", "", b.name));
       if (!hasBuild(s, kind)) {
@@ -3584,22 +3599,24 @@
         sh.appendChild(el("div", "sub", "Без амбара не работает: блюдам негде лежать. Амбар — красный сарай наверху, за двором."));
         sh.appendChild(btn("Понятно", "ghost", close)); return;
       }
-      sh.appendChild(el("div", "sub", about + " Блюда берутся из амбара — сначала самые дешёвые." + (kind === "oven" ? " Выпечка помнит сорт муки: из разных колосьев выходит разный хлеб." : "")));
+      sh.appendChild(el("div", "sub", about + " Блюда берутся из амбара — сначала самые дешёвые." + (kind === "oven" ? " Выпечка помнит муку: её расцветку и сорт — из разных колосьев выходит разный хлеб." : "")));
       // рецепты с мукой и сама мука — отдельной строкой на каждый сорт, что есть в амбаре
       var rows2 = [];
       Object.keys(s.recipes).filter(function (k) { return s.recipes[k].kind === kind; }).forEach(function (k) {
         var r = s.recipes[k], sorts = [];
         if (k === "flour") (s.barn || []).forEach(function (it) { var g = s.strains[it.strain]; if (it.count > 0 && g && g.shape === "grain") sorts.push(it.strain); });
         else if (r.needs["p:flour"]) (s.barn || []).forEach(function (it) { if (it.count > 0 && recKey(it.strain) === "flour") sorts.push(sortKey(it.strain)); });
-        sorts.sort(function (a, c) { return ((s.strains[a] || {}).dust || 0) - ((s.strains[c] || {}).dust || 0); });
+        var price2 = function (x) { return k === "flour" ? ((s.strains[x] || {}).dust || 0) : ((itemOf("p:flour@" + x) || {}).dust || 0); };
+        sorts.sort(function (a, c) { return price2(a) - price2(c); });
         if (!sorts.length) sorts = [""];
         sorts.forEach(function (sort) { rows2.push([k, sort]); });
       });
       rows2.forEach(function (q) {
-        var k = q[0], sort = q[1], r = s.recipes[k], can = b.max, pid = "p:" + k + (sort ? "@" + sort : ""), info = itemOf(pid) || r;
+        var k = q[0], sort = q[1], r = s.recipes[k], can = b.max, outKey = k === "flour" && sort && s.strains[sort] ? flourKey(s.strains[sort]) : sort;
+        var pid = "p:" + k + (outKey ? "@" + outKey : ""), info = itemOf(pid) || r;   // мельница: колосья → мука своего сорта
         var parts = Object.keys(r.needs).map(function (nd) {
           var have = haveFor(nd, k, sort), lbl = NEED[nd];
-          if (sort && (nd === "p:flour" || (k === "flour" && nd === "grain"))) lbl = (nd === "p:flour" ? "мука · " : "") + (s.strains[sort] ? s.strains[sort].name.toLowerCase() : lbl);
+          if (sort && (nd === "p:flour" || (k === "flour" && nd === "grain"))) lbl = nd === "p:flour" ? (itemName("p:flour@" + sort) || "мука").toLowerCase() : (s.strains[sort] ? s.strains[sort].name.toLowerCase() : lbl);
           can = Math.min(can, Math.floor(have / r.needs[nd])); return lbl + " ×" + r.needs[nd] + " (есть " + have + ")";
         });
         var row = el("div", "seed"), cv = el("canvas", "pix"); itemIcon(cv, pid); row.appendChild(cv);
@@ -3610,7 +3627,7 @@
         var acts = el("div", "invacts");
         var go = function (n) {
           haptic("success"); close();
-          var t0 = farmNow(), rk = sort ? k + "@" + sort : k;
+          var t0 = farmNow(), rk = outKey ? k + "@" + outKey : k;
           s.jobs = (s.jobs || []).concat([{ kind: kind, recipe: rk, n: n, started: t0, ready: t0 + r.min * 60 * n }]);
           Object.keys(r.needs).forEach(function (nd) { takeFor(nd, k, sort, r.needs[nd] * n); }); renderFarm();
           toast((kind === "mill" ? "Мельница мелет: " : "В печи: ") + (itemName(pid) || r.name).toLowerCase() + " ×" + n);
