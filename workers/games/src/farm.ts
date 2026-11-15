@@ -411,7 +411,7 @@ const MONO_MIN = 5, MONO_EVERY = 3 * DAY, SOLSTICE_FOR = DAY, CONST_FOR = 3 * DA
 const MONO_OF: Record<string, string> = { sun: "solstice", berry: "constellation", nebula: "myth", ember: "fire", crystal: "comet" };
 const COMET_RAIN_X = 2;
 const FIRE_FOR = 6 * 3600;                                   // Огненная ночь: сколько горят грядки (его правка 2026-11-15)                                      // осколков в сумме — вдвое от цены всех растений на ферме
-const MONO_CHANCE: Record<string, number> = { solstice: 0.2, constellation: 0.2, myth: 0.15, moss: 0.15, fire: 0.1, comet: 0.08 };   // мягкие — чаще, разрушительные — реже (его «давай» 2026-11-15)                                    // большие события — не наверняка: жребий раз в сутки на ферму (сначала у мха, потом у всех — его правки 2026-11-15)
+const MONO_CHANCE = 0.15;                                    // у всех больших событий один шанс — 15% (его решение 2026-11-15; разный шанс он не просил)                                    // большие события — не наверняка: жребий раз в сутки на ферму (сначала у мха, потом у всех — его правки 2026-11-15)
 const MOSS_FOR = DAY, MOSS_DUST = 8;                         // мох держится сутки; комочков в сумме — по 8 пыли за открытую грядку
 async function mossNow(uid: number) { return (await q("SELECT 1 FROM f_mono WHERE user = ? AND kind = 'moss' AND until > ?", [uid, now()])).length > 0; }
 async function mossEnd(uid: number) {                       // мох отцвёл — раскатать комочки (один раз на событие)
@@ -471,7 +471,7 @@ async function checkMono(uid: number) {
     const roll = "monoroll:" + Math.floor((t + TZ) / DAY);    //   сколько ни пересаживай, второй попытки сегодня нет
     if ((await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind IN (?, ?)", [uid, roll, "mossroll:" + Math.floor((t + TZ) / DAY)])).length) return null;
     await q("INSERT INTO f_evlog (user, kind, at) VALUES (?, ?, ?)", [uid, roll, t]);
-    if (Math.random() >= (WTEST.moss >= 0 ? WTEST.moss : MONO_CHANCE[kind] ?? 0.15)) return null;
+    if (Math.random() >= (WTEST.moss >= 0 ? WTEST.moss : MONO_CHANCE)) return null;
   }
   const until = t + (kind === "solstice" ? SOLSTICE_FOR : kind === "constellation" ? CONST_FOR : kind === "moss" ? MOSS_FOR : kind === "fire" ? FIRE_FOR : DAY);
   if (!(await q("INSERT OR IGNORE INTO f_mono (user, kind, started, until) VALUES (?, ?, ?, ?) RETURNING 1", [uid, kind, t, until])).length) return null;
