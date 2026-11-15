@@ -256,7 +256,7 @@ function dayWeather(d: number, depth = 0): string {         // особая по
   for (const salt of ["a", "b", "c", "d"]) { const w = rawWeather(d, salt); if (w === "clear" || w !== prev) return w; }
   return "clear";
 }
-export const WTEST = { force: "" };                        // только для проверки у себя: принудительная погода
+export const WTEST = { force: "", moss: -1 };              // только для проверки у себя: принудительная погода; moss ≥ 0 — свой шанс мха
 export function weatherOn(t: number) { return WTEST.force || dayWeather(Math.floor((t + TZ) / DAY)); }   // погода на сутки момента t
 export function weatherView(t: number) {
   const id = weatherOn(t), next = weatherOn(t + DAY), from = dayStart(t);
@@ -354,7 +354,7 @@ async function plotEvents(uid: number) {
   }
   return out;
 }
-async function seenEvents(uid: number) { return (await q("SELECT DISTINCT kind FROM f_evlog WHERE user = ?", [uid])).map((r) => String(r[0])); }
+async function seenEvents(uid: number) { return (await q("SELECT DISTINCT kind FROM f_evlog WHERE user = ? AND kind NOT LIKE '%:%'", [uid])).map((r) => String(r[0])); }
 // уголь с грядки — в амбар (без амбара — сразу пылью)
 // звёздочка кометы — в пыль; кратер — восстановить грядку (бесплатно), семя растения, на которое упала комета, возвращается
 export async function takeStar(u: any, id: number) {
@@ -392,6 +392,7 @@ export async function takeCoal(u: any, idx: number) {
 // лунная расцветка — «Лунное эхо» (×2 к продаже еды по заказам) — потом, с заказами.
 const MONO_MIN = 5, MONO_EVERY = 3 * DAY, SOLSTICE_FOR = DAY, CONST_FOR = 3 * DAY, MYTH_WAIT = DAY, CONST_N = 4;
 const MONO_OF: Record<string, string> = { sun: "solstice", berry: "constellation", nebula: "myth" };
+const MOSS_CHANCE = 0.15;                                    // мох захватывает не наверняка: жребий раз в сутки на ферму (его правка 2026-11-15 — раз в трое суток было часто)
 const MOSS_FOR = DAY, MOSS_DUST = 8;                         // мох держится сутки; комочков в сумме — по 8 пыли за открытую грядку
 async function mossNow(uid: number) { return (await q("SELECT 1 FROM f_mono WHERE user = ? AND kind = 'moss' AND until > ?", [uid, now()])).length > 0; }
 async function mossEnd(uid: number) {                       // мох отцвёл — раскатать комочки (один раз на событие)
@@ -447,6 +448,12 @@ async function checkMono(uid: number) {
   const kind = allMoss ? "moss" : colors.size === 1 ? MONO_OF[String([...colors][0])] : "";
   if (!kind) return null;
   if ((await q("SELECT 1 FROM f_mono WHERE user = ? AND started > ?", [uid, t - MONO_EVERY])).length) return null;
+  if (kind === "moss") {                                       // жребий — один на сутки: сколько ни сажай, второй попытки сегодня нет
+    const roll = "mossroll:" + Math.floor((t + TZ) / DAY);
+    if ((await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?", [uid, roll])).length) return null;
+    await q("INSERT INTO f_evlog (user, kind, at) VALUES (?, ?, ?)", [uid, roll, t]);
+    if (Math.random() >= (WTEST.moss >= 0 ? WTEST.moss : MOSS_CHANCE)) return null;
+  }
   const until = t + (kind === "solstice" ? SOLSTICE_FOR : kind === "constellation" ? CONST_FOR : kind === "moss" ? MOSS_FOR : DAY);
   if (!(await q("INSERT OR IGNORE INTO f_mono (user, kind, started, until) VALUES (?, ?, ?, ?) RETURNING 1", [uid, kind, t, until])).length) return null;
   await q("INSERT INTO f_evlog (user, kind, at) VALUES (?, ?, ?)", [uid, "mono_" + kind, t]);
