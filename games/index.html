@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151051";
+    var BUILD = "202611151136";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -194,6 +194,8 @@
     background: radial-gradient(130% 95% at 95% -8%, rgba(255,222,130,.85), rgba(255,180,90,.45) 45%, rgba(255,150,70,.3) 85%); }
   .fxbox.moss .wash { display: block; position: absolute; inset: 0; mix-blend-mode: soft-light;
     background: radial-gradient(120% 90% at 50% 60%, rgba(90,200,170,.6), rgba(40,140,120,.5) 60%, rgba(30,100,90,.55)); }
+  .fxbox.fire .wash { display: block; position: absolute; inset: 0; mix-blend-mode: soft-light;
+    background: radial-gradient(110% 80% at 50% 62%, rgba(255,150,60,.75), rgba(190,60,30,.55) 55%, rgba(60,10,30,.7)); }
   .cstar.clump::before { background: radial-gradient(circle, rgba(30,60,25,.85) 0 45%, rgba(150,230,120,.55) 46% 58%, rgba(150,230,120,0) 72%); }
   .cstar.clump { display: flex; align-items: center; justify-content: center; }
   .cstar.clump canvas { position: relative; height: 20px; width: auto; image-rendering: pixelated; filter: drop-shadow(0 0 1px #13240c) drop-shadow(0 0 5px rgba(170,255,150,.9)); }
@@ -1744,6 +1746,32 @@
     ml.spots.forEach(function (q, k) { var pu = .5 + .5 * Math.sin(t / 500 + k * 1.7);                  // светящиеся грибочки в кочках
       px(c, q[0] + 1, q[1] - 2, 1, 2, "#e8f0d0"); px(c, q[0], q[1] - 3, 3, 1, pu > .5 ? "#c8ffe8" : "#6fd8c0"); });
   }
+  // большой кратер кометного дождя: одна воронка на месте всех грядок
+  function bigCraterBox(plots) {
+    var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, n = 0;
+    (plots || []).forEach(function (pl, k) { if (pl && pl.big && BC[k]) { n++; x0 = Math.min(x0, BC[k][0]); x1 = Math.max(x1, BC[k][0]); y0 = Math.min(y0, BC[k][1]); y1 = Math.max(y1, BC[k][1]); } });
+    return n ? { cx: Math.round((x0 + x1) / 2), cy: Math.round((y0 + y1) / 2), rx: Math.round((x1 - x0) / 2 + HW + 1), ry: Math.round((y1 - y0) / 2 + HH + 3) } : null;
+  }
+  function drawBigCrater(c, b, t) {
+    var cx = b.cx, cy = b.cy, rx = b.rx, ry = b.ry;
+    var ellF = function (ex, ey, ax, ay, col) { ax = Math.round(ax); ay = Math.round(ay); for (var yy = -ay; yy <= ay; yy++) { var ww = Math.round(ax * Math.sqrt(Math.max(0, 1 - (yy * yy) / (ay * ay)))); if (ww > 0) px(c, ex - ww, ey + yy, ww * 2 + 1, 1, col); } };
+    ellF(cx, cy + 2, rx + 2, ry + 2, "rgba(60,35,15,.35)");
+    ellF(cx, cy, rx, ry, "#8a5a38"); ellF(cx, cy - 1, rx - 1, ry - 1, "#b98a5a"); ellF(cx - 1, cy - 2, rx * .82, ry * .8, "#d6a46c");     // вал
+    ellF(cx, cy, rx * .74, ry * .72, "#4a2e1a"); ellF(cx, cy + 1, rx * .58, ry * .55, "#2e1c10"); ellF(cx + 1, cy + 2, rx * .4, ry * .36, "#140c06");   // склон и дно
+    for (var k = 0; k < 7; k++) {                                                     // уступы на склоне
+      var a = k * .9 + .4, ex = Math.round(cx + Math.cos(a) * rx * .62), ey = Math.round(cy + Math.sin(a) * ry * .6);
+      px(c, ex - 2, ey, 5, 1, Math.sin(a) < 0 ? "#3a2414" : "#a07650");
+    }
+    [[-6, 1], [3, 3], [9, 0], [-1, -2], [-12, 2], [6, -3]].forEach(function (q, k2) {  // осколки кометы на дне мерцают
+      var on = (Math.floor(t / 300) + k2) % 4;
+      px(c, cx + q[0], cy + 2 + q[1], 2, 2, on ? "#c4b5fd" : "#ffffff"); px(c, cx + q[0] + 1, cy + 2 + q[1], 1, 1, "#ffffff");
+    });
+    for (var ki = 0; ki < 30; ki++) {                                                 // комья и тлеющие искры по валу
+      var ang = ki / 30 * 6.283, rx2 = Math.round(cx + Math.cos(ang) * rx), ry2 = Math.round(cy + Math.sin(ang) * ry);
+      px(c, rx2, ry2, 2, 1, "#6e4425");
+      if ((Math.floor(t / 380) + ki) % 3 === 0) px(c, Math.round(cx + Math.cos(ang) * rx * .68), Math.round(cy + Math.sin(ang) * ry * .66), 1, 1, ki % 2 ? "#ff9f43" : "#ffd166");
+    }
+  }
   function drawCrater(c, i, t) {                                                     // кратер от кометы: круглая воронка, чуть шире грядки
     var cx = BC[i][0], cy = BC[i][1];
     var ellF = function (ex, ey, rx, ry, col) { for (var yy = -ry; yy <= ry; yy++) { var ww = Math.round(rx * Math.sqrt(Math.max(0, 1 - (yy * yy) / (ry * ry)))); if (ww > 0) px(c, ex - ww, ey + yy, ww * 2 + 1, 1, col); } };
@@ -1773,6 +1801,7 @@
       px(c, cx - 3, cy + 2, 6, 1, "rgba(40,60,20,.4)"); drawSign(c, cx, cy + 2, true, pl.price);   // табличка с ценой
       return;
     }
+    if (pl.big) return;                                                               // на месте грядок — один большой кратер
     var inf = pl.crop ? plotInfo(pl, now, ss, dryLim) : null, wet = inf && inf.wet, dry = inf && !inf.wet && !inf.ripe;
     rhomb(c, cx + 1, cy + 5, HW, HH, "rgba(90,60,25,.3)");                           // тень
     rhomb(c, cx, cy + 3, HW, HH, C.wdd); rhomb(c, cx, cy + 2, HW, HH, C.wd);          // бортик: передние доски
@@ -1959,7 +1988,8 @@
     drawMill(c, t, kit, own, now);
     var nextLock = -1; (plots || []).forEach(function (pl, k) { if (pl.locked && nextLock < 0) nextLock = k; });
     BORDER.forEach(function (k) { if (plots && plots[k] && BC[k]) drawBed(c, plots[k], k, now, t, ss, dryLim, own, k === nextLock); });   // дальние грядки — раньше
-    (plots || []).forEach(function (pl, k) { if (pl && pl.crater && BC[k]) drawCrater(c, k, t); });
+    (plots || []).forEach(function (pl, k) { if (pl && pl.crater && !pl.big && BC[k]) drawCrater(c, k, t); });
+    var bigC = bigCraterBox(plots); if (bigC) drawBigCrater(c, bigC, t);
     if (nextLock >= 0 && BC[nextLock] && (plots || []).some(function (pl) { return pl && pl.crater; })) drawSign(c, BC[nextLock][0], BC[nextLock][1] + 2, true, plots[nextLock].price);   // табличка цены — поверх кратера
     c.drawImage(L.front, 0, 0);
     drawOven(c, t, kit, own, now);
@@ -2184,17 +2214,21 @@
     solstice: { icon: "☀", name: "Солнцестояние", text: "Вся ферма засажена солнечными растениями — наступило Солнцестояние. Сутки все растения растут вдвое быстрее." },
     constellation: { icon: "✨", name: "Созвездие", text: "Над звёздной фермой сложилось созвездие. Следующий сбор с каждой его грядки даст урожай ×2. После сбора звезда гаснет; созвездие держится трое суток." },
     moss: { icon: "", name: "Мох захватил ферму", text: "Лунный мох разросся по всей ферме: по дорожкам, забору и крышам. Сутки что ни посади — пробивается мох, а семя остаётся в мешке. Зато урожай мха в это время вдвое больше. Когда мох отцветёт, по ферме раскатятся мшистые комочки со звёздной пылью — собери их." },
+    fire: { icon: "", name: "Огненная ночь", text: "Вся ферма засажена огненными растениями — и разом вспыхнула. Урожай сгорел, зато на каждой грядке остался звёздный уголь, редкий и ценный. Собери его." },
+    comet: { icon: "", name: "Кометный дождь", text: "На кометную ферму обрушился кометный дождь. На месте грядок — один большой кратер, а по ферме рассыпались осколки со звёздной пылью: собери их. Кратер убирают лопатой: выбери её и нажми на кратер — грядки вернутся, семена тоже." },
     myth: { icon: "", name: "Мифическое семя", text: "Туманная ферма подарила мифическое семя — оно уже в инвентаре и светится фиолетовым. Посади его: пока оно растёт, следующий сбор с каждой соседней грядки (слева, справа, сверху, снизу) даст звёздной пыли втрое больше. Само растение даёт один мифический плод — он втрое дороже, и еда с ним втрое дороже, — но семян не даёт. Созревшее мифическое растение ждёт сутки, потом рассыпается." },
   };
   var MONO_RULE = "Такие события случаются, когда все открытые грядки — не меньше пяти — засажены растениями одной расцветки. У каждой расцветки своё событие. Не чаще раза в трое суток.";
-  var MONO_COLOR = { solstice: "солнечными", constellation: "звёздными", myth: "туманными", moss: "лунными" };
-  var MONO_FARM = { solstice: "солнечной", constellation: "звёздной", myth: "туманной", moss: "лунной" };
+  var MONO_COLOR = { solstice: "солнечными", constellation: "звёздными", myth: "туманными", moss: "лунными", fire: "огненными", comet: "кометными" };
+  var MONO_FARM = { solstice: "солнечной", constellation: "звёздной", myth: "туманной", moss: "лунной", fire: "огненной", comet: "кометной" };
   function monoRule(kind) {
     if (kind === "moss") return "Это событие случается, когда все открытые грядки — не меньше пяти — засажены мхом любой расцветки. Случается не каждый раз — как повезёт, и не чаще раза в трое суток.";
     return "Это событие " + MONO_FARM[kind] + " фермы: все открытые грядки — не меньше пяти — засажены " + MONO_COLOR[kind] + " растениями. Бывает не чаще раза в трое суток."; }
   function monoOf(f, now) {
     var m = f && f.mono; if (!m || m.until <= now) return null;
     if (m.kind === "constellation" && !marksOf(f).some(function (k) { return k.kind === "star"; })) return null;   // все звёзды собраны
+    if (m.kind === "fire" && !(f.plots || []).some(function (p) { return p && p.coal; })) return null;            // уголь собран
+    if (m.kind === "comet" && !(f.plots || []).some(function (p) { return p && p.big; }) && !((f.stars || []).length)) return null;   // кратер убран, осколки собраны
     return m;
   }
   function monoSheet(kind, fresh) {
@@ -2223,9 +2257,9 @@
     var stars = marksOf(f).filter(function (k) { return k.kind === "star" && BC[k.idx]; }).sort(function (a, b) { return a.n - b.n; });
     var myth = ((f && f.plots) || []).filter(function (p) { return p && p.crop && ss[p.crop] && ss[p.crop].myth && BC[p.idx]; });
     var near = myth.length ? marksOf(f).filter(function (k) { return k.kind === "myth" && BC[k.idx]; }) : [];
-    var mossy = !!(m && m.kind === "moss");
-    L.box.classList.toggle("sun", sun); L.box.classList.toggle("moss", mossy);
-    if (!sun && !mossy && !stars.length && !myth.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    var mossy = !!(m && m.kind === "moss"), fire = !!(m && m.kind === "fire");
+    L.box.classList.toggle("sun", sun); L.box.classList.toggle("moss", mossy); L.box.classList.toggle("fire", fire);
+    if (!sun && !mossy && !fire && !stars.length && !myth.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
     var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
     var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
@@ -2246,6 +2280,25 @@
       for (var q = 0; q < 28; q++) {                                                   // пылинки в лучах
         var ph = (t / 9000 + hash01(q + 7)) % 1, mx0 = hash01(q) * cw + Math.sin(t / 2000 + q) * 6 * dpr, my0 = (hash01(q + 3) * ch + ph * ch * .3) % ch;
         c.globalAlpha = .45 * Math.sin(ph * Math.PI); c.fillStyle = "#fff0c0"; c.beginPath(); c.arc(mx0, my0, (1 + hash01(q + 9) * 1.4) * dpr, 0, 7); c.fill();
+      }
+      c.globalAlpha = 1;
+    }
+    if (fire) {                                                                        // огненная ночь: язычки пламени над углём и искры в небо
+      ((f && f.plots) || []).forEach(function (p) {
+        if (!p || !p.coal || !BC[p.idx]) return;
+        var bx = BC[p.idx][0] * kx, by = (BC[p.idx][1] - 2) * ky;
+        var gl = c.createRadialGradient(bx, by, 0, bx, by, 20 * kx); gl.addColorStop(0, "rgba(255,150,60,.5)"); gl.addColorStop(1, "rgba(255,90,20,0)");
+        c.fillStyle = gl; c.beginPath(); c.ellipse(bx, by, 20 * kx, 13 * ky, 0, 0, 7); c.fill();
+        for (var fl = 0; fl < 4; fl++) {
+          var fh = (9 + 6 * Math.abs(Math.sin(t / 170 + fl * 2.1 + p.idx))) * ky, fw = (3 + 1.5 * Math.sin(t / 230 + fl)) * kx, fx3 = bx + (fl - 1.5) * 6 * kx + Math.sin(t / 300 + fl * 3) * kx;
+          var fg = c.createLinearGradient(0, by, 0, by - fh); fg.addColorStop(0, "rgba(255,230,140,.95)"); fg.addColorStop(.5, "rgba(255,140,40,.8)"); fg.addColorStop(1, "rgba(255,60,20,0)");
+          c.fillStyle = fg; c.beginPath(); c.moveTo(fx3 - fw, by); c.quadraticCurveTo(fx3 - fw * .6, by - fh * .5, fx3 + Math.sin(t / 140 + fl) * 2 * kx, by - fh); c.quadraticCurveTo(fx3 + fw * .6, by - fh * .5, fx3 + fw, by); c.closePath(); c.fill();
+        }
+      });
+      for (var em = 0; em < 40; em++) {
+        var pe = (t / 5000 + hash01(em + 60)) % 1, ex3 = hash01(em * 2 + 11) * cw + Math.sin(t / 900 + em) * 10 * dpr, ey3 = ch * (.75 - pe * .8);
+        c.globalAlpha = .85 * Math.sin(pe * Math.PI); c.fillStyle = em % 3 ? "#ffb347" : "#ff6a2a";
+        c.beginPath(); c.arc(ex3, ey3, (.9 + hash01(em + 4) * 1.3) * dpr, 0, 7); c.fill();
       }
       c.globalAlpha = 1;
     }
@@ -2356,6 +2409,11 @@
       b.style.width = HW * 2 / FW * 100 + "%"; b.style.height = (HH * 2 + 11) / FH * 100 + "%";
       var lbl = document.createElement("span"), inf = pl.crop ? plotInfo(pl, now, ss, dryLim) : null; lbl.className = "lbl";
       if (pl.locked) lbl.textContent = "";
+      else if (pl.crater && pl.big) {                                              // большой кратер: одна подпись — у грядки ближе к середине
+        var bb = bigCraterBox(plots), mid = -1, best = 1e9;
+        plots.forEach(function (q, k) { if (q && q.big && BC[k]) { var d = Math.abs(BC[k][0] - bb.cx) + Math.abs(BC[k][1] - bb.cy) * 2; if (d < best) { best = d; mid = k; } } });
+        lbl.textContent = i === mid ? (own ? "убери лопатой" : "кратер") : ""; lbl.classList.add("ready"); b.classList.add("crat");
+      }
       else if (pl.crater) { lbl.textContent = own ? "починить" : "кратер"; lbl.classList.add("ready"); b.classList.add("crat"); }
       else if (pl.frost) { lbl.textContent = "лёд\n" + fmtShort(pl.frost - now).replace(/ /g, "\u00a0"); lbl.classList.add("water", "two"); }
       else if (pl.coal) { lbl.textContent = own ? "уголь!" : "уголь"; lbl.classList.add("ready"); }
@@ -2446,7 +2504,7 @@
     setText($("waterpill"), "💧 " + s.water + "/" + s.can_max);
     var ban = $("farmbanners"), mo = monoOf(s, now);
     var sig = JSON.stringify([mo && mo.kind, s.gifts, s.sales]);               // строки пересобираются, только когда меняется их суть — иначе нажатие «теряется»
-    var monoLine = function () { var mi = MONO_INFO[mo.kind]; return (mi.icon ? mi.icon + " " : "") + mi.name + " · ещё " + fmtShort(mo.until - now); };
+    var monoLine = function () { var mi = MONO_INFO[mo.kind]; return (mi.icon ? mi.icon + " " : "") + mi.name + (mo.kind === "fire" || mo.kind === "comet" ? "" : " · ещё " + fmtShort(mo.until - now)); };
     var wz = $("weather"), wt = s.weather && s.weather.today, wn = s.weather && s.weather.tomorrow;   // погода дня — значком в шапке
     wz.hidden = !wt;
     if (wt) {
@@ -2545,6 +2603,13 @@
         });
         if (s.dust < pl.price) b.disabled = true; sh.appendChild(b);
       });
+    }
+    if (pl.crater && pl.big) {                                                      // большой кратер — только лопатой, зато все грядки разом
+      if (F.sel !== "shovel") { haptic("error"); return toast("Большой кратер убирают лопатой: выбери лопату слева внизу и нажми на кратер"); }
+      haptic("success"); var nb = 0;
+      F.state.plots.forEach(function (q, k) { if (q && q.big) { F.state.plots[k] = { idx: k, crop: null }; nb++; } });
+      renderFarm(); floatText(pl.idx, "грядки восстановлены, семена вернулись", "big");
+      return farmCall("/api/farm/crater", { idx: pl.idx }).catch(function () {});
     }
     if (pl.crater) {                                                                // кратер — восстановить грядку, бесплатно; семя вернётся
       haptic("success"); F.state.plots[pl.idx] = { idx: pl.idx, crop: null }; renderFarm(); floatText(pl.idx, "грядка восстановлена");
@@ -2978,9 +3043,10 @@
               d.appendChild(el("b", "", x[1] + ". " + (ok ? x[2] + ". " : "")));
               d.append(ok ? x[3] : "??? — случится, узнаешь."); page.appendChild(d);
             });
-          page.appendChild(el("h3", "", "Ферма одной расцветки"));                    // события моно-фермы
-          page.appendChild(el("div", "bsub", MONO_RULE));
-          [["solstice", "Солнечная ферма"], ["constellation", "Звёздная ферма"], ["myth", "Туманная ферма"], ["moss", "Ферма во мху"]].forEach(function (x) {
+          var mh3 = el("h3", "", "Большие события"); mh3.style.marginTop = "18px"; page.appendChild(mh3);   // события моно-фермы
+          page.appendChild(el("div", "bsub", "Когда вся ферма засажена одинаково"));
+          page.appendChild(el("p", "brule", "Случаются, когда все открытые грядки — не меньше пяти — засажены растениями одной расцветки или мхом любой расцветки. У каждой расцветки своё событие. Не чаще раза в трое суток."));
+          [["solstice", "Солнечная ферма"], ["constellation", "Звёздная ферма"], ["myth", "Туманная ферма"], ["fire", "Огненная ферма"], ["comet", "Кометная ферма"], ["moss", "Ферма во мху"]].forEach(function (x) {
             var d = el("p", "brule"), ok = seen.indexOf("mono_" + x[0]) >= 0, mi = MONO_INFO[x[0]];
             d.appendChild(el("b", "", x[1] + ". " + (ok ? mi.name + ". " : "")));
             d.append(ok ? mi.text : "??? — случится, узнаешь."); page.appendChild(d);
@@ -3221,26 +3287,46 @@
       var drawBarn = function () {
         var cur = F.state, barn = barnItems(), bgrid = el("div", "invgrid"), total = 0;
         barnBox.innerHTML = "";
-        if (F.barnSel && !barnOf(F.barnSel)) F.barnSel = null;
-        if (F.barnSel && barnOf(F.barnSel).count <= 0) F.barnSel = null;
+        var BARN_MULTI = true;                                      // выделение нескольких ячеек (выложено по его «пуш» 2026-11-15)
+        var selSet = F.barnSet = F.barnSet || {};                 // можно выделить несколько ячеек и разом распылить или выставить в лавку (его просьба 2026-11-15)
+        Object.keys(selSet).forEach(function (id) { var bo = barnOf(id); if (!bo || bo.count <= 0) delete selSet[id]; });
         barn.forEach(function (it) {
-          var st = itemOf(it.strain), b = el("button", "slot" + (F.barnSel === it.strain ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
+          var st = itemOf(it.strain), b = el("button", "slot" + (selSet[it.strain] ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
           total += it.count * st.dust;
           var cv = el("canvas", "pix"); itemIcon(cv, it.strain); fitIcon(cv, it.strain.indexOf("p:") === 0 ? 84 : 70); b.appendChild(cv);   b.appendChild(el("span", "n", it.count));   // в амбаре — крупно
-          b.onclick = function () { haptic("light"); F.barnSel = F.barnSel === it.strain ? null : it.strain; drawBarn(); };
+          b.onclick = function () { haptic("light"); var was = selSet[it.strain]; if (!BARN_MULTI) Object.keys(selSet).forEach(function (k9) { delete selSet[k9]; });
+            if (was) delete selSet[it.strain]; else selSet[it.strain] = 1; drawBarn(); };
           bgrid.appendChild(b);
         });
         for (var k = barn.length; k < 5; k++) bgrid.appendChild(el("div", "slot empty"));
         barnBox.appendChild(bgrid);
         if (!barn.length) { barnBox.appendChild(el("div", "sub", "Пока пусто. Сюда попадает всё, что ты собираешь с грядок.")); return; }
-        var sel = F.barnSel && barnOf(F.barnSel), acts = el("div", "invacts");
-        if (sel) {
-          var st = itemOf(sel.strain);
-          barnBox.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли."));
+        var picked = Object.keys(selSet).map(barnOf), acts = el("div", "invacts");
+        var toStall = function (list) {                             // сразу: из амбара на прилавок; сервер подтвердит
+          haptic("success"); var n = 0;
+          list.forEach(function (x) { var id = x.strain, k2 = x.count; if (k2 <= 0) return; n += k2; x.count = 0;
+            var sx = stallOf(id); if (sx) sx.listed += k2; else (F.state.stall = F.state.stall || []).push({ item: id, listed: k2 });
+            farmCall("/api/farm/stall", { item: id, delta: k2 }).catch(function () {}); });
+          F.barnSet = {}; renderFarm(); drawBarn(); toast("Выставлено в лавку: " + n + " " + plural(n, "штука", "штуки", "штук"));
+        };
+        if (picked.length === 1) {
+          var sel = picked[0], st = itemOf(sel.strain);
+          barnBox.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли." + (BARN_MULTI ? " Можно выделить ещё ячейки." : "")));
           acts.appendChild(btn("1 в пыль · ✦ " + st.dust, "ghost", function () { toDust(sel.strain, 1, st.dust); drawBarn(); renderFarm(); }));
           if (sel.count > 1) acts.appendChild(btn("все " + sel.count + " · ✦ " + st.dust * sel.count, "", function () { toDust(sel.strain, sel.count, st.dust * sel.count); drawBarn(); }));
+          if (BARN_MULTI) acts.appendChild(btn("В лавку" + (sel.count > 1 ? " · все " + sel.count : ""), "ghost", function () { toStall([sel]); }));
+        } else if (picked.length > 1) {
+          var cnt = 0, sum = 0; picked.forEach(function (x) { cnt += x.count; sum += x.count * itemOf(x.strain).dust; });
+          barnBox.appendChild(el("div", "sub", "Выделено ячеек: " + picked.length + " — " + cnt + " " + plural(cnt, "штука", "штуки", "штук") + ", в пыль это ✦ " + sum + "."));
+          acts.appendChild(btn("Всё выделенное в пыль · ✦ " + sum, "", function () {
+            var cur2 = F.state; haptic("success");
+            picked.forEach(function (x) { var k3 = x.count; if (k3 <= 0) return; x.count = 0; farmCall("/api/farm/sell", { strain: x.strain, n: k3 }).catch(function () {}); });
+            cur2.dust += sum; F.barnSet = {}; renderFarm(); drawBarn(); toast("+✦ " + sum + " звёздной пыли");
+          }));
+          acts.appendChild(btn("Всё выделенное в лавку", "ghost", function () { toStall(picked); }));
+          acts.appendChild(btn("Снять выделение", "ghost", function () { F.barnSet = {}; drawBarn(); }));
         } else {
-          barnBox.appendChild(el("div", "sub", "Нажми на ячейку, чтобы превратить урожай в звёздную пыль."));
+          barnBox.appendChild(el("div", "sub", BARN_MULTI ? "Нажми на ячейку, чтобы превратить урожай в звёздную пыль или выставить в лавку. Можно выделить несколько." : "Нажми на ячейку, чтобы превратить урожай в звёздную пыль."));
           acts.appendChild(btn("Весь урожай в пыль · ✦ " + total, "", function () { toDust("*", 0, total); drawBarn(); }));
         }
         barnBox.appendChild(acts);
