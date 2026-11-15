@@ -23,10 +23,10 @@ export const CROPS: Record<string, Strain> = {
   crystal: { id: "crystal", name: "Кометный хрусталь", shape: "crystal", color: "crystal", minutes: 240, dust: 70, vinyl: 0.25, thirst: 90, points: 8, bonus: null, gen: 0, cost: 25, base: true },
   // зерно (2026-11-14): само по себе дешёвое, нужно ради муки на мельнице. У станции один вид — пшеница;
   // другие колосья открываются скрещиванием и мутациями, как у остальных растений (его правка 2026-11-14).
-  wheat:   { id: "wheat",   name: "Лунная пшеница",    shape: "grain",   color: "sun",     minutes: 20,  dust: 5,  vinyl: 0.04, thirst: 25, points: 2, bonus: null,    gen: 0, cost: 3,  base: true },
+  wheat:   { id: "wheat",   name: "Солнечные колосья", shape: "grain",   color: "sun",     minutes: 20,  dust: 5,  vinyl: 0.04, thirst: 25, points: 2, bonus: null,    gen: 0, cost: 3,  base: true },
   // сняты с продажи в тот же день (ни у кого не было) — оставлены скрытыми, чтобы старые ссылки не ломались
-  millet:  { hidden: true, id: "millet",  name: "Огненное просо",    shape: "grain",   color: "ember",   minutes: 45,  dust: 9,  vinyl: 0.06, thirst: 20, points: 2, bonus: "seedy", gen: 0, cost: 5,  base: true },
-  rye:     { hidden: true, id: "rye",     name: "Туманная рожь",     shape: "grain",   color: "nebula",  minutes: 120, dust: 26, vinyl: 0.12, thirst: 60, points: 4, bonus: "hardy", gen: 0, cost: 10, base: true },
+  millet:  { hidden: true, id: "millet",  name: "Огненные колосья",  shape: "grain",   color: "ember",   minutes: 45,  dust: 9,  vinyl: 0.06, thirst: 20, points: 2, bonus: "seedy", gen: 0, cost: 5,  base: true },
+  rye:     { hidden: true, id: "rye",     name: "Туманные колосья",  shape: "grain",   color: "nebula",  minutes: 120, dust: 26, vinyl: 0.12, thirst: 60, points: 4, bonus: "hardy", gen: 0, cost: 10, base: true },
 };
 export const BONUSES: Record<string, string> = {
   rain: "в звёздный дождь урожай ×3, а не ×2",

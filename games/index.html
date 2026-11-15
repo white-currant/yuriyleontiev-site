@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151720";
+    var BUILD = "202611151754";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3198,7 +3198,7 @@
       var page = el("div", "bpage"), nav = el("div", "bnav"), prev = el("button", "bbtn", "‹"), next = el("button", "bbtn", "›"), num = el("span", "bnum");
       prev.type = next.type = "button";
       var known = function () {                              // вид (форма+цвет) → лучший найденный сорт и сколько сортов
-        var m = {}; data.strains.forEach(function (st) { var k = st.shape + "/" + st.color, e = m[k] = m[k] || { best: null, n: 0 }; e.n++; if (!e.best || (st.price || 0) > (e.best.price || 0)) e.best = st; });
+        var m = {}; data.strains.forEach(function (st) { var k = st.shape + "/" + st.color, e = m[k] = m[k] || { best: null, n: 0, bon: [] }; e.n++; if (st.bonus && e.bon.indexOf(st.bonus) < 0) e.bon.push(st.bonus); if (!e.best || (st.price || 0) > (e.best.price || 0)) e.best = st; });
         return m;
       };
       // страницы: как играть, гибриды, формы растений, погода, особые свойства, кухня, лавка и пыль, благодарности
@@ -3246,9 +3246,13 @@
             if (e) cell.onclick = function () {
               grid.querySelectorAll(".bcell").forEach(function (x) { x.classList.remove("on"); }); cell.classList.add("on"); haptic("light");
               var st = e.best; info.innerHTML = "";
-              info.appendChild(el("b", "", st.name));
+              info.appendChild(el("b", "", nm));                     // название — как в клетке, без «стойкий», «дождевой» (его правка 2026-11-15); свойство — строкой «★»
               info.appendChild(factGrid(st));
-              if (st.bonus) info.appendChild(el("div", "bbonus", "★ " + (BONUS_SHORT[st.bonus] || "")));
+              // у одной расцветки бывают сорта с разными свойствами (стойкий, дождевой…) — перечисляем все найденные (его правка 2026-11-15)
+              if (e.n > 1) info.appendChild(el("div", "bbonus", "Найдено сортов: " + e.n + (e.bon.length ? ". Встречаются свойства:" : ".")));
+              else if (e.bon.length) info.appendChild(el("div", "bbonus", "Свойство:"));
+              e.bon.forEach(function (b) { info.appendChild(el("div", "bbonus", "★ " + (BONUS_SHORT[b] || ""))); });
+              info.scrollIntoView({ block: "nearest", behavior: "smooth" });   // страница фиксированной высоты — описание не прячется под край
             };
             grid.appendChild(cell);
           });
@@ -3333,7 +3337,7 @@
           page.appendChild(el("h3", "", "Лавка и пыль"));
           page.appendChild(el("div", "bsub", "Звёздная пыль — деньги фермы"));
           rules([
-            ["Станция", "Всегда продаёт базовые семена: мох, ягоды, хрусталь, пшеницу."],
+            ["Станция", "Всегда продаёт базовые семена: мох, ягоды, хрусталь, колосья."],
             ["Своя лавка", "Выведенные тобой семена, урожай и еду можно выставить на продажу другим игрокам. Цену считает игра, а ты можешь подвинуть её немного дешевле или дороже. Пыль приходит сразу после покупки."],
             ["Вид фермы", "Кнопка с кистью вверху справа на ферме. Там меняется цвет крыш — дома, амбара, колодца и магазина. Каждый цвет покупается один раз за 300 пыли, потом переключай бесплатно; гости видят твой цвет."],
             ["Метка «✓»", "В лавке на товаре, который у тебя уже есть, в углу зелёная метка «✓ 3» — столько таких у тебя: семян в инвентаре и сундуке, урожая и блюд — в амбаре и сундуке."],
