@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151616";
+    var BUILD = "202611151630";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -580,6 +580,7 @@
   /* сцена стоит в деревянной раме, под ней — доска с инвентарём */
   body[data-screen^="farm"] .scene { box-shadow: 0 4px 0 var(--ink); }
   body[data-screen^="farm"] .scene canvas { border-bottom: 4px solid var(--wood4); }
+  body[data-screen^="farm"] .scene .decorbtn canvas { border-bottom: 0; height: auto; }   /* палитра — без полосы земли под сценой */
   body[data-screen^="farm"] .plot .lbl { bottom: 26%; transform: translateX(-50%); font-family: var(--pix); font-size: 12px; font-weight: 700; color: var(--cream);
     text-shadow: 1px 0 0 var(--ink), -1px 0 0 var(--ink), 0 1px 0 var(--ink), 0 -1px 0 var(--ink), 1px 1px 0 var(--ink), -1px 1px 0 var(--ink), 1px -1px 0 var(--ink), -1px -1px 0 var(--ink); }
   body[data-screen^="farm"] .plot .lbl.ready { color: #b9f58a; }
@@ -607,6 +608,10 @@
   /* инструменты — две маленькие ячейки слева от семян: лейка и лопата (его решение 2026-11-15) */
   /* маленькие, в самом низу левого угла — под печью, не налезают на неё (его правка 2026-11-15) */
   .toolbox { position: absolute; left: 6px; bottom: 5px; z-index: 3; }
+  .decorbtn { position: absolute; right: 6px; top: calc(var(--top) + 46px + 9.6vw);   /* на верхушках деревьев над колодцем, ниже неба (его отметка) */ z-index: 3; width: 30px; height: 30px; padding: 0; border: 0; background: none; }
+  .decorbtn:active canvas { transform: scale(.9); }
+  .decorbtn canvas { border: 0; width: 100%; filter: drop-shadow(0 1px 0 rgba(30, 15, 5, .7)) drop-shadow(0 0 1px rgba(30, 15, 5, .6)); height: auto; image-rendering: pixelated; }
+  .roofgrid .slot canvas { width: 70%; }
   .tools { display: flex; gap: 6px; }
   .tools .slot { width: 36px; height: 36px; aspect-ratio: 1; }
   body[data-screen^="farm"] .tools .slot { box-shadow: 0 0 0 2px var(--ink), inset 2px 2px 0 #33200f, inset -2px -2px 0 #6b4428; }
@@ -801,7 +806,7 @@
   <section class="screen" id="farm" hidden>
     <div class="scene">
       <div class="farm-top"><button class="exit" type="button" data-go="home">← Гильдия</button><div class="pills"><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill blue" id="waterpill">💧 5</div><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
-      <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div><div class="toolbox" id="toolbox"></div>
+      <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div><div class="toolbox" id="toolbox"></div><button class="decorbtn" id="decorbtn" type="button" aria-label="Вид фермы"><canvas class="pix" id="decoricon"></canvas></button>
     </div>
     <div id="farmbanners"></div>
     <div class="hotbar" id="hotbar"></div>
@@ -1304,7 +1309,69 @@
     glass: "#ffd27a", glass2: "#ffb347", water: "#2d6fa6", waterl: "#8fd3f5", lamp: "#9ff5de", gold: "#ffc469",
     flowers: ["#ff6b8a", "#ffd166", "#ffffff", "#c084fc", "#ff9f43", "#7dd3fc"],
   };
-  var ROOFS = [["#d9643c", "#a8462a", "#f08c5e"], ["#4f86c9", "#335f9c", "#7fb0e8"], ["#9a62c8", "#6c419c", "#c091ea"], ["#3fa37a", "#2b7656", "#6fd0a2"]];
+  // цвета крыш (его решение 2026-11-15: цвет покупается в «Виде фермы»): основной, тень, блик, тёмный край
+  var ROOF_PAL = { orange: ["#d9643c", "#a8462a", "#f08c5e", "#7a2e1a"], red: ["#c8383c", "#8f2428", "#e86a64", "#5e161a"],
+                   blue: ["#4f86c9", "#335f9c", "#7fb0e8", "#22406a"], green: ["#3fa37a", "#2b7656", "#6fd0a2", "#1c4f39"],
+                   purple: ["#9a62c8", "#6c419c", "#c091ea", "#472a6a"], teal: ["#2fa6a8", "#1f7476", "#63d0cf", "#144d4f"],
+                   slate: ["#5d6673", "#3f4650", "#8790a0", "#2a2f36"] };
+  function roofKey(kit) { if (kit && kit === F.state && F.roofTry) return F.roofTry; return kit && ROOF_PAL[kit.roof] ? kit.roof : "orange"; }   // roofTry — примерка в окне «Вид фермы»
+  function roofSwatch(cv, pal) {                                 // маленькая двускатная крыша в цветах палитры
+    cv.width = 16; cv.height = 14; var c = cv.getContext("2d"); c.imageSmoothingEnabled = false;
+    for (var y = 0; y < 8; y++) { var w = 2 + y * 2, x0 = 8 - w / 2 - 1;
+      c.fillStyle = pal[3]; c.fillRect(x0, 2 + y, 1, 1); c.fillRect(x0 + w + 1, 2 + y, 1, 1);
+      c.fillStyle = y % 2 ? pal[0] : pal[2]; c.fillRect(x0 + 1, 2 + y, w / 2, 1); c.fillStyle = y % 2 ? pal[1] : pal[0]; c.fillRect(x0 + 1 + w / 2, 2 + y, w / 2, 1); }
+    c.fillStyle = pal[3]; c.fillRect(0, 10, 16, 1);
+    c.fillStyle = "#f3e2c0"; c.fillRect(3, 11, 10, 3); c.fillStyle = "#b98a55"; c.fillRect(7, 12, 2, 2);
+  }
+  function decorIcon(cv, pal) {                                  // малярный валик: шубка в цвет крыш, рамка, ручка, капля краски
+    cv.width = 16; cv.height = 16; var c = cv.getContext("2d"); c.imageSmoothingEnabled = false;
+    var P = function (x, y, w, h, col) { c.fillStyle = col; c.fillRect(x, y, w, h); }, K = "#3a2414";
+    P(1, 1, 11, 1, K); P(1, 7, 11, 1, K); P(0, 2, 1, 5, K); P(12, 2, 1, 5, K);                 // контур шубки
+    P(1, 2, 11, 1, pal[2]); P(1, 3, 11, 2, pal[0]); P(1, 5, 11, 2, pal[1]);                       // шубка: блик, цвет, тень
+    for (var x = 2; x < 12; x += 3) P(x, 3, 1, 1, pal[2]);                                         // ворс
+    P(13, 4, 2, 1, "#c9ccd6"); P(14, 4, 1, 5, "#c9ccd6"); P(15, 4, 1, 5, K); P(9, 8, 6, 1, "#c9ccd6"); P(9, 9, 6, 1, K);   // рамка
+    P(8, 9, 2, 1, "#c9ccd6");
+    P(7, 10, 3, 6, K); P(8, 10, 1, 5, "#b57a45"); P(8, 12, 1, 1, "#8a5530");                      // ручка
+    P(3, 8, 2, 2, pal[0]); P(3, 10, 1, 1, pal[0]); P(3, 8, 1, 1, pal[2]);                         // капля
+  }
+  function decorSheet() {
+    var s = F.state; if (!s) return;
+    var cols = s.roof_colors || {}, keys = Object.keys(ROOF_PAL).filter(function (k) { return cols[k] || k === "orange"; }), price = s.roof_price || 300;
+    F.roofTry = null;
+    sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", "Вид фермы"));
+      sh.appendChild(el("div", "sub", "Цвет крыш: дом, амбар, колодец и магазин. Гости видят твой цвет."));
+      var box = el("div"); sh.appendChild(box);
+      var pick = roofKey(s);
+      var draw = function () {
+        box.innerHTML = "";
+        var owned = s.roofs_owned || ["orange"], g = el("div", "invgrid roofgrid");
+        keys.forEach(function (k) {
+          var has = owned.indexOf(k) >= 0, cell = el("div", "slot" + (k === pick ? " on" : "")); cell.setAttribute("aria-label", cols[k] || k);
+          var cv = el("canvas", "pix"); roofSwatch(cv, ROOF_PAL[k]); cell.appendChild(cv);
+          if (k === s.roof || !has) cell.appendChild(el("span", "vars", k === s.roof ? "✓" : "✦ " + price));
+          cell.onclick = function () { haptic("light"); pick = k; F.roofTry = k === s.roof ? null : k; renderFarm(); draw(); };
+          g.appendChild(cell);
+        });
+        box.appendChild(g);
+        box.appendChild(el("div", "sub", (cols[pick] || "") + " крыша" + (pick === s.roof ? " — сейчас на ферме." : owned.indexOf(pick) >= 0 ? " — уже куплена." : " — ✦ " + price + ".")));
+        var acts = el("div", "invacts"), has = owned.indexOf(pick) >= 0, b;
+        if (pick === s.roof) { b = btn("Сейчас на ферме", "ghost", function () {}); b.disabled = true; }
+        else b = btn(has ? "Поставить" : "Купить за ✦ " + price, "", function (ev) {
+          if (!has && s.dust < price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
+          haptic("success");
+          if (!has) { s.dust -= price; s.roofs_owned = owned.concat([pick]); buyFx(ev.currentTarget, (cols[pick] || "") + " крыша", "−✦ " + price); }
+          s.roof = pick; F.roofTry = null; renderFarm(); draw();
+          toast(has ? "Крыши перекрашены" : "Куплено: " + (cols[pick] || "").toLowerCase() + " крыша");
+          farmCall("/api/farm/roof", { color: pick }).catch(function () {});
+        });
+        acts.appendChild(b); box.appendChild(acts);
+      };
+      draw();
+      sh.appendChild(btn("Закрыть", "ghost", close));
+      var tick = setInterval(function () { if (!sh.isConnected) { clearInterval(tick); if (F.roofTry) { F.roofTry = null; renderFarm(); } } }, 300);   // закрыли окно — примерка снимается
+    });
+  }
   var TREES = [["#2f6b2c", "#3f8a36", "#5aaa43", "#8acf60"], ["#244f2a", "#2d6430", "#3a7d3a", "#55a04a"]];
   // спрайты: строки пикселей, «.» — пусто; буквы — цвета из SPR
   var SPR = { k: "#2e1f14", a: "#1c8a72", b: "#3fcca6", c: "#d6fff3", d: "#126150", l: "#3f8f3a", L: "#6fcf5a", h: "#b6ee88",
@@ -1453,12 +1520,13 @@
       });
     });
   }
-  function staticLayer(seed) {
-    if (statics[seed]) return statics[seed];
+  function staticLayer(seed, rk) {
+    rk = ROOF_PAL[rk] ? rk : "orange"; var sk = seed + ":" + rk;
+    if (statics[sk]) return statics[sk];
     var back = document.createElement("canvas"), front = document.createElement("canvas"), shed = document.createElement("canvas"), back2 = document.createElement("canvas");
     back.width = front.width = shed.width = back2.width = FW; back.height = front.height = shed.height = back2.height = FH;   // shed — амбар (рисуется, если куплен)
     var c = back.getContext("2d"), f = front.getContext("2d"), r = rng(seed), x, y, i;
-    var roof = ROOFS[0];   // крыши у всех одного цвета: раньше в гостях цвет брался из номера фермы, и сосед видел чужой дом не таким, каким его видит хозяин (жалоба в чате 2026-11-15)
+    var roof = ROOF_PAL[rk];   // цвет крыш — выбор хозяина (хранится на сервере, гости видят тот же)
     // небо — его рисунки (art/sky.png и art/sky-stars.png): ночное небо, планеты; звёзды мерцают отдельно (drawStars)
     if (SKY.ready) {
       px(c, 0, 0, FW, 36, "#02054d"); c.drawImage(SKY.sky, 0, 0); c.drawImage(SKY.planets, 0, 0);
@@ -1628,8 +1696,8 @@
     [gl, gr].forEach(function (g) { px(f, g[0] - 1, g[1] - 12, 3, 13, C.wdd); px(f, g[0] - 1, g[1] - 12, 2, 12, C.wd); px(f, g[0] - 1, g[1] - 13, 3, 1, C.wdl); });   // столбы калитки
     tree(f, 181, 122, 7, TREES[1]);                                                  // дерево у правого угла — перед забором, а не за ним
     for (y = FH - 6; y < FH; y++) px(f, 0, y, FW, 1, "rgba(30,60,20," + ((y - FH + 7) * .07).toFixed(2) + ")");
-    statics[seed] = { back: back, shed: shed, back2: back2, front: front, lamps: [[gl[0], gl[1] - 15], [gr[0], gr[1] - 15]], smoke: smoke, glows: glows };
-    return statics[seed];
+    statics[sk] = { back: back, shed: shed, back2: back2, front: front, lamps: [[gl[0], gl[1] - 15], [gr[0], gr[1] - 15]], smoke: smoke, glows: glows };
+    return statics[sk];
   }
 
   // ---------- сорта: форма растения (shape) — от одного родителя, раскраска (color) — от другого ----------
@@ -1732,7 +1800,7 @@
     var mk = function () { var cv = document.createElement("canvas"); cv.width = W; cv.height = H; return cv; };
     var full = mk(), fc = full.getContext("2d"), extra = mk(), ec = extra.getContext("2d");
     if (hasBuild(kit, "oven") && ARTS.ok) ec.drawImage(ARTS.oven, OVEN[0] - 14, OVEN[1] + 4 - ARTS.oven.height);
-    if (hasBuild(kit, "shop")) drawShop(ec, 0, { builds: ["shop"] }, false, true);                                   // магазин тоже зарастает: крыша, маркизы, площадка, ящики
+    if (hasBuild(kit, "shop")) drawShop(ec, 0, { builds: ["shop"], roof: kit.roof }, false, true);                                   // магазин тоже зарастает: крыша, маркизы, площадка, ящики
     if (hasBuild(kit, "mill")) {                                                      // башня мельницы: то, что не меняется между кадрами
       var m1 = mk(), m2 = mk(), k0 = { builds: ["mill"], jobs: [] };
       drawMill(m1.getContext("2d"), 0, k0, false, 0); drawMill(m2.getContext("2d"), 2345, k0, false, 0);
@@ -1938,7 +2006,7 @@
   // магазин: прилавок под полосатым навесом, на прилавке — хлеб, банки, пирог; когда есть заказ, который можно сдать, — искорка
   function drawShop(c, t, kit, own, mossy) {                                             // магазин в изометрии: каменная площадка, вход с козырьком и ступенями, прилавки с маркизами, ящики с товаром
     if (!hasBuild(kit, "shop")) return drawLot(c, LOTS.shop, own, lotPrice(kit, "shop"));
-    var A = [129, 166], B = [151, 177], Cc = [173, 166], D = [151, 155], H = 20, i, roof = ROOFS[0];
+    var A = [129, 166], B = [151, 177], Cc = [173, 166], D = [151, 155], H = 20, i, roof = ROOF_PAL[roofKey(kit)];
     var up = function (p, h) { return [p[0], p[1] - h]; }, lerp = function (p, q, k) { return [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k]; };
     var onL = function (k, h) { return up(lerp(A, B, k), h); }, onR = function (k, h) { return up(lerp(B, Cc, k), h); };
     var R = function (p) { return [Math.round(p[0]), Math.round(p[1])]; }, blink = Math.floor(t / 450);
@@ -1977,7 +2045,7 @@
     var hd1 = R(onL(.71, 7)), hd2 = R(onL(.77, 7)); px(c, hd1[0], hd1[1], 1, 1, C.gold); px(c, hd2[0], hd2[1], 1, 1, C.gold);
     var w1 = R(onL(.74, 11)); px(c, w1[0] - 1, w1[1] - 1, 3, 2, "#ffd27a");                                          // окошко над дверью светится
     var cp0 = onL(.55, 16), cp1 = onL(.93, 16);                                                                       // козырёк в цвет крыши
-    poly(c, [cp0, cp1, [cp1[0] - 3, cp1[1] + 3], [cp0[0] - 3, cp0[1] + 3]], roof[0]); seg(c, cp0[0] - 3, cp0[1] + 3, cp1[0] - 3, cp1[1] + 3, "#7a2e1a");
+    poly(c, [cp0, cp1, [cp1[0] - 3, cp1[1] + 3], [cp0[0] - 3, cp0[1] + 3]], roof[0]); seg(c, cp0[0] - 3, cp0[1] + 3, cp1[0] - 3, cp1[1] + 3, roof[3]);
     var sg = R(onL(.74, 18.5)); px(c, sg[0] - 4, sg[1] - 1, 9, 3, "#f3e2c0"); px(c, sg[0] - 4, sg[1] + 2, 9, 1, "#b98a55"); px(c, sg[0] - 2, sg[1], 2, 1, "#e0a85a"); px(c, sg[0] + 1, sg[1], 2, 1, "#d9643c");   // вывеска
     [.56, .92].forEach(function (k) { var lq = R(onL(k, 10)); px(c, lq[0], lq[1] - 2, 1, 2, C.wdd); px(c, lq[0] - 1, lq[1], 2, 3, (blink % 2) ? "#ffd27a" : "#ffc35a"); px(c, lq[0] - 1, lq[1], 1, 1, "#fff6df"); });   // фонари у входа
     var st0 = onL(.6, 0), st1 = onL(.88, 0);                                                                          // ступени
@@ -1989,8 +2057,8 @@
     eA = [eA[0] - 2, eA[1] + 1]; eB = [eB[0], eB[1] + 2]; eC = [eC[0] + 2, eC[1] + 1];
     poly(c, [eD, eA, ap], roof[2]); poly(c, [eA, eB, ap], roof[0]); poly(c, [eB, eC, ap], roof[1]);
     for (i = 1; i < 4; i++) { var r0 = lerp(ap, eA, i / 4), r1 = lerp(ap, eB, i / 4), r2 = lerp(ap, eC, i / 4);
-      seg(c, r0[0], r0[1], r1[0], r1[1], roof[2]); seg(c, r1[0], r1[1], r2[0], r2[1], "#8c3a20"); }
-    seg(c, eA[0], eA[1], eB[0], eB[1], "#7a2e1a"); seg(c, eB[0], eB[1], eC[0], eC[1], "#6a2614"); seg(c, ap[0], ap[1], eB[0], eB[1], roof[2]);
+      seg(c, r0[0], r0[1], r1[0], r1[1], roof[2]); seg(c, r1[0], r1[1], r2[0], r2[1], roof[3]); }
+    seg(c, eA[0], eA[1], eB[0], eB[1], roof[3]); seg(c, eB[0], eB[1], eC[0], eC[1], roof[3]); seg(c, ap[0], ap[1], eB[0], eB[1], roof[2]);
     var GOLD = mossy ? ["#9ff0d6", "#58c2a6"] : ["#ffd166", "#f2b33d"], DIM = mossy ? "#2f7a68" : "#9a6a2a";        // золотая гирлянда; во мху — мятные огоньки, как светящиеся грибы
     [[eA, eB], [eB, eC]].forEach(function (e, side) {
       for (var gk = 1; gk < 7; gk++) { var q = R(lerp(e[0], e[1], gk / 7)), o2 = (blink + gk + side) % 3;
@@ -2120,7 +2188,7 @@
   }
   function drawFarm(cv, seed, plots, now, t, rain, ss, dryLim, own, kit) {
     if (cv.width !== FW) { cv.width = FW; cv.height = FH; }
-    var c = cv.getContext("2d"), i, L = staticLayer(seed);
+    var c = cv.getContext("2d"), i, L = staticLayer(seed, roofKey(kit));
     c.drawImage(L.back, 0, 0); drawStars(c, t);
     if (hasBuild(kit, "barn")) c.drawImage(L.shed, 0, 0); else drawLot(c, LOTS.barn, own, lotPrice(kit, "barn"));
     c.drawImage(L.back2, 0, 0);
@@ -2133,7 +2201,7 @@
     c.drawImage(L.front, 0, 0);
     drawOven(c, t, kit, own, now);
     drawShop(c, t, kit, own, mossOn(kit, now));
-    drawMossOver(c, kit, now, t, L, seed + ["barn", "mill", "oven", "shop"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
+    drawMossOver(c, kit, now, t, L, seed + roofKey(kit) + ["barn", "mill", "oven", "shop"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
     if (CHEST_ON) drawChest(c, own);
     if (own) drawFx(c, t);
     for (i = 0; i < 4; i++) {                                                      // дым из трубы
@@ -2653,6 +2721,7 @@
     var s = F.state; if (!s) return;
     var now = farmNow();
     setText($("dustpill"), "✦ " + s.dust);
+    var rkNow = roofKey(s); if (F.decorIconKey !== rkNow) { F.decorIconKey = rkNow; decorIcon($("decoricon"), ROOF_PAL[rkNow]); }
     setText($("waterpill"), "💧 " + s.water + "/" + s.can_max);
     var ban = $("farmbanners"), mo = monoOf(s, now);
     var sig = JSON.stringify([mo && mo.kind, s.gifts, s.sales]);               // строки пересобираются, только когда меняется их суть — иначе нажатие «теряется»
@@ -3258,6 +3327,7 @@
           rules([
             ["Станция", "Всегда продаёт базовые семена: мох, ягоды, хрусталь, пшеницу."],
             ["Своя лавка", "Выведенные тобой семена, урожай и еду можно выставить на продажу другим игрокам. Цену считает игра, а ты можешь подвинуть её немного дешевле или дороже. Пыль приходит сразу после покупки."],
+            ["Вид фермы", "Кнопка с кистью вверху справа на ферме. Там меняется цвет крыш — дома, амбара, колодца и магазина. Каждый цвет покупается один раз за 300 пыли, потом переключай бесплатно; гости видят твой цвет."],
             ["Метка «✓»", "В лавке на товаре, который у тебя уже есть, в углу зелёная метка «✓ 3» — столько таких у тебя: семян в инвентаре и сундуке, урожая и блюд — в амбаре и сундуке."],
             ["Выставленное", "Пока товар на продаже, его нельзя посадить, смолоть или распылить — сначала сними с продажи."],
             ["В пыль", "Урожай и еду можно превратить в пыль в амбаре, лишние семена — в окне семян. Это самый невыгодный способ: продать игрокам выгоднее, а приготовить еду — ещё выгоднее."],
@@ -4339,6 +4409,7 @@
   $("tofarm").onclick = openFarm;
   $("toneighbors").onclick = openNeighbors;
   $("toshop").onclick = function () { openShop("buy"); };
+  $("decorbtn").onclick = function () { haptic("light"); decorSheet(); };
   document.querySelectorAll("#shoptabs button").forEach(function (b) { b.onclick = function () { haptic("light"); F.shopSel = null; openShop(b.dataset.st); }; });
   document.querySelectorAll("#shopcats button").forEach(function (b) { b.onclick = function () { haptic("light"); F.shopCat = b.dataset.cat; F.shopSel = null; renderShopTab(); }; });
   document.querySelectorAll("[data-go]").forEach(function (b) {

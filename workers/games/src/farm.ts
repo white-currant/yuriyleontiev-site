@@ -573,7 +573,7 @@ export async function farmState(u: any) {
     stars: (await q("SELECT id, x, y, dust FROM f_stars WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     clumps: (await q("SELECT id, x, y, dust FROM f_clumps WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
-    ...(await kitchenOf(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...(await q("SELECT recipe FROM f_jobs WHERE user = ?", [u.id])).map((x) => "p:" + x[0])])).products, build_list: BUILDS,
+    ...(await kitchenOf(u.id)), ...(await decorView(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...(await q("SELECT recipe FROM f_jobs WHERE user = ?", [u.id])).map((x) => "p:" + x[0])])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY),
     vinyls, inv, barn, stall, chest, seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })), ...(await monoView(u.id)), feed_top: await feedTop(u.id),
@@ -1076,6 +1076,27 @@ async function giftsLeft(uid: number) {
   return Math.max(0, GIFTS_PER_DAY - Number(sent));
 }
 
+// ---------- вид фермы: цвет крыш (его решение 2026-11-15) ----------
+// Каждый цвет покупается один раз за ✦300, между купленными — бесплатно; оранжевый — у всех с начала. Гости видят цвет хозяина.
+export const ROOF_PRICE = 300;
+export const ROOF_COLORS: Record<string, string> = { orange: "Оранжевая", red: "Красная", blue: "Синяя", green: "Зелёная", purple: "Фиолетовая", teal: "Бирюзовая", slate: "Графитовая" };
+async function roofOf(uid: number) { const r = await q("SELECT roof FROM f_style WHERE user = ?", [uid]); const k = r.length ? String(r[0][0]) : ""; return ROOF_COLORS[k] ? k : "orange"; }
+async function decorView(uid: number) {
+  const owned = (await q("SELECT item FROM f_decor WHERE user = ? AND kind = 'roof'", [uid])).map((r) => String(r[0]));
+  return { roof: await roofOf(uid), roofs_owned: ["orange", ...owned.filter((k) => k !== "orange" && ROOF_COLORS[k])], roof_price: ROOF_PRICE, roof_colors: ROOF_COLORS };
+}
+export async function setRoof(u: any, color: string) {
+  if (!ROOF_COLORS[color]) return { error: "Такого цвета нет" };
+  await ensureFarm(u);
+  const has = color === "orange" || (await q("SELECT 1 FROM f_decor WHERE user = ? AND kind = 'roof' AND item = ?", [u.id, color])).length > 0;
+  if (!has) {
+    if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [ROOF_PRICE, u.id, ROOF_PRICE])).length) return { error: "Не хватает звёздной пыли" };
+    await q("INSERT OR IGNORE INTO f_decor (user, kind, item, at) VALUES (?, 'roof', ?, ?)", [u.id, color, now()]);
+  }
+  await q("INSERT INTO f_style (user, roof) VALUES (?, ?) ON CONFLICT(user) DO UPDATE SET roof = excluded.roof", [u.id, color]);
+  return { bought: !has, farm: await farmState(u) };
+}
+
 export async function visit(u: any, pub: string) {
   const [f] = await q(`SELECT f.user, f.unlocked, p.name, p.title FROM f_farms f LEFT JOIN g_profiles p ON p.user = f.user WHERE f.pub = ?`, [pub]);
   if (!f || Number(f[0]) === u.id) return { error: "Участок не найден" };
@@ -1086,7 +1107,7 @@ export async function visit(u: any, pub: string) {
   const shop = await q("SELECT strain, listed FROM f_inv WHERE user = ? AND listed > 0", [f[0]]);
   const stall = await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [f[0]]);
   const ii = await itemInfo(stall.map((r) => String(r[0]))), own = await ownPrices(Number(f[0]));
-  return { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given,
+  return { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given, roof: await roofOf(Number(f[0])),
            plots: await (async () => { const ev = await plotEvents(Number(f[0])); return Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(f[1]), ev[i])); })(), now: now(),
            rain_until: await rainUntil(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY), dry_limit: DRY_LIMIT, gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY,
            ...(await kitchenOf(Number(f[0]))),

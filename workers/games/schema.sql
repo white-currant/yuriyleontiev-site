@@ -81,3 +81,6 @@ CREATE INDEX IF NOT EXISTS g_events_at ON g_events (at);
 CREATE INDEX IF NOT EXISTS g_events_user ON g_events (user, id);
 CREATE INDEX IF NOT EXISTS g_rounds_started ON g_rounds (started);
 CREATE INDEX IF NOT EXISTS f_sales_seller ON f_sales (seller, seen);
+-- вид фермы (2026-11-15): купленные цвета крыш и выбранный цвет
+CREATE TABLE IF NOT EXISTS f_decor (user INTEGER NOT NULL, kind TEXT NOT NULL, item TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (user, kind, item));
+CREATE TABLE IF NOT EXISTS f_style (user INTEGER PRIMARY KEY, roof TEXT);
