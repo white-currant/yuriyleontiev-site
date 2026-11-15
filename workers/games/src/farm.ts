@@ -1026,6 +1026,15 @@ export async function skipOrder(u: any, slot: number) {
   await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [u.id, slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]);
   return { farm: await farmState(u) };
 }
+// звёздный уголь в печь (его идея 2026-11-15): один уголь из амбара — всё, что сейчас печётся, готово сразу
+export async function stoke(u: any) {
+  const [j] = await q("SELECT ready FROM f_jobs WHERE user = ? AND kind = 'oven'", [u.id]);
+  if (!j) return { error: "В печи ничего не печётся" };
+  if (Number(j[0]) <= now()) return { error: "Уже готово — забери в амбар" };
+  if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = 'p:coal' AND count >= 1 RETURNING 1", [u.id])).length) return { error: "В амбаре нет звёздного угля" };
+  await q("UPDATE f_jobs SET ready = ? WHERE user = ? AND kind = 'oven'", [now(), u.id]);
+  return { farm: await farmState(u) };
+}
 export async function collect(u: any, kind: string) {
   const [j] = await q("SELECT recipe, n, ready FROM f_jobs WHERE user = ? AND kind = ?", [u.id, kind]);
   if (!j) return { error: "Нечего забирать" };
