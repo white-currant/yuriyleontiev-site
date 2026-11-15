@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151820";
+    var BUILD = "202611151921";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2756,8 +2756,9 @@
       var g = el("div", "banner gift"); var names = s.gifts.map(function (x) { return x.from; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
       g.appendChild(el("span", "", "🎁 Подарки от соседей: " + names.slice(0, 3).join(", ") + (names.length > 3 ? " и др." : "")));
       var gb = el("button", "", "Забрать"); gb.onclick = function () {      // сразу: пыль в балансе, баннер прочь; сервер подтвердит
-        var sum = s.gifts.reduce(function (a, x) { return a + (x.dust || 0); }, 0);
-        haptic("success"); s.dust += sum; s.gifts = []; renderFarm(); toast("+" + sum + " звёздной пыли");
+        var cs = F.state;                                                   // текущее состояние, не то, с которым плашку собрали (баг 2026-11-15: плашка «висела» до ответа сервера)
+        var sum = (cs.gifts || []).reduce(function (a, x) { return a + (x.dust || 0); }, 0);
+        haptic("success"); cs.dust += sum; cs.gifts = []; renderFarm(); toast("+" + sum + " звёздной пыли");
         var dp = $("dustpill"); if (dp) { dp.classList.remove("bump"); void dp.offsetWidth; dp.classList.add("bump"); }
         farmCall("/api/farm/gifts").catch(function () {});
       };
@@ -2767,7 +2768,7 @@
       var sum = s.sales.reduce(function (a, x) { return a + x.price; }, 0), sb = el("div", "banner gift");
       var who = s.sales.map(function (x) { return x.buyer; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
       sb.appendChild(el("span", "", "🛒 В твоей лавке купили семена на ✦ " + sum + ": " + who.slice(0, 3).join(", ") + (who.length > 3 ? " и др." : "")));
-      var ok = el("button", "", "Ок"); ok.onclick = function () { s.sales = []; renderFarm(); farmCall("/api/farm/sales/seen").catch(function () {}); };
+      var ok = el("button", "", "Ок"); ok.onclick = function () { haptic("light"); F.state.sales = []; renderFarm(); farmCall("/api/farm/sales/seen").catch(function () {}); };
       sb.appendChild(ok); ban.appendChild(sb);
     }
     }
