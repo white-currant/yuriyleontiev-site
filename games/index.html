@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151458";
+    var BUILD = "202611151529";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -221,6 +221,16 @@
   .ping.mine { background: #ffe7a8; }
   @keyframes pingin { from { transform: translateY(-14px) scale(.97); } }   /* без прозрачности: если анимации стоят, плашку всё равно видно */
   .pcell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .ovtop { display: flex; gap: 14px; align-items: center; margin: 4px 0 10px; }
+  .ovtop .ovslot { width: 76px; flex: none; }
+  .ovtop .ovslot.empty { opacity: .55; }
+  .ovinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .ovinfo small { opacity: .8; }
+  .ovbar { height: 6px; background: rgba(0, 0, 0, .3); }
+  .ovbar i { display: block; height: 100%; background: #f2c76b; }
+  .ovcat > b { display: block; margin-bottom: 8px; }
+  .ovpick { margin: 10px 0 6px; display: flex; flex-direction: column; gap: 2px; }
+  .ovpick small { opacity: .8; }
   .pcell .slot { width: 100%; }
   .pm { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
   .pm button { min-height: 30px; padding: 0; border: 0; border-radius: 0; background: var(--wood3); color: var(--cream); font: 700 18px var(--pix); box-shadow: inset 0 -3px 0 #6e4425; }
@@ -487,6 +497,7 @@
     background: #f3e2c0; color: #3a2414; font-size: 11px; font-weight: 750; white-space: nowrap; box-shadow: 0 1px 0 rgba(0, 0, 0, .35); }
   .ware.on .tag { background: var(--gold); }
   .ware .qty { position: absolute; right: 6px; top: 4px; font-size: 11px; font-weight: 750; color: rgba(255, 255, 255, .9); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+  .ware .have { position: absolute; left: 6px; top: 4px; font-size: 11px; font-weight: 750; color: #8ff0c4; text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
   .ware .qty.sale { color: #8ff0c4; left: 0; right: 0; text-align: center; white-space: nowrap; font-size: 10.5px; }
   /* имя продавца под ценником; длинное — медленно прокручивается туда-обратно */
   .ware.who { height: 122px; padding-bottom: 49px; }
@@ -2864,6 +2875,8 @@
   var FLOUR_ADJ = { moss: "Лунная", berry: "Звёздная", crystal: "Кометная", sun: "Солнечная", nebula: "Туманная", ember: "Огненная", frost: "Ледяная", night: "Полуночная", aurora: "Сияющая" },
       GRADE_NAMES = ["высший сорт", "первый сорт", "второй сорт"];
   function flourKey(g) { var d = g.myth ? g.dust / 3 : g.dust; return "g:" + g.color + ":" + (d <= 7 ? 2 : d <= 10 ? 1 : 0) + (g.myth ? ":m" : ""); }   // как на сервере
+  var RAW_MAIN = { soup: "moss", stew: "mushroom", tea: "flower", jam: "cactus" }, RAW_REF = { moss: 4, mushroom: 8, flower: 8, cactus: 8 };   // как на сервере
+  function rawKey(g) { var d = (g.myth ? g.dust / 3 : g.dust) / (RAW_REF[g.shape] || 8); return "r:" + g.color + ":" + (d <= 1.4 ? 2 : d <= 2 ? 1 : 0) + (g.myth ? ":m" : ""); }
   function itemName(id) { var it = itemOf(id); return it ? it.name + (it.sort_name ? " · " + it.sort_name.toLowerCase() : "") : ""; }   // сорт или продукт кухни
   function barnItems() { return (F.state.barn || []).filter(function (it) { return it.count > 0 && itemOf(it.strain); }); }
   function bagOf(id) { var r = null; (F.state.inv || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
@@ -3215,10 +3228,10 @@
           page.appendChild(el("div", "bsub", "Жители станции заказывают блюда"));
           rules([
             ["Постройка", "Магазин стоит ✦ 500 и строится в правом нижнем углу луга. Построить его можно, когда уже есть мельница или печь: магазину нужны блюда."],
-            ["Заказы", "На доске всегда три заказа. Простой — любая выпечка, какая есть: хлеб, булочка, пирог — неважно. Сложный и особый — конкретные блюда, у каждого видно, сколько нужно и сколько уже есть в амбаре. Сорт муки неважен: подойдёт хлеб из любой пшеницы."],
-            ["Награда", "Простой заказ платит ✦ 50 за каждое блюдо — выгодно сдать дешёвое: хлеб, суп из мха. Сложный платит в полтора раза больше цены блюд, особый — вдвое: туда стоит нести дорогую выпечку."],
+            ["Заказы", "На доске всегда три заказа. Простой — на категорию: «Хлеб», «Пироги», «Похлёбка»… Подойдёт любое блюдо этой категории любого сорта, какие именно отдать — выбираешь сам. Сложный и особый — несколько конкретных блюд, у каждого видно, сколько нужно и сколько уже есть в амбаре; из амбара уйдут самые дешёвые подходящие."],
+            ["Награда", "Все заказы платят больше цены блюд: простой и сложный — в полтора раза, особый — вдвое. Простой считается по самому дешёвому блюду категории: дешёвое сдать выгодно, дорогое — себе в убыток. Например, в «Пироги» тыквенный пирог выгоден, а звёздный — нет."],
             ["Сроки", "На простой заказ — сутки, на сложный — двое, на особый — трое. Не успел — заказ уходит, и на его месте сразу появляется новый."],
-            ["Сдать", "Когда всех блюд хватает, над магазином мигает искорка. В простом заказе сам выбери, какие блюда отдать — дорогие лучше оставить для сложного и особого. В остальных блюда уйдут из амбара — сначала самые дешёвые. Пыль придёт сразу. Новый заказ появится через полчаса."],
+            ["Сдать", "Когда всех блюд хватает, над магазином мигает искорка. В простом заказе сам выбери, какие именно блюда отдать: кнопки «−» и «+» под каждым. В остальных блюда уйдут из амбара — сначала самые дешёвые. Пыль придёт сразу. Новый заказ появится через полчаса."],
             ["Другой заказ", "Если заказ неудобный — например, нужен джем, а кактусов нет, — его можно заменить на другой. Один раз в сутки, бесплатно."],
           ]);
         } else if (q === SH + 4) {
@@ -3227,7 +3240,7 @@
           rules([
             ["Амбар", "Хранит урожай, муку и еду. Без амбара урожай сразу превращается в пыль, а мельница и печь не работают."],
             ["Мельница", "Мелет колосья в муку: один сноп — одна мука. Мука берёт расцветку колосьев, а сорт — по их цене: колосья до ✦7 дают муку второго сорта (✦7), до ✦10 — первого (✦11), дороже — высшего (✦15). Одинаковая мука лежит в одной ячейке."],
-            ["Печь", "Печёт еду из урожая и муки. Выпечка помнит муку — её расцветку и сорт: из муки высшего сорта хлеб дороже. Пока печь работает, в ней горит огонь."],
+            ["Печь", "Печёт еду из урожая и муки. Каждое блюдо помнит своё сырьё — расцветку и сорт: выпечка — муку, суп и похлёбка — мох и грибы, чай — звездоцвет, джем — кактус. Чем дороже сырьё, тем выше сорт и дороже блюдо. В печи блюда разложены по категориям — в каждой то, что можно испечь из твоего сырья; выбранное готовится в ячейке печи вверху. Пока печь работает, в ней горит огонь."],
             ["Готовое", "Мука и блюда ложатся в амбар. Их можно превратить в пыль — блюдо стоит дороже, чем урожай, из которого оно приготовлено, — продать другим игрокам в лавке или сдать по заказу в магазин. За выпечку дают очки."],
           ]);
           var rs = (F.state && F.state.recipes) || {}, NEEDW = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука" };
@@ -3245,6 +3258,7 @@
           rules([
             ["Станция", "Всегда продаёт базовые семена: мох, ягоды, хрусталь, пшеницу."],
             ["Своя лавка", "Выведенные тобой семена, урожай и еду можно выставить на продажу другим игрокам. Цену считает игра, а ты можешь подвинуть её немного дешевле или дороже. Пыль приходит сразу после покупки."],
+            ["Метка «✓»", "В лавке на товаре, который у тебя уже есть, в углу зелёная метка «✓ 3» — столько таких у тебя: семян в инвентаре и сундуке, урожая и блюд — в амбаре и сундуке."],
             ["Выставленное", "Пока товар на продаже, его нельзя посадить, смолоть или распылить — сначала сними с продажи."],
             ["В пыль", "Урожай и еду можно превратить в пыль в амбаре, лишние семена — в окне семян. Это самый невыгодный способ: продать игрокам выгоднее, а приготовить еду — ещё выгоднее."],
             ["Сундук", "Лишние семена можно убрать в сундук у домика, чтобы не мешали в инвентаре. Оттуда их не посадить, пока не достанешь."],
@@ -3530,6 +3544,7 @@
     if (need === "p:flour") return id === (sort ? "p:flour@" + sort : "p:flour");
     if (need.indexOf("p:") === 0) return id === need;
     if (recipe === "flour" && sort) return id === sort;
+    if (RAW_MAIN[recipe] === need && sort) return !!(s.strains[id] && s.strains[id].shape === need && rawKey(s.strains[id]) === sort);
     return !!(s.strains[id] && s.strains[id].shape === need);
   }
   function haveFor(need, recipe, sort) {
@@ -3541,9 +3556,9 @@
     fit.forEach(function (it) { var t = Math.min(n, it.count); it.count -= t; n -= t; });
   }
   // ---------- магазин: доска заказов на блюда ----------
-  function fitsOrder(recipe, id) {                              // «*oven» — любая выпечка, «*mill» — любая мука (простой заказ)
-    var r = recKey(id), all = (F.state && F.state.recipes) || {};
-    return recipe.charAt(0) === "*" ? !!(all[r] && all[r].kind === recipe.slice(1)) : r === recipe;
+  var ORDER_CATS = { bread: ["bread"], bun: ["bun"], soup: ["soup", "stew"], pie: ["pie", "pumpkin"], tea: ["tea"], jam: ["jam"], flour: ["flour"] };   // как на сервере
+  function fitsOrder(recipe, id) {                              // «~pie» — категория «Пироги»: любой пирог любого сорта (простой заказ)
+    var r = recKey(id); return recipe.charAt(0) === "~" ? (ORDER_CATS[recipe.slice(1)] || []).indexOf(r) >= 0 : r === recipe;
   }
   function haveRecipe(recipe) { var n = 0; (F.state.barn || []).forEach(function (it) { if (it.count > 0 && it.strain.indexOf("p:") === 0 && fitsOrder(recipe, it.strain)) n += it.count; }); return n; }
   function orderReady(o) { return o.items.every(function (it) { return haveRecipe(it.recipe) >= it.n; }); }
@@ -3567,11 +3582,11 @@
           var ul = el("div", "olist");
           o.items.forEach(function (it) {
             var have = haveRecipe(it.recipe), row = el("div", "orow" + (have >= it.n ? " ok" : ""));
-            var cv = el("canvas", "pix"); itemIcon(cv, it.recipe.charAt(0) === "*" ? (it.recipe === "*mill" ? "p:flour" : "p:bread") : "p:" + it.recipe); row.appendChild(cv);
-            row.appendChild(el("span", "", it.name + " ×" + it.n)); row.appendChild(el("b", "", Math.min(have, it.n) + " из " + it.n)); ul.appendChild(row);
+            var cv = el("canvas", "pix"); itemIcon(cv, "p:" + (it.recipe.charAt(0) === "~" ? (ORDER_CATS[it.recipe.slice(1)] || ["bread"])[0] : it.recipe)); row.appendChild(cv);
+            row.appendChild(el("span", "", it.name + " ×" + it.n + (it.recipe.charAt(0) === "~" ? " · любые" : ""))); row.appendChild(el("b", "", Math.min(have, it.n) + " из " + it.n)); ul.appendChild(row);
           });
           card.appendChild(ul);
-          var anyOrder = o.items.length === 1 && o.items[0].recipe.charAt(0) === "*", pick = null, picked = 0;
+          var anyOrder = o.items.length === 1 && o.items[0].recipe.charAt(0) === "~", pick = null, picked = 0;
           if (anyOrder) {                                                   // простой заказ: игрок сам выбирает, какие блюда отдать (его решение 2026-11-15)
             var need = o.items[0].n; pick = F.orderPick = (F.orderPick && F.orderPick.slot === o.slot && F.orderPick.n === need) ? F.orderPick : { slot: o.slot, n: need, ids: {} };
             Object.keys(pick.ids).forEach(function (id) { var b0 = barnOf(id); if (!b0 || b0.count < pick.ids[id]) pick.ids[id] = b0 ? b0.count : 0; if (!pick.ids[id]) delete pick.ids[id]; });
@@ -3619,10 +3634,120 @@
       var acts = el("div", "salebtns"); acts.appendChild(btn("Готово", "", close)); sh.appendChild(acts);
     });
   }
+  // варианты рецептов: выпечка и мука — по сорту муки/колосьев, суп, похлёбка, чай, джем — по сорту сырья
+  function kitchenRows(kind, max) {
+    var s = F.state;
+    var rows2 = [];
+    Object.keys(s.recipes).filter(function (k) { return s.recipes[k].kind === kind; }).forEach(function (k) {
+      var r = s.recipes[k], sorts = [];
+      if (k === "flour") (s.barn || []).forEach(function (it) { var g = s.strains[it.strain]; if (it.count > 0 && g && g.shape === "grain") sorts.push(it.strain); });
+      else if (r.needs["p:flour"]) (s.barn || []).forEach(function (it) { if (it.count > 0 && recKey(it.strain) === "flour") sorts.push(sortKey(it.strain)); });
+      else if (RAW_MAIN[k]) (s.barn || []).forEach(function (it) { var g = s.strains[it.strain]; if (it.count > 0 && g && g.shape === RAW_MAIN[k] && sorts.indexOf(rawKey(g)) < 0) sorts.push(rawKey(g)); });
+      var price2 = function (x) { return k === "flour" ? ((s.strains[x] || {}).dust || 0) : RAW_MAIN[k] ? ((itemOf("p:" + k + "@" + x) || {}).dust || 0) : ((itemOf("p:flour@" + x) || {}).dust || 0); };
+      sorts.sort(function (a, c) { return price2(a) - price2(c); });
+      if (!sorts.length) sorts = [""];
+      sorts.forEach(function (sort) { rows2.push([k, sort]); });
+    });
+    return rows2.map(function (q) {
+      var k = q[0], sort = q[1], r = s.recipes[k], can = max, outKey = k === "flour" && sort && s.strains[sort] ? flourKey(s.strains[sort]) : sort;
+      var pid = "p:" + k + (outKey ? "@" + outKey : ""), info = itemOf(pid) || r;   // мельница: колосья → мука своего сорта
+      var parts = Object.keys(r.needs).map(function (nd) {
+        var have = haveFor(nd, k, sort), lbl = NEED[nd];
+        if (sort && RAW_MAIN[k] === nd) lbl = (((itemOf(pid) || {}).sort_name || lbl).split(",")[0]);
+        else if (sort && (nd === "p:flour" || (k === "flour" && nd === "grain"))) lbl = nd === "p:flour" ? (itemName("p:flour@" + sort) || "мука").toLowerCase() : (s.strains[sort] ? s.strains[sort].name.toLowerCase() : lbl);
+        can = Math.min(can, Math.floor(have / r.needs[nd])); return lbl + " ×" + r.needs[nd] + " (есть " + have + ")";
+      });
+      return { k: k, sort: sort, r: r, can: can, outKey: outKey, pid: pid, info: info, parts: parts };
+    });
+  }
+  // печь (его схема 2026-11-15): вверху ячейка готовки, ниже категории блюд — в каждой маленькие ячейки того, что можно
+  // испечь из своего сырья; выбрал → «Испечь» → блюдо готовится в ячейке, окно не закрывается. Ячеек потом станет больше (прокачка печи).
+  var OVEN_CATS = [["Хлеб", ["bread"]], ["Булочки", ["bun"]], ["Похлёбка", ["soup", "stew"]], ["Пироги", ["pie", "pumpkin"]], ["Чай", ["tea"]], ["Джем", ["jam"]]];
+  function ovenBody(sh, close, b) {
+    var s = F.state, top = el("div", "ovtop"), body = el("div");
+    sh.appendChild(top);
+    sh.appendChild(el("div", "sub", "Выбери блюдо и нажми «Испечь» — оно будет готовиться в ячейке печи. Блюдо помнит сырьё: из дорогого сырья выходит дороже."));
+    sh.appendChild(body);
+    var drawTop = function () {
+      top.innerHTML = "";
+      var job = jobOf(s, "oven"), tn = farmNow(), ready = job && job.ready <= tn;
+      var cell = el("div", "slot ovslot" + (ready ? " on" : "") + (job ? "" : " empty"));
+      var info = el("div", "ovinfo");
+      if (job) {
+        var rk = recKey(job.recipe), rr = s.recipes[rk] || {}, nm = itemName("p:" + job.recipe) || rr.name || "";
+        var cv = el("canvas", "pix"); itemIcon(cv, "p:" + job.recipe); cell.appendChild(cv);
+        cell.appendChild(el("span", "n", "×" + job.n));
+        info.appendChild(el("b", "", nm));
+        info.appendChild(el("small", "", ready ? "Готово — забери в амбар" : "Готово через " + fmtLeft(job.ready - tn)));
+        if (!ready) { var bar = el("div", "ovbar"), fill = el("i"); fill.style.width = Math.round(100 * Math.min(1, (tn - job.started) / Math.max(1, job.ready - job.started))) + "%"; bar.appendChild(fill); info.appendChild(bar); }
+        else info.appendChild(btn("Забрать в амбар", "", function () {
+          haptic("success");
+          s.jobs = s.jobs.filter(function (j) { return j.kind !== "oven"; }); barnAdd("p:" + job.recipe, job.n); renderFarm();
+          toast("+" + job.n + " " + (rr.name || "").toLowerCase() + " в амбар" + (rr.points ? " · +" + rr.points * job.n + " " + plural(rr.points * job.n, "очко", "очка", "очков") : ""));
+          farmCall("/api/farm/collect", { kind: "oven" }).catch(function () {});
+          drawTop(); drawCats();
+        }));
+      } else {
+        info.appendChild(el("b", "", "Печь свободна"));
+        info.appendChild(el("small", "", "Выбери блюдо ниже"));
+      }
+      top.appendChild(cell); top.appendChild(info);
+    };
+    var drawCats = function () {
+      body.innerHTML = "";
+      var rows = kitchenRows("oven", b.max), busy = !!jobOf(s, "oven"), sel = F.ovenSel;
+      OVEN_CATS.forEach(function (c) {
+        var pl = el("div", "order ovcat"); pl.appendChild(el("b", "", c[0]));
+        var vs = rows.filter(function (v) { return c[1].indexOf(v.k) >= 0 && v.can >= 1; })
+          .sort(function (a, z) { return (a.info.dust || 0) - (z.info.dust || 0); });
+        if (!vs.length) {
+          var need = c[1].map(function (k) { var r = s.recipes[k]; return r ? r.name.toLowerCase() + ": " + Object.keys(r.needs).map(function (nd) { return NEED[nd] + " ×" + r.needs[nd]; }).join(" + ") : ""; });
+          pl.appendChild(el("div", "sub", "Не из чего испечь. Нужно — " + need.join("; ") + "."));
+          body.appendChild(pl); return;
+        }
+        var g = el("div", "invgrid"), picked = null;
+        vs.forEach(function (v) {
+          var on = sel && sel.k === v.k && sel.sort === v.sort; if (on) picked = v;
+          var cell = el("div", "slot" + (on ? " on" : "")); cell.setAttribute("aria-label", itemName(v.pid) || v.r.name);
+          var cv = el("canvas", "pix"); itemIcon(cv, v.pid); cell.appendChild(cv);
+          cell.appendChild(el("span", "n", String(v.can)));
+          cell.appendChild(el("span", "vars", "✦ " + v.info.dust));
+          cell.onclick = function () { haptic("light"); F.ovenSel = on ? null : { k: v.k, sort: v.sort }; drawCats(); };
+          g.appendChild(cell);
+        });
+        pl.appendChild(g);
+        if (picked) {
+          var v = picked, r = v.r, d = el("div", "ovpick");
+          d.appendChild(el("b", "", itemName(v.pid) || r.name));
+          var s1 = el("small", "", v.parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + v.info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : ""));
+          d.appendChild(s1); d.appendChild(s2); pl.appendChild(d);
+          if (busy) { var no = btn("Печь занята", "ghost", function () {}); no.disabled = true; pl.appendChild(no); }
+          else qtyBox(pl, { key: "cook:" + v.k + ":" + v.sort, max: function () { return v.can; },
+            acts: [{ t: function (n) { return "Испечь " + n + " · ⏱ " + fmtLeft(r.min * 60 * n); }, run: function (n) {
+              haptic("success");
+              var t0 = farmNow(), rk = v.outKey ? v.k + "@" + v.outKey : v.k;
+              s.jobs = (s.jobs || []).concat([{ kind: "oven", recipe: rk, n: n, started: t0, ready: t0 + r.min * 60 * n }]);
+              Object.keys(r.needs).forEach(function (nd) { takeFor(nd, v.k, v.sort, r.needs[nd] * n); }); renderFarm();
+              toast("В печи: " + (itemName(v.pid) || r.name).toLowerCase() + " ×" + n);
+              farmCall("/api/farm/cook", { recipe: v.k, n: n, sort: v.sort }).catch(function () {});
+              F.ovenSel = null; drawTop(); drawCats();
+            } }] });
+        }
+        body.appendChild(pl);
+      });
+    };
+    drawTop(); drawCats();
+    sh.appendChild(btn("Закрыть", "ghost", close));
+    var lastLbl = "", tick = setInterval(function () {               // отсчёт в ячейке; когда окно закрыто — таймер гасим
+      if (!sh.isConnected) return clearInterval(tick);
+      var job = jobOf(s, "oven"); if (!job) return;
+      var lbl = job.ready <= farmNow() ? "ready" : fmtLeft(job.ready - farmNow()); if (lbl !== lastLbl) { lastLbl = lbl; drawTop(); }
+    }, 1000);
+  }
   function kitchenSheet(kind) {
     var s = F.state; if (!s) return;
     var b = (s.build_list || {})[kind] || { name: kind, price: 0, max: 1 };
-    var about = kind === "shop" ? "Жители станции заказывают здесь блюда. За заказ платят пылью больше, чем стоят эти блюда по отдельности: простой — ✦ 50 за любое блюдо, сложный — в полтора раза, особый — вдвое. На доске три заказа: на простой — сутки, на сложный — двое, на особый — трое." :
+    var about = kind === "shop" ? "Жители станции заказывают здесь блюда. За заказ платят пылью больше, чем стоят эти блюда по отдельности: простой и сложный — в полтора раза, особый — вдвое. На доске три заказа: на простой — сутки, на сложный — двое, на особый — трое." :
                 kind === "barn" ? "Пока амбара нет, урожай сразу превращается в звёздную пыль. В амбаре он копится: из него мельница делает муку, а печь — еду." :
                 kind === "mill" ? "Мелет колосья в муку: один сноп — одна мука. Мука берёт расцветку колосьев, а сорт — по их цене: второй, первый или высший. Из муки высшего сорта выпечка дороже." : "Печёт из урожая и муки хлеб, супы и пироги. Готовое стоит дороже, чем блюда по отдельности, а за выпечку дают очки.";
     sheet(function (sh, close) {
@@ -3639,6 +3764,7 @@
         if (kind !== "barn" && !hasBuild(s, "barn")) sh.appendChild(el("div", "sub", "Работать она будет, только когда появится амбар: блюдам нужно где-то лежать."));
         sh.appendChild(bb); sh.appendChild(btn("Не сейчас", "ghost", close)); return;
       }
+      if (kind === "oven" && hasBuild(s, "barn")) { ovenBody(sh, close, b); return; }
       var job = jobOf(s, kind), tn = farmNow();
       if (job) {
         var r = { name: itemName("p:" + job.recipe) || (s.recipes[recKey(job.recipe)] || {}).name, points: (s.recipes[recKey(job.recipe)] || {}).points }, cv = el("canvas", "pix bigseed"); itemIcon(cv, "p:" + job.recipe); sh.appendChild(cv);
@@ -3660,26 +3786,9 @@
         sh.appendChild(el("div", "sub", "Без амбара не работает: блюдам негде лежать. Амбар — красный сарай наверху, за двором."));
         sh.appendChild(btn("Понятно", "ghost", close)); return;
       }
-      sh.appendChild(el("div", "sub", about + " Блюда берутся из амбара — сначала самые дешёвые." + (kind === "oven" ? " Выпечка помнит муку: её расцветку и сорт — из разных колосьев выходит разный хлеб." : "")));
-      // рецепты с мукой и сама мука — отдельной строкой на каждый сорт, что есть в амбаре
-      var rows2 = [];
-      Object.keys(s.recipes).filter(function (k) { return s.recipes[k].kind === kind; }).forEach(function (k) {
-        var r = s.recipes[k], sorts = [];
-        if (k === "flour") (s.barn || []).forEach(function (it) { var g = s.strains[it.strain]; if (it.count > 0 && g && g.shape === "grain") sorts.push(it.strain); });
-        else if (r.needs["p:flour"]) (s.barn || []).forEach(function (it) { if (it.count > 0 && recKey(it.strain) === "flour") sorts.push(sortKey(it.strain)); });
-        var price2 = function (x) { return k === "flour" ? ((s.strains[x] || {}).dust || 0) : ((itemOf("p:flour@" + x) || {}).dust || 0); };
-        sorts.sort(function (a, c) { return price2(a) - price2(c); });
-        if (!sorts.length) sorts = [""];
-        sorts.forEach(function (sort) { rows2.push([k, sort]); });
-      });
-      rows2.forEach(function (q) {
-        var k = q[0], sort = q[1], r = s.recipes[k], can = b.max, outKey = k === "flour" && sort && s.strains[sort] ? flourKey(s.strains[sort]) : sort;
-        var pid = "p:" + k + (outKey ? "@" + outKey : ""), info = itemOf(pid) || r;   // мельница: колосья → мука своего сорта
-        var parts = Object.keys(r.needs).map(function (nd) {
-          var have = haveFor(nd, k, sort), lbl = NEED[nd];
-          if (sort && (nd === "p:flour" || (k === "flour" && nd === "grain"))) lbl = nd === "p:flour" ? (itemName("p:flour@" + sort) || "мука").toLowerCase() : (s.strains[sort] ? s.strains[sort].name.toLowerCase() : lbl);
-          can = Math.min(can, Math.floor(have / r.needs[nd])); return lbl + " ×" + r.needs[nd] + " (есть " + have + ")";
-        });
+      sh.appendChild(el("div", "sub", about + " Блюда берутся из амбара — сначала самые дешёвые." + (kind === "oven" ? " Блюдо помнит сырьё: выпечка — муку, суп и похлёбка — мох и грибы, чай — звездоцвет, джем — кактус. Из разного сырья выходят разные блюда со своей ценой." : "")));
+      kitchenRows(kind, b.max).forEach(function (v) {
+        var k = v.k, sort = v.sort, r = v.r, can = v.can, outKey = v.outKey, pid = v.pid, info = v.info, parts = v.parts;
         var row = el("div", "seed"), cv = el("canvas", "pix"); itemIcon(cv, pid); row.appendChild(cv);
         var tx = el("span"); tx.appendChild(el("b", "", itemName(pid) || r.name));
         var s1 = el("small", "", parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : ""));
@@ -3769,6 +3878,7 @@
       var cv = el("canvas", "pix"); w.icon(cv); b.appendChild(cv);
       if (w.tag) b.appendChild(el("span", "tag", w.tag));
       if (w.qty) b.appendChild(el("span", "qty" + (w.sale ? " sale" : ""), w.qty));
+      if (w.have) { var hv = el("span", "have", "✓ " + w.have); hv.title = "У тебя уже есть: " + w.have; b.appendChild(hv); }   // такое уже есть (просьба игрока 2026-11-15)
       if (w.seller != null) { var sl = el("span", "seller"); sl.appendChild(el("span", "", w.seller)); b.appendChild(sl); }
       b.onclick = function () { haptic("light"); pick(w.key === selKey ? null : w.key); };
       g.appendChild(b);
@@ -3785,6 +3895,8 @@
     var d = el("div", "wareinfo"); d.appendChild(el("h4", "", title));
     lines.forEach(function (t) { if (t) d.appendChild(el("div", "sub", t)); }); box.appendChild(d); return d;
   }
+  function ownSeeds(id) { var a = bagOf(id), c = chestOf(id); return (a ? a.count : 0) + (c ? c.count : 0); }   // в инвентаре и сундуке
+  function ownItems(id) { var a = barnOf(id), c = chestOf(id); return (a ? a.count : 0) + (c ? c.count : 0); }   // в амбаре и сундуке
   function seedIconOf(st) { return function (cv) { cropIcon(cv, st, true); }; }
   function itemIconOf(id) { return function (cv) { itemIcon(cv, id); }; }
   function renderShopTab() {
@@ -3806,7 +3918,7 @@
       if (cat === "seed") {
         ["moss", "berry", "crystal", "wheat"].forEach(function (k) {
           var st = s.strains[k]; if (!st) return;
-          wares.push({ key: "st:" + k, icon: seedIconOf(st), tag: "✦ " + st.cost, seller: "станция" });
+          wares.push({ key: "st:" + k, icon: seedIconOf(st), tag: "✦ " + st.cost, seller: "станция", have: ownSeeds(k) });
           act["st:" + k] = function () {
             var have = bagOf(k), d = infoBox(box, st.name, [describe(st), "Станция продаёт базовые семена всегда. У тебя: " + (have ? have.count : 0) + "."]);
             var acts = el("div", "invacts");
@@ -3826,7 +3938,7 @@
           var st = m.strains[o.strain]; if (!st) return;
           var key = "of:" + i + ":" + o.pub + ":" + o.strain;
           var op = o.price || st.price;
-          wares.push({ key: key, icon: seedIconOf(st), tag: "✦ " + op, qty: "×" + o.count, seller: o.seller });
+          wares.push({ key: key, icon: seedIconOf(st), tag: "✦ " + op, qty: "×" + o.count, seller: o.seller, have: ownSeeds(o.strain) });
           act[key] = function () {
             var tier = SEEDTIER[st.tier] || SEEDTIER.common;
             var d = infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · продаёт " + o.seller, describe(st)]);
@@ -3840,7 +3952,7 @@
           if (catOf(o.item) !== cat) return;
           var it = itemOf(o.item); if (!it) return;
           var key = "it:" + i + ":" + o.pub + ":" + o.item;
-          wares.push({ key: key, icon: itemIconOf(o.item), tag: "✦ " + o.price, qty: "×" + o.count, seller: o.seller });
+          wares.push({ key: key, icon: itemIconOf(o.item), tag: "✦ " + o.price, qty: "×" + o.count, seller: o.seller, have: ownItems(o.item) });
           act[key] = function () {
             var d = infoBox(box, itemName(o.item), ["Продаёт " + o.seller + ". Ляжет к тебе в амбар.", "В пыль в амбаре — ✦ " + it.dust + "."]);
             var acts = el("div", "invacts"), b = btn("Купить за ✦ " + o.price, "", function () {
@@ -3859,7 +3971,8 @@
       }
       if (sel && !act[sel]) sel = F.shopSel = null;
       shelf(box, wares, sel, pick);
-      if (sel) act[sel](); else note(cat === "seed" ? "Нажми на товар, чтобы посмотреть и купить. Базовые семена — у станции, выведенные сорта продают игроки." : "Нажми на товар, чтобы посмотреть и купить.");
+      if (sel) act[sel](); else note((cat === "seed" ? "Нажми на товар, чтобы посмотреть и купить. Базовые семена — у станции, выведенные сорта продают игроки." : "Нажми на товар, чтобы посмотреть и купить.")
+        + " Зелёная метка «✓ 3» в углу — столько таких " + (cat === "seed" ? "семян" : "у тебя") + (cat === "seed" ? " у тебя уже есть (в инвентаре и сундуке)." : " уже есть (в амбаре и сундуке)."));
       return;
     }
     // продать

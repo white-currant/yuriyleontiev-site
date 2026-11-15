@@ -518,14 +518,17 @@ async function mythTick(uid: number) {
 }
 // мука и выпечка, смолотые до сортов, — разложить по новым ключам (раз для каждого игрока; ничего не теряется, одинаковое складывается)
 async function normFlour(uid: number) {
-  const old = "LIKE '%@%' AND {c} NOT LIKE '%@g:%'";
-  const rows = [...(await q(`SELECT 'barn', strain, count FROM f_barn WHERE user = ? AND strain ${old.replace("{c}", "strain")}`, [uid])),
-                ...(await q(`SELECT 'stall', item, listed FROM f_stall WHERE user = ? AND item ${old.replace("{c}", "item")}`, [uid])),
-                ...(await q(`SELECT 'job', recipe, 0 FROM f_jobs WHERE user = ? AND recipe ${old.replace("{c}", "recipe")}`, [uid])),
-                ...(await q(`SELECT 'price', item, 0 FROM f_prices WHERE user = ? AND item ${old.replace("{c}", "item")}`, [uid]))];
+  const old = "({c} LIKE '%@%' AND {c} NOT LIKE '%@g:%' AND {c} NOT LIKE '%@r:%' OR {c} IN ('p:soup', 'soup'))";   // простой суп — из обычного мха
+  const rows = [...(await q(`SELECT 'barn', strain, count FROM f_barn WHERE user = ? AND ${old.replaceAll("{c}", "strain")}`, [uid])),
+                ...(await q(`SELECT 'stall', item, listed FROM f_stall WHERE user = ? AND ${old.replaceAll("{c}", "item")}`, [uid])),
+                ...(await q(`SELECT 'job', recipe, 0 FROM f_jobs WHERE user = ? AND ${old.replaceAll("{c}", "recipe")}`, [uid])),
+                ...(await q(`SELECT 'price', item, 0 FROM f_prices WHERE user = ? AND ${old.replaceAll("{c}", "item")}`, [uid])),
+                ...(await q(`SELECT 'chest', strain, count FROM f_chest WHERE user = ? AND ${old.replaceAll("{c}", "strain")}`, [uid]))];
   if (!rows.length) return;
   const ss = await strains(rows.map((r) => sortOf(String(r[1]))));
   const conv = (id: string) => { const rec = recipeOf(id), r = RECIPES[rec], g = ss[sortOf(id)];
+    if (rec === "soup" && !sortOf(id)) return (id.startsWith("p:") ? "p:" : "") + "soup@r:moss:2";
+    if (r && g && RAW_MAIN[rec] === g.shape) return (id.startsWith("p:") ? "p:" : "") + rec + "@" + rawKey(g);
     if (!r || !g || !(rec === "flour" || r.needs["p:flour"])) return null;
     return (id.startsWith("p:") ? "p:" : "") + rec + "@" + flourKey(g); };
   for (const [where, id, n] of rows) {
@@ -534,6 +537,8 @@ async function normFlour(uid: number) {
                                           DB.prepare("DELETE FROM f_barn WHERE user = ? AND strain = ?").bind(uid, id)]);
     if (where === "stall") await DB.batch([DB.prepare("INSERT INTO f_stall (user, item, listed) VALUES (?, ?, ?) ON CONFLICT(user, item) DO UPDATE SET listed = listed + excluded.listed").bind(uid, to, Number(n)),
                                            DB.prepare("DELETE FROM f_stall WHERE user = ? AND item = ?").bind(uid, id)]);
+    if (where === "chest") await DB.batch([DB.prepare("INSERT INTO f_chest (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count").bind(uid, to, Number(n)),
+                                           DB.prepare("DELETE FROM f_chest WHERE user = ? AND strain = ?").bind(uid, id)]);
     if (where === "job") await q("UPDATE f_jobs SET recipe = ? WHERE user = ? AND recipe = ?", [to, uid, id]);
     if (where === "price") await DB.batch([DB.prepare("UPDATE OR IGNORE f_prices SET item = ? WHERE user = ? AND item = ?").bind(to, uid, id),
                                            DB.prepare("DELETE FROM f_prices WHERE user = ? AND item = ?").bind(uid, id)]);
@@ -557,6 +562,11 @@ export async function farmState(u: any) {
   const stall = (await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [u.id])).map(([item, listed]) => ({ item: String(item), listed: Number(listed) }));
   const chest = (await q("SELECT strain, count FROM f_chest WHERE user = ? AND count > 0", [u.id])).map(([strain, count]) => ({ strain: String(strain), count: Number(count) }));
   const bs = [...barn.map((b) => b.strain), ...stall.map((x) => x.item)];
+  const bss = await strains(barn.map((b) => String(b.strain)).filter((x) => !x.startsWith("p:")));   // что можно приготовить из амбара — с ценой и сортом
+  for (const b of barn) { const id = String(b.strain), g = bss[id];
+    if (g?.shape === "grain") bs.push("p:flour@" + flourKey(g));
+    if (g) for (const rk in RAW_MAIN) if (RAW_MAIN[rk] === g.shape) bs.push("p:" + rk + "@" + rawKey(g));
+    if (recipeOf(id) === "flour" && sortOf(id)) for (const rk in RECIPES) if (RECIPES[rk].needs["p:flour"]) bs.push("p:" + rk + "@" + sortOf(id)); }
   return {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked), EVS[i])), events_seen: await seenEvents(u.id),
@@ -811,6 +821,16 @@ function recipeOf(id: string) { const r = id.startsWith("p:") ? id.slice(2) : id
 const FLOUR_PRICE = [15, 11, 7], GRADE_NAME = ["высший сорт", "первый сорт", "второй сорт"];
 function gradeOf(dust: number) { return dust <= 7 ? 2 : dust <= 10 ? 1 : 0; }
 export function flourKey(g: Strain) { return "g:" + g.color + ":" + gradeOf(g.myth ? g.dust / 3 : g.dust) + (g.myth ? ":m" : ""); }
+// Блюда без муки (его правка 2026-11-15: «нужно, чтобы всё различалось по сырью») помнят главное сырьё рецепта:
+// суп — мох, похлёбка — грибы, чай — звездоцвет, джем — кактус. Ключ «r:<расцветка>:<сорт>[:m]»; сорт — по цене сырья
+// относительно обычного (до ×1,4 — второй, до ×2 — первый, дороже — высший). Цена блюда растёт с сортом, как у выпечки.
+export const RAW_MAIN: Record<string, string> = { soup: "moss", stew: "mushroom", tea: "flower", jam: "cactus" };
+const RAW_REF: Record<string, number> = { moss: 4, mushroom: 8, flower: 8, cactus: 8 };   // цена «обычного» сырья
+const GRADE_X = [15 / 7, 11 / 7, 1];                                   // наценка за сорт — та же, что у муки
+export function rawKey(g: Strain) {
+  const d = (g.myth ? g.dust / 3 : g.dust) / (RAW_REF[g.shape] || 8);
+  return "r:" + g.color + ":" + (d <= 1.4 ? 2 : d <= 2 ? 1 : 0) + (g.myth ? ":m" : "");
+}
 function parseFlour(k: string) { const [, color, gr, m] = k.split(":"); return { color, grade: Math.max(0, Math.min(2, Number(gr) || 0)), myth: m === "m" }; }
 export function productInfo(id: string, ss: Record<string, Strain>) {
   const r = RECIPES[recipeOf(id)]; if (!r) return null;
@@ -822,6 +842,15 @@ export function productInfo(id: string, ss: Record<string, Strain>) {
     const adj = f.myth ? MYTH_ADJ[2] : (ADJ[f.color] || ["", "", ""])[2], key = "g:" + f.color + ":" + f.grade + (f.myth ? ":m" : "");
     return { name: isFlour ? adj + " мука" : r.name, dust, sort: key, sort_name: isFlour ? GRADE_NAME[f.grade] : adj.toLowerCase() + " мука, " + GRADE_NAME[f.grade],
              color: f.color, grade: f.grade, ...(f.myth ? { myth: true } : {}) };
+  }
+  const main = RAW_MAIN[recipeOf(id)];
+  if (main) {                                                            // суп, похлёбка, чай, джем — по главному сырью
+    const k = sort.startsWith("r:") ? sort : ss[sort]?.shape === main ? rawKey(ss[sort]) : "";
+    if (!k) return { name: r.name, dust: r.dust };
+    const f = parseFlour(k), n = r.needs[main] || 1, [noun, form] = NOUN[main];
+    const dust = Math.round((r.dust + n * (RAW_REF[main] || 8) * (GRADE_X[f.grade] - 1)) * (f.myth ? 3 : 1));
+    const adj = f.myth ? MYTH_ADJ[form] : (ADJ[f.color] || ["", "", ""])[form];
+    return { name: r.name, dust, sort: k, sort_name: (adj + " " + noun).toLowerCase() + ", " + GRADE_NAME[f.grade], color: f.color, grade: f.grade, ...(f.myth ? { myth: true } : {}) };
   }
   const g = ss[sort];
   if (!g) return { name: r.name, dust: r.dust };
@@ -863,8 +892,14 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
   const ss = await strains(barn.map((x) => x[0]).filter((x) => !String(x).startsWith("p:")));
   const plan: [string, number][] = [];
   // сорт: мельница мелет один сорт колосьев, печь берёт муку одного сорта; без сорта — как раньше (старая «p:flour»)
-  const sorted = recipe === "flour" || !!r.needs["p:flour"];
-  if (sorted && !sort) {                                  // не выбран — берём тот, которого хватает и который дешевле
+  const main = RAW_MAIN[recipe], sorted = recipe === "flour" || !!r.needs["p:flour"] || !!main;
+  if (main && !(sort && sort.startsWith("r:"))) {           // суп, похлёбка, чай, джем: сорт главного сырья; не выбран — самый дешёвый, которого хватает
+    const by: Record<string, number> = {}, price: Record<string, number> = {};
+    for (const [id, c] of barn) { const g = ss[id]; if (g?.shape !== main) continue; const key = rawKey(g); by[key] = (by[key] || 0) + Number(c); price[key] = Math.min(price[key] ?? 1e9, g.dust); }
+    const opts = Object.keys(by).filter((x) => by[x] >= r.needs[main] * k).sort((a, c) => price[a] - price[c]);
+    sort = opts[0] || "";
+  }
+  if (sorted && !main && !sort) {                                  // не выбран — берём тот, которого хватает и который дешевле
     const want = recipe === "flour" ? k : r.needs["p:flour"] * k;
     const opts = barn.filter(([id, c]) => Number(c) >= want && (recipe === "flour" ? ss[id]?.shape === "grain" : String(id).startsWith("p:flour")))
       .sort((a, c) => (ss[a[0]]?.dust || 0) - (ss[c[0]]?.dust || 0));
@@ -874,7 +909,7 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
     let left = per * k;
     const flourId = sort ? "p:flour@" + sort : "p:flour";
     const fit = barn.filter(([id]) => need === "p:flour" ? id === flourId : need.startsWith("p:") ? id === need
-      : recipe === "flour" && sort ? id === sort : ss[id] && ss[id].shape === need)
+      : recipe === "flour" && sort ? id === sort : need === main ? !!ss[id] && ss[id].shape === need && rawKey(ss[id]) === sort : ss[id] && ss[id].shape === need)
       .sort((a, c) => (!sorted ? (ss[c[0]]?.myth ? 1 : 0) - (ss[a[0]]?.myth ? 1 : 0) : 0) || (ss[a[0]]?.dust || 0) - (ss[c[0]]?.dust || 0));   // мифическое — в дело первым
     for (const [id, have] of fit) { const take = Math.min(left, Number(have)); if (take > 0) { plan.push([id, take]); left -= take; } }
     if (left > 0) return { error: "Не хватает продуктов в амбаре" };
@@ -897,19 +932,23 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
 // (простой — сутки, сложный — двое, особый — трое; его правка 2026-11-15);
 // выполнил — новый заказ через полчаса, срок вышел — сразу новый. Раз в сутки можно заменить неудобный заказ.
 const ORDER_FOR = [DAY, 2 * DAY, 3 * DAY], ORDER_NEXT = 30 * 60, ORDER_X = [1.5, 1.5, 2], ORDER_TIER = ["Простой", "Сложный", "Особый"];   // названия вернул по его просьбе
-// его правка 2026-11-15: простой — выгоден дешёвой еде (фиксированно ✦50 за штуку: хлеб и суп из мха дешевле, булочки и пироги дороже),
 // сложный — ×1,5 цены блюд, особый (дорогие блюда) — ×2
-const SIMPLE_PER = 50;
-// простой заказ (его правка 2026-11-15): без конкретного блюда — «любая выпечка ×N» (или «любая мука», пока нет печи)
-const ANY_NAME: Record<string, string> = { "*oven": "Любая выпечка", "*mill": "Любая мука" };
-function anyOf(r: string) { const kind = r.slice(1); return Object.keys(RECIPES).filter((k) => RECIPES[k].kind === kind); }
-function orderFits(r: string, recipe: string) { return r.startsWith("*") ? anyOf(r).includes(recipe) : r === recipe; }
+// простой заказ (его правка 2026-11-15): категория — «Хлеб», «Пироги», «Похлёбка»… («~pie»); подходит любое блюдо категории любого сорта,
+// какие именно отдать — выбирает игрок. Награда — ×1,5 от самого дешёвого блюда категории: дешёвое отдать выгодно, дорогое — в убыток.
+export const ORDER_CATS: Record<string, { name: string; r: string[] }> = {
+  bread: { name: "Хлеб", r: ["bread"] }, bun: { name: "Булочки", r: ["bun"] }, soup: { name: "Похлёбка", r: ["soup", "stew"] },
+  pie: { name: "Пироги", r: ["pie", "pumpkin"] }, tea: { name: "Чай", r: ["tea"] }, jam: { name: "Джем", r: ["jam"] }, flour: { name: "Мука", r: ["flour"] },
+};
+function anyOf(r: string) { return r.startsWith("~") ? (ORDER_CATS[r.slice(1)] || { r: [] }).r : []; }
+function orderFits(r: string, recipe: string) { return r.startsWith("~") ? anyOf(r).includes(recipe) : r === recipe; }
 function genOrder(slot: number, builds: string[]) {
   const can = Object.keys(RECIPES).filter((k) => builds.includes(RECIPES[k].kind) && !(k === "flour" && builds.includes("oven")));   // мука — только пока нет печи
   if (!can.length) return null;
   if (slot === 0) {
-    const any = builds.includes("oven") ? "*oven" : "*mill", n = 2 + Math.floor(Math.random() * 3);
-    return { items: [{ r: any, n }], reward: n * (any === "*mill" ? 12 : SIMPLE_PER) };
+    const cats = Object.keys(ORDER_CATS).filter((c) => ORDER_CATS[c].r.every((k) => can.includes(k)));
+    if (!cats.length) return null;
+    const c = cats[Math.floor(Math.random() * cats.length)], n = 2 + Math.floor(Math.random() * 3), cheap = Math.min(...ORDER_CATS[c].r.map((k) => RECIPES[k].dust));
+    return { items: [{ r: "~" + c, n }], reward: Math.max(10, Math.round(n * cheap * ORDER_X[0] / 5) * 5) };
   }
   const r = Math.random, pool = slot === 2 ? can.slice().sort((a, b) => RECIPES[b].dust - RECIPES[a].dust).slice(0, Math.max(3, Math.ceil(can.length / 2))) : can;
   const types = Math.min(pool.length, slot === 0 ? 1 + Math.floor(r() * 2) : slot === 1 ? 2 + Math.floor(r() * 2) : 3);
@@ -924,15 +963,15 @@ async function ordersOf(uid: number, builds: string[]) {
   const out = [];
   for (let slot = 0; slot < 3; slot++) {
     let row = rows.get(slot), items = row ? JSON.parse(String(row[1])) : [];
-    const oldSimple = slot === 0 && items.length && (!String(items[0].r).startsWith("*")   // простой заказ старого вида (конкретные блюда) — сразу на новый
-      || (items[0].r === "*oven" && Number(row![2]) !== Number(items[0].n) * SIMPLE_PER));      // или со старой наградой — пересчитать
+    const oldSimple = slot === 0 && items.length && !(String(items[0].r).startsWith("~") && ORDER_CATS[String(items[0].r).slice(1)]);   // простой заказ прежнего вида — сразу на новый
     const stale = !row || oldSimple || (items.length && Number(row[3]) <= t) || (!items.length && Number(row[4]) <= t);
     if (stale) {
       const g = genOrder(slot, builds); if (!g) continue;
       await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [uid, slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]);
       row = [slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]; items = g.items;
     }
-    out.push({ slot, tier: ORDER_TIER[slot], items: items.map((it: any) => ({ recipe: it.r, n: it.n, name: ANY_NAME[it.r] || RECIPES[it.r]?.name || it.r, ...(it.r.startsWith("*") ? { any: anyOf(it.r) } : {}) })),
+    out.push({ slot, tier: ORDER_TIER[slot], items: items.map((it: any) => ({ recipe: it.r, n: it.n, name: String(it.r).startsWith("~") ? (ORDER_CATS[String(it.r).slice(1)]?.name || it.r) : RECIPES[it.r]?.name || it.r,
+                                                             ...(String(it.r).startsWith("~") ? { pick: true, fits: anyOf(it.r) } : {}) })),
                reward: Number(row![2]), until: Number(row![3]), ready: Number(row![4]) });
   }
   const day = Math.floor((t + TZ) / DAY);
@@ -947,7 +986,7 @@ export async function fulfil(u: any, slot: number, pick?: Record<string, number>
   const barn = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0 AND strain LIKE 'p:%'", [u.id]);
   const prices = (await productsFor(barn.map((x) => String(x[0])))).products;
   const plan: [string, number][] = [];
-  if (items.length === 1 && String(items[0].r).startsWith("*")) {            // простой заказ: игрок сам выбрал блюда (его решение 2026-11-15)
+  if (items.length === 1 && String(items[0].r).startsWith("~")) {            // простой заказ: игрок сам выбрал, какие именно блюда (его решение 2026-11-15)
     if (!pick || typeof pick !== "object") return { error: "Выбери, какие блюда отдать" };
     const have = new Map(barn.map((x) => [String(x[0]), Number(x[1])])); let sum = 0;
     for (const [id, k0] of Object.entries(pick)) {
@@ -962,7 +1001,7 @@ export async function fulfil(u: any, slot: number, pick?: Record<string, number>
     for (const [id, c] of barn.filter((x) => orderFits(it.r, recipeOf(String(x[0]))) && !plan.some((p) => p[0] === String(x[0]) && p[1] >= Number(x[1]))).sort((a, b) => (prices[String(a[0])]?.dust || 0) - (prices[String(b[0])]?.dust || 0))) {
       const take = Math.min(left, Number(c)); if (take > 0) { plan.push([String(id), take]); left -= take; }
     }
-    if (left > 0) return { error: "Не хватает блюд: " + (ANY_NAME[it.r] || RECIPES[it.r]?.name || it.r).toLowerCase() };
+    if (left > 0) return { error: "Не хватает блюд: " + (RECIPES[it.r]?.name || it.r).toLowerCase() };
   }
   if (!(await q("DELETE FROM f_orders WHERE user = ? AND slot = ? AND items = ? RETURNING 1", [u.id, slot, String(row[0])])).length) return { error: "Заказ уже сдан" };
   const done: [string, number][] = [];
