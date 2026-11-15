@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151411";
+    var BUILD = "202611151419";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -220,6 +220,10 @@
   .ping b, .ping b.who { display: inline; color: #7a3b12; } .ping .ev { color: #2f7a3a; font-weight: 700; } .ping small { display: none; }
   .ping.mine { background: #ffe7a8; }
   @keyframes pingin { from { transform: translateY(-14px) scale(.97); } }   /* без прозрачности: если анимации стоят, плашку всё равно видно */
+  .qty { display: grid; grid-template-columns: 46px 52px 46px 1fr; gap: 8px; align-items: center; margin: 12px 3px 0; }   /* − N + рядом, «все» — на остаток (его эскиз) */
+  .qty .btn { margin: 0; min-height: 42px; padding: 0 10px; width: auto; font-size: 20px; }
+  .qty .btn:last-child { font-size: 14px; }
+  .qval { text-align: center; font-family: var(--pix); font-size: 22px; font-weight: 700; color: var(--cream); }
   .feednote { margin: 12px 3px 0; font-size: 13.5px; line-height: 1.4; color: rgba(246, 239, 227, .75); }
   #toneighbors.dot, #ntabs button.dot { position: relative; }
   #toneighbors.dot::after, #ntabs button.dot::after { content: ""; position: absolute; top: 6px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: #ff6a4a; box-shadow: 0 0 0 2px rgba(42, 20, 6, .6); }
@@ -2905,25 +2909,25 @@
       line(st.base ? "Цена у станции" : "Цена в лавке", "✦ " + (st.base ? st.cost : st.price) + " за семя");
       sh.appendChild(props);
       var mine = s && !opt.foreign ? bagOf(st.id) : null;
-      if (mine) sh.appendChild(el("div", "sub", "У тебя: " + mine.count));
-      if (mine && freeOf(mine) > 0) {                                                // лишние семена — в пыль
-        var sd = seedDustOf(st), fr = freeOf(mine), da = el("div", "invacts");
-        da.appendChild(btn("1 в пыль · ✦ " + sd, "ghost", function () { close(); seedsDust(st.id, 1, "inv"); }));
-        if (fr > 1) da.appendChild(btn("все " + fr + " в пыль · ✦ " + sd * fr, "ghost", function () { close(); seedsDust(st.id, fr, "inv"); }));
-        sh.appendChild(da);
+      var hv = null, lavDraw = null;
+      if (mine) { hv = el("div", "sub", "У тебя: " + mine.count); sh.appendChild(hv); }
+      if (mine && freeOf(mine) > 0) {                                                // лишние семена — в пыль, сколько выберешь; окно остаётся открытым
+        var sd = seedDustOf(st);
+        qtyBox(sh, { key: "dust:" + st.id, max: function () { return freeOf(bagOf(st.id)); }, empty: "Свободных семян больше нет.",
+          acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + sd * n; }, cls: "ghost",
+                   run: function (n) { seedsDust(st.id, n, "inv"); if (hv) hv.textContent = "У тебя: " + bagOf(st.id).count; if (lavDraw) lavDraw(); } }] });
       }
       if (mine && !st.base) {                                                       // продажа: сколько семян лежит в твоей лавке
         var h = el("div", "mono", "Твоя лавка"); h.style.marginTop = "18px"; sh.appendChild(h);
         sh.appendChild(el("div", "sub", "Соседи, которые зайдут к тебе в гости, смогут купить выставленные семена по ✦ " + st.price +
           ". Пыль придёт тебе сразу. Выставленные семена не посадить, пока не уберёшь их с продажи."));
-        var stat = el("div", "salecount"), acts = el("div", "salebtns");
-        var minus = btn("− убрать", "ghost", function () { step(-1); }), plus = btn("+ выставить", "", function () { step(1); });
-        var draw = function () {
-          stat.textContent = "На продаже: " + mine.listed + " из " + mine.count;
-          minus.disabled = !mine.listed; plus.disabled = mine.listed >= mine.count;
-        };
-        var step = function (d) { haptic("light"); mine.listed += d; draw(); renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: d }).catch(function () {}); };
-        draw(); sh.appendChild(stat); acts.appendChild(minus); acts.appendChild(plus); sh.appendChild(acts);
+        var stat = el("div", "salecount"), upd = function () { stat.textContent = "На продаже: " + mine.listed + " из " + mine.count; };
+        var step = function (d) { haptic("light"); mine.listed += d; upd(); renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: d }).catch(function () {}); };
+        upd(); sh.appendChild(stat);
+        var lq = qtyBox(sh, { key: "list:" + st.id, max: function () { return mine.count; },
+          acts: [{ t: function (n) { return "Выставить " + n; }, max: function () { return mine.count - mine.listed; }, run: function (n) { step(n); } },
+                 { t: function (n) { return "Убрать " + n; }, cls: "ghost", max: function () { return mine.listed; }, run: function (n) { step(-n); } }] });
+        lavDraw = function () { upd(); lq.draw(); };
       } else if (mine && st.base) sh.appendChild(el("div", "sub", "Семена станции в своей лавке не продаются — только выведенные тобой сорта."));
       if (opt.buy) sh.appendChild(btn("Купить за ✦ " + st.price, "", function () { close(); opt.buy(); }));
       if (opt.back) sh.appendChild(btn("Назад", "ghost", function () { close(); opt.back(); }));
@@ -3267,6 +3271,30 @@
     return wrap;
   }
 
+  // счётчик количества (его правка 2026-11-15): «− N + · все», под ним действия на выбранное число; окно после действия не закрывается.
+  // o.key — запомнить число, если окно перерисуется; o.max() — сколько можно; acts: [{t(n) — подпись, run(n), max() — свой предел, cls}]
+  F.qtyMem = F.qtyMem || {};
+  function qtyBox(box, o) {
+    var wrap = el("div", "qtybox"), n = (o.key && F.qtyMem[o.key]) || 1;
+    var draw = function () {
+      wrap.innerHTML = "";
+      var mx = o.max(); if (mx < 1) { if (o.empty) wrap.appendChild(el("div", "sub", o.empty)); return; }
+      n = Math.max(1, Math.min(n, mx)); if (o.key) F.qtyMem[o.key] = n;
+      var row = el("div", "qty");
+      var minus = btn("−", "ghost", function () { haptic("light"); n = Math.max(1, n - 1); draw(); });
+      var plus = btn("+", "ghost", function () { haptic("light"); n = Math.min(mx, n + 1); draw(); });
+      var all = btn(n === mx ? "по одному" : "все " + mx, "ghost", function () { haptic("light"); n = n === mx ? 1 : mx; draw(); });
+      minus.disabled = n <= 1; plus.disabled = n >= mx; if (mx === 1) all.style.visibility = "hidden";   // одна штука — «все» не нужна
+      row.appendChild(minus); row.appendChild(el("div", "qval", String(n))); row.appendChild(plus); row.appendChild(all); wrap.appendChild(row);
+      var a = el("div", "invacts");
+      o.acts.forEach(function (x) {
+        var lim = x.max ? x.max() : mx, b = btn(x.t(n), x.cls || "", function () { if (n > lim) return; x.run(n); draw(); });
+        b.disabled = lim < 1 || n > lim; a.appendChild(b);
+      });
+      wrap.appendChild(a);
+    };
+    box.appendChild(wrap); draw(); return { draw: draw };
+  }
   // сундук у домика: лишние семена. Убрал — в инвентаре их нет (не посадить и не продать), достал — вернулись
   function seedDustOf(st) { var k = (F.state && F.state.seed_dust) || .4; return Math.max(1, Math.floor((st.base ? st.cost || 1 : st.price || 1) * k)); }
   function seedsDust(id, n, from) {                              // семена → пыль сразу, сервер подтвердит
@@ -3316,15 +3344,11 @@
           if (F.sel === id && freeOf(bagOf(id)) <= 0) F.sel = "can";
           draw(); renderFarm(); farmCall("/api/farm/chest", { strain: id, delta: n }).catch(function () {});
         };
-        var a = el("div", "invacts"), sg = from === "bag" ? 1 : -1;
-        a.appendChild(btn(from === "bag" ? "В сундук: 1" : "Достать 1", "ghost", function () { move(sg); }));
-        if (have > 1) a.appendChild(btn((from === "bag" ? "В сундук все " : "Достать все ") + have, "", function () { move(sg * have); }));
-        fbox.appendChild(a);
-        var sd = seedDustOf(st), b2 = el("div", "invacts"), src = from === "bag" ? "inv" : "chest";
+        var sg = from === "bag" ? 1 : -1, sd = seedDustOf(st), src = from === "bag" ? "inv" : "chest";
         var dust = function (n) { seedsDust(id, n, src); if ((src === "chest" ? chestOf(id).count : freeOf(bagOf(id))) <= 0) F.chestSel = null; draw(); };
-        b2.appendChild(btn("1 в пыль · ✦ " + sd, "ghost", function () { dust(1); }));
-        if (have > 1) b2.appendChild(btn("все в пыль · ✦ " + sd * have, "ghost", function () { dust(have); }));
-        fbox.appendChild(b2);
+        qtyBox(fbox, { key: "chest:" + sel, max: function () { return from === "bag" ? freeOf(bagOf(id)) : (chestOf(id) || { count: 0 }).count; },
+          acts: [{ t: function (n) { return (from === "bag" ? "В сундук " : "Достать ") + n; }, run: function (n) { move(sg * n); } },
+                 { t: function (n) { return "В пыль " + n + " · ✦ " + sd * n; }, cls: "ghost", run: function (n) { dust(n); } }] });
       };
       draw();
       var acts = el("div", "salebtns"); acts.appendChild(btn("Готово", "", close)); foot.appendChild(acts); sh.appendChild(foot);
@@ -3376,14 +3400,11 @@
         a.appendChild(btn("Сажать этот", "", function () { haptic("success"); F.sel = id; F.pick[name] = id; close(); renderFarm(); if (F.invRedraw) F.invRedraw(); }));
         a.appendChild(btn("Подробнее", "ghost", function () { close(); seedSheet(st); }));
         foot.appendChild(a);
-        var b2 = el("div", "invacts");
-        b2.appendChild(btn("1 в пыль · ✦ " + sd, "ghost", function () { seedsDust(id, 1, "inv"); draw(); }));
-        if (fr > 1) b2.appendChild(btn("все " + fr + " · ✦ " + sd * fr, "ghost", function () { seedsDust(id, fr, "inv"); draw(); }));
-        if (!st.base) b2.appendChild(btn("+1 в лавку", "ghost", function () {
-          if (freeOf(bagOf(id)) < 1) return; haptic("light"); bagOf(id).listed += 1; draw(); renderFarm(); if (F.invRedraw) F.invRedraw();
-          farmCall("/api/farm/list", { strain: id, delta: 1 }).catch(function () {}); toast("Выставлено в лавку по ✦ " + priceFor("s:" + id, st.price));
-        }));
-        foot.appendChild(b2);
+        var vacts = [{ t: function (n) { return "В пыль " + n + " · ✦ " + sd * n; }, cls: "ghost", run: function (n) { seedsDust(id, n, "inv"); draw(); } }];
+        if (!st.base) vacts.push({ t: function (n) { return "В лавку " + n; }, cls: "ghost", run: function (n) {
+          haptic("light"); bagOf(id).listed += n; draw(); renderFarm(); if (F.invRedraw) F.invRedraw();
+          farmCall("/api/farm/list", { strain: id, delta: n }).catch(function () {}); toast("Выставлено в лавку: " + n + " по ✦ " + priceFor("s:" + id, st.price)); } });
+        qtyBox(foot, { key: "var:" + id, max: function () { return freeOf(bagOf(id)); }, acts: vacts });
         if (g.ids.length > 1) {                                       // оставить выбранный, остальные — в пыль
           var rest = g.ids.filter(function (x) { return x !== id; }), restN = 0, restD = 0;
           rest.forEach(function (x) { var n = freeOf(bagOf(x)); restN += n; restD += n * seedDustOf(s.strains[x]); });
@@ -3464,17 +3485,18 @@
         var picked = Object.keys(selSet).map(barnOf), acts = el("div", "invacts");
         var toStall = function (list) {                             // сразу: из амбара на прилавок; сервер подтвердит
           haptic("success"); var n = 0;
-          list.forEach(function (x) { var id = x.strain, k2 = x.count; if (k2 <= 0) return; n += k2; x.count = 0;
+          list.forEach(function (x) { var id = x.strain, k2 = x.count, bo = barnOf(id); if (k2 <= 0 || !bo) return; k2 = Math.min(k2, bo.count); n += k2; bo.count -= k2;
             var sx = stallOf(id); if (sx) sx.listed += k2; else (F.state.stall = F.state.stall || []).push({ item: id, listed: k2 });
             farmCall("/api/farm/stall", { item: id, delta: k2 }).catch(function () {}); });
-          F.barnSet = {}; renderFarm(); drawBarn(); toast("Выставлено в лавку: " + n + " " + plural(n, "штука", "штуки", "штук"));
+          renderFarm(); drawBarn(); toast("Выставлено в лавку: " + n + " " + plural(n, "штука", "штуки", "штук"));
         };
         if (picked.length === 1) {
           var sel = picked[0], st = itemOf(sel.strain);
           barnBox.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли." + (BARN_MULTI ? " Можно выделить ещё ячейки." : "")));
-          acts.appendChild(btn("1 в пыль · ✦ " + st.dust, "ghost", function () { toDust(sel.strain, 1, st.dust); drawBarn(); renderFarm(); }));
-          if (sel.count > 1) acts.appendChild(btn("все " + sel.count + " · ✦ " + st.dust * sel.count, "", function () { toDust(sel.strain, sel.count, st.dust * sel.count); drawBarn(); }));
-          if (BARN_MULTI) acts.appendChild(btn("В лавку" + (sel.count > 1 ? " · все " + sel.count : ""), "ghost", function () { toStall([sel]); }));
+          var bsel = sel;
+          qtyBox(barnBox, { key: "barn:" + bsel.strain, max: function () { return (barnOf(bsel.strain) || { count: 0 }).count; },
+            acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + st.dust * n; }, run: function (n) { toDust(bsel.strain, n, st.dust * n); drawBarn(); } },
+                   { t: function (n) { return "В лавку " + n; }, cls: "ghost", run: function (n) { toStall([{ strain: bsel.strain, count: n }]); } }] });
         } else if (picked.length > 1) {
           var cnt = 0, sum = 0; picked.forEach(function (x) { cnt += x.count; sum += x.count * itemOf(x.strain).dust; });
           barnBox.appendChild(el("div", "sub", "Выделено ячеек: " + picked.length + " — " + cnt + " " + plural(cnt, "штука", "штуки", "штук") + ", в пыль это ✦ " + sum + "."));
@@ -3635,9 +3657,9 @@
           toast((kind === "mill" ? "Мельница мелет: " : "В печи: ") + (itemName(pid) || r.name).toLowerCase() + " ×" + n);
           farmCall("/api/farm/cook", { recipe: k, n: n, sort: sort }).catch(function () {});
         };
-        if (can < 1) { var no = btn("не хватает", "ghost", function () {}); no.disabled = true; acts.appendChild(no); }
-        else { acts.appendChild(btn("1 шт", "ghost", function () { go(1); })); if (can > 1) acts.appendChild(btn("все " + can + " · ⏱ " + fmtLeft(r.min * 60 * can), "", function () { go(can); })); }
-        sh.appendChild(acts);
+        if (can < 1) { var no = btn("не хватает", "ghost", function () {}); no.disabled = true; acts.appendChild(no); sh.appendChild(acts); }
+        else qtyBox(sh, { key: "cook:" + k + ":" + sort, max: function () { return can; },
+                          acts: [{ t: function (n) { return (kind === "mill" ? "Смолоть " : "Испечь ") + n + " · ⏱ " + fmtLeft(r.min * 60 * n); }, run: function (n) { go(n); } }] });
       });
       sh.appendChild(btn("Закрыть", "ghost", close));
     });
@@ -3814,11 +3836,10 @@
           var d = infoBox(box, st.name + " · " + strainCode(st), ["У тебя " + it.count + ", на продаже " + it.listed + ". Цену семени игра считает по свойствам сорта — ✦ " + st.price + ".",
             "Выставленные семена не посадить, пока не уберёшь их с продажи."]);
           var step = function (dl) { haptic("light"); it.listed += dl; renderShopTab(); renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: dl }).catch(function () {}); };
-          var a = el("div", "invacts"), minus = btn("− убрать", "ghost", function () { step(-1); }), plus = btn("+ выставить", "", function () { step(1); });
-          minus.disabled = !it.listed; plus.disabled = it.listed >= it.count;
-          if (it.count - it.listed > 1) { a.appendChild(plus); a.appendChild(btn("все " + (it.count - it.listed), "ghost", function () { step(it.count - it.listed); })); a.appendChild(minus); }
-          else { a.appendChild(minus); a.appendChild(plus); }                    // главная — первой: при трёх кнопках она во всю ширину
-          d.appendChild(a); priceControl(d, "s:" + st.id, st.price, st.id, "seed");
+          qtyBox(d, { key: "shs:" + st.id, max: function () { return it.count; },
+            acts: [{ t: function (n) { return "Выставить " + n; }, max: function () { return it.count - it.listed; }, run: function (n) { step(n); } },
+                   { t: function (n) { return "Убрать " + n; }, cls: "ghost", max: function () { return it.listed; }, run: function (n) { step(-n); } }] });
+          priceControl(d, "s:" + st.id, st.price, st.id, "seed");
         };
       });
     } else {
@@ -3837,11 +3858,10 @@
             var sx = stallOf(id); if (sx) sx.listed += dl; else (F.state.stall = F.state.stall || []).push({ item: id, listed: dl });
             renderShopTab(); renderFarm(); farmCall("/api/farm/stall", { item: id, delta: dl }).catch(function () {});
           };
-          var a = el("div", "invacts"), minus = btn("− убрать", "ghost", function () { step(-1); }), plus = btn("+ выставить", "", function () { step(1); });
-          minus.disabled = !ons; plus.disabled = !inb;
-          if (inb > 1) { a.appendChild(plus); a.appendChild(btn("все " + inb, "ghost", function () { step(inb); })); a.appendChild(minus); }
-          else { a.appendChild(minus); a.appendChild(plus); }                    // главная — первой: при трёх кнопках она во всю ширину
-          d.appendChild(a); priceControl(d, id, base, id, "item");
+          qtyBox(d, { key: "shi:" + id, max: function () { return Math.max(inb, ons); },
+            acts: [{ t: function (n) { return "Выставить " + n; }, max: function () { return inb; }, run: function (n) { step(n); } },
+                   { t: function (n) { return "Убрать " + n; }, cls: "ghost", max: function () { return ons; }, run: function (n) { step(-n); } }] });
+          priceControl(d, id, base, id, "item");
         };
       });
     }
