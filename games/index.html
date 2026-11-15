@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151419";
+    var BUILD = "202611151429";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2132,8 +2132,8 @@
       disc(c, l[0], l[1], 5, "rgba(159,245,222," + (.1 + .12 * pulse).toFixed(2) + ")");
       px(c, l[0] - 1, l[1] - 1, 3, 3, C.lamp); px(c, l[0], l[1] - 2, 1, 1, "#ffffff"); px(c, l[0] - 1, l[1] + 2, 3, 1, C.k);
     });
-    for (i = 0; i < 3; i++) {                                                      // лунные куры гуляют по лугу
-      var hs = t / 1000 + i * 3.3, hx = Math.round([40, 140, 66][i] + Math.sin(hs * .35 + i) * 12), hy = [FH - 22, FH - 26, FH - 12][i] + Math.round(Math.sin(hs * .5 + i * 2) * 2);
+    for (i = 0; i < 2; i++) {                                                      // лунные куры гуляют по лугу (третья пряталась под лейкой и лопатой — убрана) — мимо печи, тропинки и магазина (его правка 2026-11-15: ходили по магазину)
+      var hs = t / 1000 + i * 3.3, hx = Math.round([62, 110, 22][i] + Math.sin(hs * .35 + i) * [7, 5, 6][i]), hy = [FH - 14, FH - 16, FH - 8][i] + Math.round(Math.sin(hs * .5 + i * 2) * 2);
       var peck = Math.sin(hs * 1.7 + i) > .75 ? 1 : 0, fr = (Math.floor(t / 260) + i) % 2, rowsH = HEN[fr];
       for (var j = 0; j < rowsH.length; j++) for (var q = 0; q < 6; q++) { var ch = rowsH[j][q]; if (ch !== ".") px(c, hx + q, hy + j + (j < 2 ? peck : 0), 1, 1, HENPAL[ch]); }
       px(c, hx, hy + 5, 5, 1, "rgba(40,60,20,.3)");
@@ -3209,7 +3209,7 @@
           page.appendChild(el("div", "bsub", "Жители станции заказывают блюда"));
           rules([
             ["Постройка", "Магазин стоит ✦ 500 и строится в правом нижнем углу луга. Построить его можно, когда уже есть мельница или печь: магазину нужны блюда."],
-            ["Заказы", "На доске всегда три заказа: простой, сложный и особый. В заказе несколько блюд — сколько каждого нужно и сколько уже есть в амбаре. Сорт муки неважен: подойдёт хлеб из любой пшеницы."],
+            ["Заказы", "На доске всегда три заказа. Простой — любая выпечка, какая есть: хлеб, булочка, пирог — неважно. Сложный и особый — конкретные блюда, у каждого видно, сколько нужно и сколько уже есть в амбаре. Сорт муки неважен: подойдёт хлеб из любой пшеницы."],
             ["Награда", "Заказ платит звёздной пылью больше, чем стоят те же блюда по отдельности: простой — в полтора раза, сложный — почти вдвое, особый — вдвое."],
             ["Сроки", "На простой заказ — сутки, на сложный — двое, на особый — трое. Не успел — заказ уходит, и на его месте сразу появляется новый."],
             ["Сдать", "Когда всех блюд хватает, над магазином мигает искорка. Нажми «Сдать»: блюда уйдут из амбара — сначала самые дешёвые, — а пыль сразу придёт тебе. Новый заказ появится через полчаса."],
@@ -3535,10 +3535,14 @@
     fit.forEach(function (it) { var t = Math.min(n, it.count); it.count -= t; n -= t; });
   }
   // ---------- магазин: доска заказов на блюда ----------
-  function haveRecipe(recipe) { var n = 0; (F.state.barn || []).forEach(function (it) { if (it.count > 0 && it.strain.indexOf("p:") === 0 && recKey(it.strain) === recipe) n += it.count; }); return n; }
+  function fitsOrder(recipe, id) {                              // «*oven» — любая выпечка, «*mill» — любая мука (простой заказ)
+    var r = recKey(id), all = (F.state && F.state.recipes) || {};
+    return recipe.charAt(0) === "*" ? !!(all[r] && all[r].kind === recipe.slice(1)) : r === recipe;
+  }
+  function haveRecipe(recipe) { var n = 0; (F.state.barn || []).forEach(function (it) { if (it.count > 0 && it.strain.indexOf("p:") === 0 && fitsOrder(recipe, it.strain)) n += it.count; }); return n; }
   function orderReady(o) { return o.items.every(function (it) { return haveRecipe(it.recipe) >= it.n; }); }
   function takeRecipe(recipe, n) {                              // сразу убрать сданные блюда из амбара (сначала дешёвые, как на сервере)
-    var list = (F.state.barn || []).filter(function (it) { return it.count > 0 && it.strain.indexOf("p:") === 0 && recKey(it.strain) === recipe; })
+    var list = (F.state.barn || []).filter(function (it) { return it.count > 0 && it.strain.indexOf("p:") === 0 && fitsOrder(recipe, it.strain); })
       .sort(function (a, b) { return (itemOf(a.strain) || {}).dust - (itemOf(b.strain) || {}).dust; });
     list.forEach(function (it) { var k = Math.min(n, it.count); it.count -= k; n -= k; });
   }
@@ -3557,7 +3561,7 @@
           var ul = el("div", "olist");
           o.items.forEach(function (it) {
             var have = haveRecipe(it.recipe), row = el("div", "orow" + (have >= it.n ? " ok" : ""));
-            var cv = el("canvas", "pix"); itemIcon(cv, "p:" + it.recipe); row.appendChild(cv);
+            var cv = el("canvas", "pix"); itemIcon(cv, it.recipe.charAt(0) === "*" ? (it.recipe === "*mill" ? "p:flour" : "p:bread") : "p:" + it.recipe); row.appendChild(cv);
             row.appendChild(el("span", "", it.name + " ×" + it.n)); row.appendChild(el("b", "", Math.min(have, it.n) + " из " + it.n)); ul.appendChild(row);
           });
           card.appendChild(ul);

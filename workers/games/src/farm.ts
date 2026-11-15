@@ -897,9 +897,18 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
 // (простой — сутки, сложный — двое, особый — трое; его правка 2026-11-15);
 // выполнил — новый заказ через полчаса, срок вышел — сразу новый. Раз в сутки можно заменить неудобный заказ.
 const ORDER_FOR = [DAY, 2 * DAY, 3 * DAY], ORDER_NEXT = 30 * 60, ORDER_X = [1.5, 1.7, 2], ORDER_TIER = ["Простой", "Сложный", "Особый"];
+// простой заказ (его правка 2026-11-15): без конкретного блюда — «любая выпечка ×N» (или «любая мука», пока нет печи)
+const ANY_NAME: Record<string, string> = { "*oven": "Любая выпечка", "*mill": "Любая мука" };
+function anyOf(r: string) { const kind = r.slice(1); return Object.keys(RECIPES).filter((k) => RECIPES[k].kind === kind); }
+function orderFits(r: string, recipe: string) { return r.startsWith("*") ? anyOf(r).includes(recipe) : r === recipe; }
 function genOrder(slot: number, builds: string[]) {
   const can = Object.keys(RECIPES).filter((k) => builds.includes(RECIPES[k].kind) && !(k === "flour" && builds.includes("oven")));   // мука — только пока нет печи
   if (!can.length) return null;
+  if (slot === 0) {
+    const any = builds.includes("oven") ? "*oven" : "*mill", n = 2 + Math.floor(Math.random() * 3);
+    const cheap = Math.min(...anyOf(any).map((k) => RECIPES[k].dust));
+    return { items: [{ r: any, n }], reward: Math.max(10, Math.round(n * cheap * ORDER_X[0] / 5) * 5) };
+  }
   const r = Math.random, pool = slot === 2 ? can.slice().sort((a, b) => RECIPES[b].dust - RECIPES[a].dust).slice(0, Math.max(3, Math.ceil(can.length / 2))) : can;
   const types = Math.min(pool.length, slot === 0 ? 1 + Math.floor(r() * 2) : slot === 1 ? 2 + Math.floor(r() * 2) : 3);
   const pick = pool.slice().sort(() => r() - 0.5).slice(0, types);
@@ -919,7 +928,7 @@ async function ordersOf(uid: number, builds: string[]) {
       await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [uid, slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]);
       row = [slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]; items = g.items;
     }
-    out.push({ slot, tier: ORDER_TIER[slot], items: items.map((it: any) => ({ recipe: it.r, n: it.n, name: RECIPES[it.r]?.name || it.r })),
+    out.push({ slot, tier: ORDER_TIER[slot], items: items.map((it: any) => ({ recipe: it.r, n: it.n, name: ANY_NAME[it.r] || RECIPES[it.r]?.name || it.r, ...(it.r.startsWith("*") ? { any: anyOf(it.r) } : {}) })),
                reward: Number(row![2]), until: Number(row![3]), ready: Number(row![4]) });
   }
   const day = Math.floor((t + TZ) / DAY);
@@ -936,10 +945,10 @@ export async function fulfil(u: any, slot: number) {
   const plan: [string, number][] = [];
   for (const it of items) {                                  // берём сначала самые дешёвые блюда этого рецепта
     let left = Number(it.n);
-    for (const [id, c] of barn.filter((x) => recipeOf(String(x[0])) === it.r).sort((a, b) => (prices[String(a[0])]?.dust || 0) - (prices[String(b[0])]?.dust || 0))) {
+    for (const [id, c] of barn.filter((x) => orderFits(it.r, recipeOf(String(x[0]))) && !plan.some((p) => p[0] === String(x[0]) && p[1] >= Number(x[1]))).sort((a, b) => (prices[String(a[0])]?.dust || 0) - (prices[String(b[0])]?.dust || 0))) {
       const take = Math.min(left, Number(c)); if (take > 0) { plan.push([String(id), take]); left -= take; }
     }
-    if (left > 0) return { error: "Не хватает блюд: " + (RECIPES[it.r]?.name || it.r) };
+    if (left > 0) return { error: "Не хватает блюд: " + (ANY_NAME[it.r] || RECIPES[it.r]?.name || it.r).toLowerCase() };
   }
   if (!(await q("DELETE FROM f_orders WHERE user = ? AND slot = ? AND items = ? RETURNING 1", [u.id, slot, String(row[0])])).length) return { error: "Заказ уже сдан" };
   const done: [string, number][] = [];
