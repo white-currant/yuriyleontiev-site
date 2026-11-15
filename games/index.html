@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611152314";
+    var BUILD = "202611160206";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -680,6 +680,8 @@
   body[data-screen^="farm"] .salecount, body[data-screen^="farm"] .salecount2 { color: var(--cream); }
   body[data-screen^="farm"] .nlist li { font-family: var(--pix); background: var(--wood); box-shadow: var(--frame), inset 0 3px 0 var(--wood3); margin: 14px 3px 0; padding: 10px 12px; }
   body[data-screen^="farm"] .nlist .t { color: var(--cream2); }
+  body[data-screen^="farm"] .nlist li.me { background: var(--wood3); }
+  .nlist .place { font-size: 15px; font-weight: 700; color: var(--gold); padding: 0 10px; white-space: nowrap; }
   body[data-screen^="farm"] .nlist button { border-radius: 0; font-family: var(--pix); font-weight: 700; background: var(--pgold); color: var(--ink); padding: 8px 12px;
     box-shadow: 0 -2px 0 var(--ink), 0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink), inset 0 -3px 0 var(--pgold2); }
   /* окна: деревянная панель с рамкой */
@@ -3642,13 +3644,14 @@
   }
   // ---------- магазин: доска заказов на блюда ----------
   var ORDER_CATS = { bread: ["bread"], bun: ["bun"], soup: ["soup", "stew"], pie: ["pie", "pumpkin"], tea: ["tea"], jam: ["jam"], flour: ["flour"] };   // как на сервере
-  function fitsOrder(recipe, id) {                              // «~pie» — категория «Пироги»: любой пирог любого сорта (простой заказ)
-    var r = recKey(id); return recipe.charAt(0) === "~" ? (ORDER_CATS[recipe.slice(1)] || []).indexOf(r) >= 0 : r === recipe;
+  function dishGrade(id) { var i = id.indexOf("@"), k = i < 0 ? "" : id.slice(i + 1); return /^[gr]:/.test(k) ? Math.max(0, Math.min(2, parseInt(k.split(":")[2], 10) || 0)) : 2; }   // как на сервере
+  function fitsOrder(recipe, id, g) {                           // «~pie» — категория «Пироги»: любой пирог любого сорта (простой заказ); g — сорт не ниже (особый)
+    var r = recKey(id); return (recipe.charAt(0) === "~" ? (ORDER_CATS[recipe.slice(1)] || []).indexOf(r) >= 0 : r === recipe) && (g == null || dishGrade(id) <= g);
   }
-  function haveRecipe(recipe) { var n = 0; (F.state.barn || []).forEach(function (it) { if (it.count > 0 && it.strain.indexOf("p:") === 0 && fitsOrder(recipe, it.strain)) n += it.count; }); return n; }
-  function orderReady(o) { return o.items.every(function (it) { return haveRecipe(it.recipe) >= it.n; }); }
-  function takeRecipe(recipe, n) {                              // сразу убрать сданные блюда из амбара (сначала дешёвые, как на сервере)
-    var list = (F.state.barn || []).filter(function (it) { return it.count > 0 && it.strain.indexOf("p:") === 0 && fitsOrder(recipe, it.strain); })
+  function haveRecipe(recipe, g) { var n = 0; (F.state.barn || []).forEach(function (it) { if (it.count > 0 && it.strain.indexOf("p:") === 0 && fitsOrder(recipe, it.strain, g)) n += it.count; }); return n; }
+  function orderReady(o) { return o.items.every(function (it) { return haveRecipe(it.recipe, it.grade) >= it.n; }); }
+  function takeRecipe(recipe, n, g) {                           // сразу убрать сданные блюда из амбара (сначала дешёвые, как на сервере)
+    var list = (F.state.barn || []).filter(function (it) { return it.count > 0 && it.strain.indexOf("p:") === 0 && fitsOrder(recipe, it.strain, g); })
       .sort(function (a, b) { return (itemOf(a.strain) || {}).dust - (itemOf(b.strain) || {}).dust; });
     list.forEach(function (it) { var k = Math.min(n, it.count); it.count -= k; n -= k; });
   }
@@ -3666,7 +3669,7 @@
           var hd = el("div", "ohead"); hd.append(o.tier + " заказ · ✦ " + o.reward); var lf = o.until - tn; hd.appendChild(el("small", "", "ещё " + (lf >= 86400 ? Math.floor(lf / 86400) + " дн " + Math.floor(lf % 86400 / 3600) + " ч" : fmtShort(lf)))); card.appendChild(hd);   // долгие сроки — днями
           var ul = el("div", "olist");
           o.items.forEach(function (it) {
-            var have = haveRecipe(it.recipe), row = el("div", "orow" + (have >= it.n ? " ok" : ""));
+            var have = haveRecipe(it.recipe, it.grade), row = el("div", "orow" + (have >= it.n ? " ok" : ""));
             var cv = el("canvas", "pix"); itemIcon(cv, "p:" + (it.recipe.charAt(0) === "~" ? (ORDER_CATS[it.recipe.slice(1)] || ["bread"])[0] : it.recipe)); row.appendChild(cv);
             row.appendChild(el("span", "", it.name + " ×" + it.n + (it.recipe.charAt(0) === "~" ? " · любые" : ""))); row.appendChild(el("b", "", Math.min(have, it.n) + " из " + it.n)); ul.appendChild(row);
           });
@@ -3701,7 +3704,7 @@
             haptic("success");
             var body = { slot: o.slot };
             if (anyOrder) { body.pick = {}; Object.keys(pick.ids).forEach(function (id) { body.pick[id] = pick.ids[id]; var b0 = barnOf(id); if (b0) b0.count -= pick.ids[id]; }); F.orderPick = null; }
-            else o.items.forEach(function (it) { takeRecipe(it.recipe, it.n); });
+            else o.items.forEach(function (it) { takeRecipe(it.recipe, it.n, it.grade); });
             F.state.dust += o.reward; var rw = o.reward; o.items = []; o.ready = farmNow() + 1800; renderFarm(); draw(); toast("Заказ сдан: +✦ " + rw);
             farmCall("/api/farm/order", body).catch(function () {});
           });
@@ -4413,6 +4416,14 @@
         li.appendChild(btn("В гости", "", function () { visit(n.pub); })); li.lastChild.className = "";
         ul.appendChild(li);
       });
+      if (r.me) {                                                  // своя плашка — на своём месте по пыли (его просьба 2026-11-16)
+        var m = r.me, li2 = el("li", "me"), av2 = el("span", "av"); av2.style.cssText = "border-radius:50%;display:grid;place-items:center;font-weight:650;background:radial-gradient(circle at 35% 30%,#fff1d2,#ffc469 35%,#8a4a14);color:#2a1406";
+        av2.textContent = initial(m.name); setPhoto(av2, m.avatar); li2.appendChild(av2);
+        var t2 = el("span"), nm2 = el("span", "nn"); nm2.appendChild(el("span", "", m.name)); nm2.appendChild(el("b", "nd", "✦ " + m.dust)); t2.appendChild(nm2);
+        t2.appendChild(el("span", "t", (m.title ? m.title + " · " : "") + "это ты")); li2.appendChild(t2);
+        li2.appendChild(el("b", "place", m.place + "-е"));
+        var at = ul.children[m.place - 1]; if (at) ul.insertBefore(li2, at); else ul.appendChild(li2);
+      }
     });
   }
   function visit(pub) {

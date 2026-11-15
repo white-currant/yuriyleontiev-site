@@ -944,36 +944,82 @@ export const ORDER_CATS: Record<string, { name: string; r: string[] }> = {
 };
 function anyOf(r: string) { return r.startsWith("~") ? (ORDER_CATS[r.slice(1)] || { r: [] }).r : []; }
 function orderFits(r: string, recipe: string) { return r.startsWith("~") ? anyOf(r).includes(recipe) : r === recipe; }
-function genOrder(slot: number, builds: string[]) {
-  const can = Object.keys(RECIPES).filter((k) => builds.includes(RECIPES[k].kind) && !(k === "flour" && builds.includes("oven")));   // мука — только пока нет печи
+// Новый заказ не должен повторять старый (его жалоба 2026-11-16 «заказы не заменяются»: при малом выборе блюд случай
+// раз за разом выдавал тот же заказ). Сначала ищем другой набор блюд, потом хотя бы другое количество.
+function genOrder(slot: number, builds: string[], old?: string, ok?: Cook) {
+  if (!old || old === "[]") return genOrder1(slot, builds, ok);
+  const key = (items: any[]) => items.map((it) => it.r).sort().join(","), oldKey = key(JSON.parse(old));
+  let alt = null;
+  for (let i = 0; i < 16; i++) {
+    const g = genOrder1(slot, builds, ok); if (!g) return null;
+    if (key(g.items) !== oldKey) return g;
+    if (!alt && JSON.stringify(g.items) !== old) alt = g;
+  }
+  return alt || genOrder1(slot, builds, ok);
+}
+// Заказ — только на блюда из растений, которые у игрока открыты (его правка 2026-11-16: джем без кактуса — нельзя; но и не
+// «что уже готово лежит» — магазин должен оставаться трудным). Открыто — всё, что когда-либо было в мешке (строки f_inv не
+// удаляются, как в справочнике), плюс то, что растёт на грядке или лежит сырьём в амбаре.
+async function canCook(uid: number) {
+  const inv = await q("SELECT strain FROM f_inv WHERE user = ? UNION SELECT crop FROM f_plots WHERE user = ? UNION SELECT strain FROM f_barn WHERE user = ? AND strain NOT LIKE 'p:%'", [uid, uid, uid]);
+  // strains() отдаёт и все сорта станции — форму берём только у своих
+  const ids = inv.map((r) => String(r[0])), ss = await strains(ids), mine = ids.map((i) => ss[i]).filter(Boolean);
+  const shapes = new Set(mine.map((g) => g.shape));
+  const has = (need: string) => shapes.has(need === "p:flour" ? "grain" : need);
+  // какие сорта блюда игроку открыты: у выпечки — по сорту муки из его колосьев, у супа/похлёбки/чая/джема — по главному сырью
+  const grades = (k: string) => {
+    const main = RAW_MAIN[k], out = new Set<number>();
+    for (const g of mine) {
+      if (main && g.shape === main) out.add(parseFlour(rawKey(g)).grade);
+      else if (!main && g.shape === "grain" && (k === "flour" || RECIPES[k].needs["p:flour"])) out.add(parseFlour(flourKey(g)).grade);
+    }
+    return [...out];
+  };
+  return { ok: (k: string) => Object.keys(RECIPES[k].needs).every(has), grades };
+}
+type Cook = Awaited<ReturnType<typeof canCook>>;
+// Сорт в особом заказе (его решение 2026-11-16): «не ниже первого сорта» или «высшего сорта» — только из открытых игроку сортов.
+// Сорт блюда — из ключа «g:/r:<расцветка>:<сорт>»; блюдо без сорта — второй сорт.
+function dishGrade(id: string) { const k = sortOf(id); return k.startsWith("g:") || k.startsWith("r:") ? parseFlour(k).grade : 2; }
+function gradeDust(k: string, grade: number) { return productInfo("p:" + k + "@" + (RAW_MAIN[k] ? "r:" : "g:") + "sun:" + grade, {})?.dust || RECIPES[k].dust; }
+const GRADE_REQ = ["высшего сорта", "не ниже первого сорта"];
+function genOrder1(slot: number, builds: string[], cook?: Cook) {
+  const ok = cook?.ok;
+  const can = Object.keys(RECIPES).filter((k) => builds.includes(RECIPES[k].kind) && !(k === "flour" && builds.includes("oven")) && (!ok || ok(k)));   // мука — только пока нет печи
   if (!can.length) return null;
   if (slot === 0) {
-    const cats = Object.keys(ORDER_CATS).filter((c) => ORDER_CATS[c].r.every((k) => can.includes(k)));
+    const cats = Object.keys(ORDER_CATS).filter((c) => ORDER_CATS[c].r.some((k) => can.includes(k)));   // хоть одно блюдо категории игроку по силам
     if (!cats.length) return null;
-    const c = cats[Math.floor(Math.random() * cats.length)], n = 2 + Math.floor(Math.random() * 3), cheap = Math.min(...ORDER_CATS[c].r.map((k) => RECIPES[k].dust));
+    const c = cats[Math.floor(Math.random() * cats.length)], n = 2 + Math.floor(Math.random() * 3), cheap = Math.min(...ORDER_CATS[c].r.filter((k) => can.includes(k)).map((k) => RECIPES[k].dust));
     return { items: [{ r: "~" + c, n }], reward: Math.max(10, Math.round(n * cheap * ORDER_X[0] / 5) * 5) };
   }
   const r = Math.random, pool = slot === 2 ? can.slice().sort((a, b) => RECIPES[b].dust - RECIPES[a].dust).slice(0, Math.max(3, Math.ceil(can.length / 2))) : can;
   const types = Math.min(pool.length, slot === 0 ? 1 + Math.floor(r() * 2) : slot === 1 ? 2 + Math.floor(r() * 2) : 3);
   const pick = pool.slice().sort(() => r() - 0.5).slice(0, types);
   const items = pick.map((k) => ({ r: k, n: slot === 0 ? 1 + Math.floor(r() * 3) : slot === 1 ? 2 + Math.floor(r() * 3) : 2 + Math.floor(r() * 2) }));
-  const base = items.reduce((a, it) => a + it.n * RECIPES[it.r].dust, 0);
+  if (slot === 2 && cook) for (const it of items as any[]) {          // особый: блюдо нужного сорта, если игроку открыт сорт выше второго
+    const gs = cook.grades(it.r).filter((g) => g < 2);
+    if (gs.length) it.g = gs[Math.floor(r() * gs.length)];
+  }
+  const base = items.reduce((a, it: any) => a + it.n * (it.g != null ? gradeDust(it.r, it.g) : RECIPES[it.r].dust), 0);
   return { items, reward: Math.max(10, Math.round(base * ORDER_X[slot] / 5) * 5) };
 }
 async function ordersOf(uid: number, builds: string[]) {
   if (!builds.includes("shop")) return null;
   const t = now(), rows = new Map((await q("SELECT slot, items, reward, until, ready FROM f_orders WHERE user = ?", [uid])).map((r) => [Number(r[0]), r]));
-  const out = [];
+  const out = []; let ok: Cook | undefined;
   for (let slot = 0; slot < 3; slot++) {
     let row = rows.get(slot), items = row ? JSON.parse(String(row[1])) : [];
     const oldSimple = slot === 0 && items.length && !(String(items[0].r).startsWith("~") && ORDER_CATS[String(items[0].r).slice(1)]);   // простой заказ прежнего вида — сразу на новый
     const stale = !row || oldSimple || (items.length && Number(row[3]) <= t) || (!items.length && Number(row[4]) <= t);
     if (stale) {
-      const g = genOrder(slot, builds); if (!g) continue;
+      ok ??= await canCook(uid);
+      const g = genOrder(slot, builds, row && items.length ? String(row[1]) : undefined, ok); if (!g) continue;
       await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [uid, slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]);
       row = [slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]; items = g.items;
     }
-    out.push({ slot, tier: ORDER_TIER[slot], items: items.map((it: any) => ({ recipe: it.r, n: it.n, name: String(it.r).startsWith("~") ? (ORDER_CATS[String(it.r).slice(1)]?.name || it.r) : RECIPES[it.r]?.name || it.r,
+    out.push({ slot, tier: ORDER_TIER[slot], items: items.map((it: any) => ({ recipe: it.r, n: it.n, ...(it.g != null ? { grade: it.g } : {}),
+                                                             name: String(it.r).startsWith("~") ? (ORDER_CATS[String(it.r).slice(1)]?.name || it.r) : (RECIPES[it.r]?.name || it.r) + (it.g != null ? ", " + GRADE_REQ[it.g] : ""),
                                                              ...(String(it.r).startsWith("~") ? { pick: true, fits: anyOf(it.r) } : {}) })),
                reward: Number(row![2]), until: Number(row![3]), ready: Number(row![4]) });
   }
@@ -1001,10 +1047,10 @@ export async function fulfil(u: any, slot: number, pick?: Record<string, number>
   } else
   for (const it of items) {                                  // берём сначала самые дешёвые блюда этого рецепта
     let left = Number(it.n);
-    for (const [id, c] of barn.filter((x) => orderFits(it.r, recipeOf(String(x[0]))) && !plan.some((p) => p[0] === String(x[0]) && p[1] >= Number(x[1]))).sort((a, b) => (prices[String(a[0])]?.dust || 0) - (prices[String(b[0])]?.dust || 0))) {
+    for (const [id, c] of barn.filter((x) => orderFits(it.r, recipeOf(String(x[0]))) && (it.g == null || dishGrade(String(x[0])) <= it.g) && !plan.some((p) => p[0] === String(x[0]) && p[1] >= Number(x[1]))).sort((a, b) => (prices[String(a[0])]?.dust || 0) - (prices[String(b[0])]?.dust || 0))) {
       const take = Math.min(left, Number(c)); if (take > 0) { plan.push([String(id), take]); left -= take; }
     }
-    if (left > 0) return { error: "Не хватает блюд: " + (RECIPES[it.r]?.name || it.r).toLowerCase() };
+    if (left > 0) return { error: "Не хватает блюд: " + (RECIPES[it.r]?.name || it.r).toLowerCase() + (it.g != null ? ", " + GRADE_REQ[it.g] : "") };
   }
   if (!(await q("DELETE FROM f_orders WHERE user = ? AND slot = ? AND items = ? RETURNING 1", [u.id, slot, String(row[0])])).length) return { error: "Заказ уже сдан" };
   const done: [string, number][] = [];
@@ -1024,7 +1070,8 @@ export async function skipOrder(u: any, slot: number) {
   const t = now(), day = Math.floor((t + TZ) / DAY);
   if (!(await q("INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?) RETURNING 1", [u.id, "ordskip:" + day, t, u.id, "ordskip:" + day])).length)
     return { error: "Заменить заказ можно раз в сутки" };
-  const { builds } = await kitchenOf(u.id), g = genOrder(slot, builds);
+  const [cur] = await q("SELECT items FROM f_orders WHERE user = ? AND slot = ?", [u.id, slot]);
+  const { builds } = await kitchenOf(u.id), g = genOrder(slot, builds, cur ? String(cur[0]) : undefined, await canCook(u.id));
   if (!g) return { error: "Нет блюд для заказа" };
   await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [u.id, slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]);
   return { farm: await farmState(u) };
@@ -1079,7 +1126,11 @@ export async function neighbors(u: any, hidden: number[]) {
                           (SELECT COUNT(*) FROM f_given g WHERE g.from_user = ? AND g.to_user = f.user AND g.day = ?)
                         FROM f_farms f JOIN g_profiles p ON p.user = f.user
                         WHERE f.user != ?${not} ORDER BY f.dust DESC LIMIT 30`, [u.id, today(), u.id, ...hidden]);
-  return { neighbors: rows.map(([pub, name, title, avatar, dust, given]) => ({ pub, name, title, avatar: avatar ? `/avatar/${avatar}` : null, dust: Number(dust) || 0, gifted: Number(given) > 0 })),
+  // своя строка (его просьба 2026-11-16): видеть себя в рейтинге по пыли — место среди всех видимых соседей
+  const [me] = await q(`SELECT p.name, p.title, p.avatar, f.dust, (SELECT COUNT(*) FROM f_farms f2 JOIN g_profiles p2 ON p2.user = f2.user
+                          WHERE f2.user != ? AND f2.dust > f.dust${not.replaceAll("f.user", "f2.user")}) FROM f_farms f LEFT JOIN g_profiles p ON p.user = f.user WHERE f.user = ?`, [u.id, ...hidden, u.id]);
+  return { me: me ? { name: me[0] || nameOf(u), title: me[1] || "", avatar: me[2] ? `/avatar/${me[2]}` : null, dust: Number(me[3]) || 0, place: Number(me[4]) + 1 } : null,
+           neighbors: rows.map(([pub, name, title, avatar, dust, given]) => ({ pub, name, title, avatar: avatar ? `/avatar/${avatar}` : null, dust: Number(dust) || 0, gifted: Number(given) > 0 })),
            gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY };
 }
 
