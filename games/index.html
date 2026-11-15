@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151754";
+    var BUILD = "202611151757";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -714,12 +714,12 @@
   .book .bcell span { display: block; font-size: 11.5px; font-weight: 700; line-height: 1.15; max-height: 2.3em; overflow: hidden; }
   .book .bcell.unknown { background: rgba(120, 80, 30, .04); } .book .bcell.unknown span { color: #b39a70; }
   .book .bcell.on { background: rgba(240, 185, 80, .45); box-shadow: 0 -2px 0 #5a3820, 0 2px 0 #5a3820, -2px 0 0 #5a3820, 2px 0 0 #5a3820; }
-  .book .binfo { margin-top: 10px; height: 96px; overflow: hidden; padding: 8px 12px; font-size: 13px; line-height: 1.35; background: rgba(120, 80, 30, .1); color: #3b2614; }
+  .book .binfo { margin-top: 10px; min-height: 96px; padding: 8px 12px; font-size: 13px; line-height: 1.35; background: rgba(120, 80, 30, .1); color: #3b2614; }
   .book .binfo b { display: block; font-size: 15px; margin-bottom: 4px; }
   .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; font-size: 13px; font-weight: 600; }
   .facts div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .facts i { font-style: normal; display: inline-block; width: 20px; text-align: center; margin-right: 3px; }
-  .book .bbonus { margin-top: 4px; color: #9a5a12; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .book .bdim { margin-top: 4px; color: #7a5c38; font-size: 12.5px; }
+  .book .bbonus { margin-top: 4px; color: #9a5a12; font-weight: 700; } .book .bdim { margin-top: 4px; color: #7a5c38; font-size: 12.5px; }
   .book .wtable { margin-top: 8px; display: grid; gap: 4px; }
   .book .wrow { padding: 4px 8px 5px; background: rgba(120, 80, 30, .08); }
   .book .wrow.now { background: rgba(240, 185, 80, .45); box-shadow: 0 -2px 0 #5a3820, 0 2px 0 #5a3820, -2px 0 0 #5a3820, 2px 0 0 #5a3820; }
