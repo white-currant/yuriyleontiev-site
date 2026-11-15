@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151358";
+    var BUILD = "202611151411";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2970,13 +2970,15 @@
   }
   function groupOf(id) { var r = null; groupItems().forEach(function (g) { if (g.ids.indexOf(id) >= 0) r = g; }); return r; }
   function varLabel(id) { var g = groupOf(id); return g && g.ids.length > 1 ? ROMAN[g.ids.indexOf(id)] || String(g.ids.indexOf(id) + 1) : ""; }
-  function moveSeed(key, beforeKey) {                       // перетащили семя: встаёт перед beforeKey (или в конец)
-    var keys = seedItems().map(function (it) { return it.strain; }).filter(function (k) { return k !== key; });
-    var at = beforeKey ? keys.indexOf(beforeKey) : -1;
-    if (at < 0) keys.push(key); else keys.splice(at, 0, key);
+  function moveSeed(key, toKey) {                           // перетащили ячейку на другую — они меняются местами (его правка 2026-11-15); на пустое место — в конец
+    var gs = groupItems(), find = function (k) { for (var i = 0; i < gs.length; i++) if (gs[i].ids.indexOf(k) >= 0) return i; return -1; };
+    var ia = find(key), ib = toKey ? find(toKey) : -1; if (ia < 0) return;
+    if (ib < 0) gs.push(gs.splice(ia, 1)[0]);
+    else if (ia !== ib) { var tmp = gs[ia]; gs[ia] = gs[ib]; gs[ib] = tmp; }
+    var keys = []; gs.forEach(function (g) { keys = keys.concat(g.ids); });          // варианты сорта едут вместе со своей ячейкой
     try { localStorage.setItem("farm-order", JSON.stringify(keys)); } catch (e) {}
   }
-  // перетаскивание ячеек в большом инвентаре: потянул семя — оно едет за пальцем, отпустил над другой ячейкой — встало туда
+  // перетаскивание ячеек в большом инвентаре: потянул семя — оно едет за пальцем, отпустил над другой ячейкой — они поменялись местами; туда
   function dragSetup(grid, redraw) {
     var d = null;
     var slotAt = function (x, y) { var n = document.elementFromPoint(x, y); n = n && n.closest ? n.closest(".slot") : null; return n && grid.contains(n) ? n : null; };
