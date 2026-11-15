@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151136";
+    var BUILD = "202611151145";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -608,8 +608,14 @@
   body[data-screen^="farm"] .seed .onsale { color: #b9f58a; }
   body[data-screen^="farm"] .invline { font-family: var(--pix); font-size: 13.5px; color: var(--cream2); margin-top: 8px; }
   body[data-screen^="farm"] .invcount { font-family: var(--pix); font-size: 14px; color: var(--cream2); white-space: nowrap; }
-  body[data-screen^="farm"] .invacts { margin-left: 3px; flex-wrap: wrap; }
-  body[data-screen^="farm"] .invacts .btn { font-size: 15px; padding: 0 12px; }
+  /* кнопки в окнах фермы — одна сетка (его правка 2026-11-15): равная ширина и высота; одна — во всю ширину, две — пополам,
+     при нечётном числе первая (главная) — во всю ширину сверху */
+  body[data-screen^="farm"] .invacts, body[data-screen^="farm"] .salebtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 3px 4px; }
+  body[data-screen^="farm"] .invacts .btn, body[data-screen^="farm"] .salebtns .btn { width: 100%; min-height: 46px; margin: 0; padding: 4px 10px;
+    font-size: 15px; line-height: 1.15; white-space: normal; text-align: center; }
+  body[data-screen^="farm"] .invacts .btn:first-child:nth-last-child(odd),
+  body[data-screen^="farm"] .salebtns .btn:first-child:nth-last-child(odd) { grid-column: 1 / -1; }
+  body[data-screen^="farm"] .sheet > .salebtns:last-child { margin-top: 18px; }
   body[data-screen^="farm"] .invline { margin-left: 3px; }
   body[data-screen^="farm"] .salecount, body[data-screen^="farm"] .salecount2 { color: var(--cream); }
   body[data-screen^="farm"] .nlist li { font-family: var(--pix); background: var(--wood); box-shadow: var(--frame), inset 0 3px 0 var(--wood3); margin: 14px 3px 0; padding: 10px 12px; }
@@ -3318,13 +3324,13 @@
         } else if (picked.length > 1) {
           var cnt = 0, sum = 0; picked.forEach(function (x) { cnt += x.count; sum += x.count * itemOf(x.strain).dust; });
           barnBox.appendChild(el("div", "sub", "Выделено ячеек: " + picked.length + " — " + cnt + " " + plural(cnt, "штука", "штуки", "штук") + ", в пыль это ✦ " + sum + "."));
-          acts.appendChild(btn("Всё выделенное в пыль · ✦ " + sum, "", function () {
+          acts.appendChild(btn("В пыль · ✦ " + sum, "", function () {
             var cur2 = F.state; haptic("success");
             picked.forEach(function (x) { var k3 = x.count; if (k3 <= 0) return; x.count = 0; farmCall("/api/farm/sell", { strain: x.strain, n: k3 }).catch(function () {}); });
             cur2.dust += sum; F.barnSet = {}; renderFarm(); drawBarn(); toast("+✦ " + sum + " звёздной пыли");
           }));
-          acts.appendChild(btn("Всё выделенное в лавку", "ghost", function () { toStall(picked); }));
-          acts.appendChild(btn("Снять выделение", "ghost", function () { F.barnSet = {}; drawBarn(); }));
+          acts.appendChild(btn("В лавку", "ghost", function () { toStall(picked); }));
+          acts.appendChild(btn("Отменить", "ghost", function () { F.barnSet = {}; drawBarn(); }));
         } else {
           barnBox.appendChild(el("div", "sub", BARN_MULTI ? "Нажми на ячейку, чтобы превратить урожай в звёздную пыль или выставить в лавку. Можно выделить несколько." : "Нажми на ячейку, чтобы превратить урожай в звёздную пыль."));
           acts.appendChild(btn("Весь урожай в пыль · ✦ " + total, "", function () { toDust("*", 0, total); drawBarn(); }));
@@ -3603,8 +3609,9 @@
             "Выставленные семена не посадить, пока не уберёшь их с продажи."]);
           var step = function (dl) { haptic("light"); it.listed += dl; renderShopTab(); renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: dl }).catch(function () {}); };
           var a = el("div", "invacts"), minus = btn("− убрать", "ghost", function () { step(-1); }), plus = btn("+ выставить", "", function () { step(1); });
-          minus.disabled = !it.listed; plus.disabled = it.listed >= it.count; a.appendChild(minus); a.appendChild(plus);
-          if (it.count - it.listed > 1) a.appendChild(btn("все", "ghost", function () { step(it.count - it.listed); }));
+          minus.disabled = !it.listed; plus.disabled = it.listed >= it.count;
+          if (it.count - it.listed > 1) { a.appendChild(plus); a.appendChild(btn("все " + (it.count - it.listed), "ghost", function () { step(it.count - it.listed); })); a.appendChild(minus); }
+          else { a.appendChild(minus); a.appendChild(plus); }                    // главная — первой: при трёх кнопках она во всю ширину
           d.appendChild(a); priceControl(d, "s:" + st.id, st.price, st.id, "seed");
         };
       });
@@ -3625,8 +3632,9 @@
             renderShopTab(); renderFarm(); farmCall("/api/farm/stall", { item: id, delta: dl }).catch(function () {});
           };
           var a = el("div", "invacts"), minus = btn("− убрать", "ghost", function () { step(-1); }), plus = btn("+ выставить", "", function () { step(1); });
-          minus.disabled = !ons; plus.disabled = !inb; a.appendChild(minus); a.appendChild(plus);
-          if (inb > 1) a.appendChild(btn("все " + inb, "ghost", function () { step(inb); }));
+          minus.disabled = !ons; plus.disabled = !inb;
+          if (inb > 1) { a.appendChild(plus); a.appendChild(btn("все " + inb, "ghost", function () { step(inb); })); a.appendChild(minus); }
+          else { a.appendChild(minus); a.appendChild(plus); }                    // главная — первой: при трёх кнопках она во всю ширину
           d.appendChild(a); priceControl(d, id, base, id, "item");
         };
       });
