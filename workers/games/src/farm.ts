@@ -17,10 +17,13 @@ type Strain = { id: string; name: string; shape: string; color: string; minutes:
                 thirst: number; points: number; bonus: string | null; gen: number; cost?: number; base?: boolean; hidden?: boolean; price?: number; tier?: string; myth?: boolean; nonce?: string };
 // базовые сорта: семена покупаются в «Семенной лавке станции» (cost — цена одного), дальше возвращаются с урожаем;
 // thirst — на сколько минут хватает одного полива
+// Баланс (его правка 2026-11-15, жалоба Evilin «у мха 24 пыли в час — где баланс»): разные стратегии, не к среднему.
+// Мох — для активной игры (больше пыли и очков в час), долгие — за заход (у хрусталя в 8 раз больше очков за сбор).
+// Было: мох 2 очка, ягоды 16 пыли / 4 очка, хрусталь 70 пыли / 8 очков.
 export const CROPS: Record<string, Strain> = {
-  moss:    { id: "moss",    name: "Лунный мох",        shape: "moss",    color: "moss",    minutes: 10,  dust: 4,  vinyl: 0.03, thirst: 15, points: 2, bonus: null, gen: 0, cost: 2,  base: true },
-  berry:   { id: "berry",   name: "Звёздные ягоды",    shape: "berry",   color: "berry",   minutes: 60,  dust: 16, vinyl: 0.10, thirst: 30, points: 4, bonus: null, gen: 0, cost: 6,  base: true },
-  crystal: { id: "crystal", name: "Кометный хрусталь", shape: "crystal", color: "crystal", minutes: 240, dust: 70, vinyl: 0.25, thirst: 90, points: 8, bonus: null, gen: 0, cost: 25, base: true },
+  moss:    { id: "moss",    name: "Лунный мох",        shape: "moss",    color: "moss",    minutes: 10,  dust: 4,  vinyl: 0.03, thirst: 15, points: 1, bonus: null, gen: 0, cost: 2,  base: true },
+  berry:   { id: "berry",   name: "Звёздные ягоды",    shape: "berry",   color: "berry",   minutes: 60,  dust: 18, vinyl: 0.10, thirst: 30, points: 6, bonus: null, gen: 0, cost: 6,  base: true },
+  crystal: { id: "crystal", name: "Кометный хрусталь", shape: "crystal", color: "crystal", minutes: 240, dust: 90, vinyl: 0.25, thirst: 90, points: 16, bonus: null, gen: 0, cost: 25, base: true },
   // зерно (2026-11-14): само по себе дешёвое, нужно ради муки на мельнице. У станции один вид — пшеница;
   // другие колосья открываются скрещиванием и мутациями, как у остальных растений (его правка 2026-11-14).
   wheat:   { id: "wheat",   name: "Солнечные колосья", shape: "grain",   color: "sun",     minutes: 20,  dust: 5,  vinyl: 0.04, thirst: 25, points: 2, bonus: null,    gen: 0, cost: 3,  base: true },
