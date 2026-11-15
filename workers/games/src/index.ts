@@ -230,10 +230,10 @@ async function topFresh() {
   const all = await q(`SELECT name, points, title, avatar, user FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 500`, h);   // все игроки (потолок — от случайной лавины)
   // имя — как его прислал бот (хозяин — названием канала), а не из Телеграма при входе в игру
   // «Сегодня» — все очки за сутки (по Минску) из всех игр: начисления g_events, а не только раунды «Угадай трек»
-  const notE = h.length ? ` AND e.user NOT IN (${h.map(() => "?").join(",")})` : "";
   const from = Math.floor((now() + TZ_SHIFT) / 86400) * 86400 - TZ_SHIFT;
-  const day = await q(`SELECT COALESCE(p.name, MAX(e.name)), SUM(e.delta) AS pts, p.avatar, p.title, e.user FROM g_events e INDEXED BY g_events_at LEFT JOIN g_profiles p ON p.user = e.user
-                       WHERE e.at >= ? AND e.delta > 0${notE} GROUP BY e.user HAVING pts > 0 ORDER BY pts DESC LIMIT 500`, [from, ...h]);
+  const notD = h.length ? ` AND d.user NOT IN (${h.map(() => "?").join(",")})` : "";
+  const day = await q(`SELECT COALESCE(p.name, d.name), d.pts, p.avatar, p.title, d.user FROM g_daypts d LEFT JOIN g_profiles p ON p.user = d.user
+                       WHERE d.day = ? AND d.pts > 0${notD} ORDER BY d.pts DESC LIMIT 500`, [Math.floor((from + TZ_SHIFT) / 86400), ...h]);   // суммы за день копит триггер
   const av = (k: any) => (k ? `/avatar/${k}` : null);
   const ids = [...new Set([...all.map((r) => Number(r[4])), ...day.map((r) => Number(r[4]))])], refs = new Map<number, string>();
   for (const id of ids) refs.set(id, await refOf(id));
@@ -356,7 +356,8 @@ async function handle(req: Request): Promise<Response> {
       }
       if (body.consumed != null) {
         await q("INSERT INTO g_meta (key, value) VALUES ('consumed', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(body.consumed)]);
-        await q("DELETE FROM g_events WHERE +id <= ? AND at < ?", [Number(body.consumed), now() - 30 * 86400]);   // «+id» — искать по индексу времени, а не перебирать номера
+        await q("DELETE FROM g_events WHERE +id <= ? AND at < ?", [Number(body.consumed), now() - 30 * 86400]);
+        await q("DELETE FROM g_daypts WHERE day < ?", [Math.floor((now() + TZ_SHIFT) / 86400) - 2]);   // «+id» — искать по индексу времени, а не перебирать номера
       }
       return json({ ok: true });
     }

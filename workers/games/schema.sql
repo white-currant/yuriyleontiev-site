@@ -84,3 +84,15 @@ CREATE INDEX IF NOT EXISTS f_sales_seller ON f_sales (seller, seen);
 -- вид фермы (2026-11-15): купленные цвета крыш и выбранный цвет
 CREATE TABLE IF NOT EXISTS f_decor (user INTEGER NOT NULL, kind TEXT NOT NULL, item TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (user, kind, item));
 CREATE TABLE IF NOT EXISTS f_style (user INTEGER PRIMARY KEY, roof TEXT);
+-- очки за сутки по Минску (2026-11-15: рейтинг «Сегодня» читал все сегодняшние события — тысячи строк на открытие).
+-- Каждое начисление само прибавляется сюда триггером; рейтинг читает по строке на игрока.
+CREATE TABLE IF NOT EXISTS g_daypts (day INTEGER NOT NULL, user INTEGER NOT NULL, pts INTEGER NOT NULL DEFAULT 0, name TEXT, PRIMARY KEY (day, user));
+CREATE INDEX IF NOT EXISTS g_daypts_top ON g_daypts (day, pts);
+CREATE TRIGGER IF NOT EXISTS g_events_daypts AFTER INSERT ON g_events WHEN NEW.delta > 0 BEGIN
+  INSERT INTO g_daypts (day, user, pts, name) VALUES ((NEW.at + 10800) / 86400, NEW.user, NEW.delta, NEW.name)
+  ON CONFLICT(day, user) DO UPDATE SET pts = pts + excluded.pts, name = COALESCE(NULLIF(excluded.name, ''), name);
+END;
+-- заполнить сегодняшний день из уже начисленного (повторный запуск безопасен: пересчитывает заново)
+INSERT OR REPLACE INTO g_daypts (day, user, pts, name)
+  SELECT (at + 10800) / 86400, user, SUM(delta), MAX(name) FROM g_events
+  WHERE at >= ((CAST(strftime('%s', 'now') AS INTEGER) + 10800) / 86400) * 86400 - 10800 AND delta > 0 GROUP BY 1, 2;
