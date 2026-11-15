@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151630";
+    var BUILD = "202611151646";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -608,9 +608,13 @@
   /* инструменты — две маленькие ячейки слева от семян: лейка и лопата (его решение 2026-11-15) */
   /* маленькие, в самом низу левого угла — под печью, не налезают на неё (его правка 2026-11-15) */
   .toolbox { position: absolute; left: 6px; bottom: 5px; z-index: 3; }
-  .decorbtn { position: absolute; right: 6px; top: calc(var(--top) + 46px + 9.6vw);   /* на верхушках деревьев над колодцем, ниже неба (его отметка) */ z-index: 3; width: 30px; height: 30px; padding: 0; border: 0; background: none; }
-  .decorbtn:active canvas { transform: scale(.9); }
-  .decorbtn canvas { border: 0; width: 100%; filter: drop-shadow(0 1px 0 rgba(30, 15, 5, .7)) drop-shadow(0 0 1px rgba(30, 15, 5, .6)); height: auto; image-rendering: pixelated; }
+  body[data-screen^="farm"] .dust-pill.decorbtn { min-width: 40px; justify-content: center; padding: 0 7px; cursor: pointer; }   /* «Вид фермы» — в панели слева от погоды (его решение) */
+  .decorbtn:active canvas { transform: scale(.88); }
+  @media (max-width: 380px) {                                    /* узкий телефон: панель фермы — плотнее, чтобы влезали валик, погода, вода и пыль */
+    body[data-screen^="farm"] #farm .pills { gap: 6px; }
+    body[data-screen^="farm"] #farm .dust-pill.decorbtn, body[data-screen^="farm"] #farm .dust-pill.rainpill { min-width: 34px; padding: 0 5px; }
+  }
+  .decorbtn canvas { border: 0; width: 22px; height: auto; image-rendering: pixelated; }
   .roofgrid .slot canvas { width: 70%; }
   .tools { display: flex; gap: 6px; }
   .tools .slot { width: 36px; height: 36px; aspect-ratio: 1; }
@@ -805,8 +809,8 @@
   <!-- «Лунная ферма»: свой участок, гости, пластинки -->
   <section class="screen" id="farm" hidden>
     <div class="scene">
-      <div class="farm-top"><button class="exit" type="button" data-go="home">← Гильдия</button><div class="pills"><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill blue" id="waterpill">💧 5</div><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
-      <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div><div class="toolbox" id="toolbox"></div><button class="decorbtn" id="decorbtn" type="button" aria-label="Вид фермы"><canvas class="pix" id="decoricon"></canvas></button>
+      <div class="farm-top"><button class="exit" type="button" data-go="home">← Гильдия</button><div class="pills"><button type="button" class="dust-pill decorbtn" id="decorbtn" aria-label="Вид фермы"><canvas class="pix" id="decoricon"></canvas></button><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill blue" id="waterpill">💧 5</div><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
+      <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div><div class="toolbox" id="toolbox"></div>
     </div>
     <div id="farmbanners"></div>
     <div class="hotbar" id="hotbar"></div>
@@ -1310,7 +1314,8 @@
     flowers: ["#ff6b8a", "#ffd166", "#ffffff", "#c084fc", "#ff9f43", "#7dd3fc"],
   };
   // цвета крыш (его решение 2026-11-15: цвет покупается в «Виде фермы»): основной, тень, блик, тёмный край
-  var ROOF_PAL = { orange: ["#d9643c", "#a8462a", "#f08c5e", "#7a2e1a"], red: ["#c8383c", "#8f2428", "#e86a64", "#5e161a"],
+  var ROOF_PAL = { orange: ["#d9643c", "#a8462a", "#f08c5e", "#7a2e1a"], amber: ["#ffb627", "#d98a1c", "#ffe08a", "#8a4a12"],   // янтарная — из солнечной расцветки растений
+                   red: ["#c8383c", "#8f2428", "#e86a64", "#5e161a"],
                    blue: ["#4f86c9", "#335f9c", "#7fb0e8", "#22406a"], green: ["#3fa37a", "#2b7656", "#6fd0a2", "#1c4f39"],
                    purple: ["#9a62c8", "#6c419c", "#c091ea", "#472a6a"], teal: ["#2fa6a8", "#1f7476", "#63d0cf", "#144d4f"],
                    slate: ["#5d6673", "#3f4650", "#8790a0", "#2a2f36"] };

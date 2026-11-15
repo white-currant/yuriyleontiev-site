@@ -1079,7 +1079,7 @@ async function giftsLeft(uid: number) {
 // ---------- вид фермы: цвет крыш (его решение 2026-11-15) ----------
 // Каждый цвет покупается один раз за ✦300, между купленными — бесплатно; оранжевый — у всех с начала. Гости видят цвет хозяина.
 export const ROOF_PRICE = 300;
-export const ROOF_COLORS: Record<string, string> = { orange: "Оранжевая", red: "Красная", blue: "Синяя", green: "Зелёная", purple: "Фиолетовая", teal: "Бирюзовая", slate: "Графитовая" };
+export const ROOF_COLORS: Record<string, string> = { orange: "Оранжевая", amber: "Янтарная", red: "Красная", blue: "Синяя", green: "Зелёная", purple: "Фиолетовая", teal: "Бирюзовая", slate: "Графитовая" };
 async function roofOf(uid: number) { const r = await q("SELECT roof FROM f_style WHERE user = ?", [uid]); const k = r.length ? String(r[0][0]) : ""; return ROOF_COLORS[k] ? k : "orange"; }
 async function decorView(uid: number) {
   const owned = (await q("SELECT item FROM f_decor WHERE user = ? AND kind = 'roof'", [uid])).map((r) => String(r[0]));
