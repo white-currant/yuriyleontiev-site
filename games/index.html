@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151529";
+    var BUILD = "202611151616";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -488,8 +488,8 @@
   .wares { margin-top: 18px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 10px; column-gap: 0; }
   .ware { position: relative; height: 104px; display: flex; align-items: flex-end; justify-content: center; padding: 0 0 31px; border: 0; background: none; overflow: visible; }
   .ware::after { content: ""; position: absolute; left: 0; right: 0; bottom: 22px; height: 9px; background: linear-gradient(#c58c54, #9a6438 60%, #6e4425); box-shadow: 0 4px 0 rgba(30, 15, 5, .45); }
-  .ware:nth-child(4n + 1)::after { left: 4px; border-radius: 3px 0 0 3px; }
-  .ware:nth-child(4n)::after, .ware:last-child::after { right: 4px; border-radius: 0 3px 3px 0; }
+  .ware:nth-child(4n + 1)::after { left: 4px; border-top-left-radius: 3px; border-bottom-left-radius: 3px; }   /* углы по отдельности: один товар на полке — скруглены оба края */
+  .ware:nth-child(4n)::after, .ware:last-child::after { right: 4px; border-top-right-radius: 3px; border-bottom-right-radius: 3px; }
   .ware canvas { width: 58%; height: auto; max-height: 58px; object-fit: contain; image-rendering: pixelated; margin-bottom: 1px; transition: transform .15s, filter .15s; filter: drop-shadow(0 3px 0 rgba(30, 15, 5, .35)); }
   .ware:active canvas { transform: scale(.92); }
   .ware.on canvas { transform: translateY(-4px) scale(1.06); filter: drop-shadow(0 0 8px rgba(255, 200, 110, .8)); }
