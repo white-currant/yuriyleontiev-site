@@ -369,6 +369,7 @@ async function handle(req: Request): Promise<Response> {
       return json({ ok: true });
     }
     if (req.method === "GET" && url.pathname === "/bot/weather") return json(farm.weatherView(now()));   // для объявлений бота в чате
+    if (req.method === "GET" && url.pathname === "/bot/mono") return json(await farm.monoFeed(Number(url.searchParams.get("after")) || 0));   // события моно-фермы — объявить в чате
     if (req.method === "POST" && url.pathname === "/bot/rain") {   // новый пост в канале — дождь звёздной пыли
       return json(await farm.setRain(Number((await req.json()).hours || 24)));
     }
@@ -399,6 +400,9 @@ async function handle(req: Request): Promise<Response> {
     case "/api/link/remove": return json(await linkRemove(user));
     // «Лунная ферма»
     case "/api/farm": return json(await farm.farmState(user));
+    case "/api/farm/star": return json(await farm.takeStar(user, Number(body.id)));
+    case "/api/farm/crater": return json(await farm.fixCrater(user, Number(body.idx)));
+    case "/api/farm/coal": return json(await farm.takeCoal(user, Number(body.idx)));
     case "/api/farm/dig": return json(await farm.dig(user, Number(body.idx)));
     case "/api/farm/plant": return json(await farm.plant(user, Number(body.idx), String(body.crop || "")));
     case "/api/farm/harvest": return json(await farm.harvest(user, Number(body.idx)));

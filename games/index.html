@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150154";
+    var BUILD = "202611150407";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -178,8 +178,23 @@
   .vrec canvas { width: 100%; aspect-ratio: 1; }
   .vrec span { display: block; margin-top: 4px; font-size: 11.5px; line-height: 1.25; color: rgba(246, 239, 227, .85); }
   .vrec.locked span { color: var(--dim); }
-  .foil canvas, canvas.foil { animation: foil 3s linear infinite; }
-  @keyframes foil { 0% { filter: hue-rotate(0deg) saturate(1.2); } 100% { filter: hue-rotate(360deg) saturate(1.2); } }
+  /* фольга (2026-11-15): по конверту пластинки бежит радужный блик, как у голографической карточки */
+  .foilbox { position: relative; display: block; } .foilbox canvas { display: block; }
+  .vdetail .foilbox { width: 160px; margin: 4px auto 12px; } .vdetail .foilbox canvas { margin: 0; }
+  .foilbox::after { content: ""; position: absolute; left: calc(var(--fx) * 100%); top: calc(var(--fy) * 100%); width: calc(var(--fs) * 100%); height: calc(var(--fs) * 100%); pointer-events: none;
+    background: linear-gradient(115deg, rgba(255,255,255,0) 32%, rgba(255,110,210,.6) 41%, rgba(120,230,255,.65) 47%, rgba(255,245,150,.7) 53%, rgba(140,255,190,.55) 59%, rgba(255,255,255,0) 68%);
+    background-size: 260% 260%; mix-blend-mode: color-dodge; animation: foilsweep 3.6s ease-in-out infinite; }
+  @keyframes foilsweep { 0% { background-position: 100% 100%; } 65%, 100% { background-position: 0% 0%; } }
+  /* слой эффектов поверх фермы: Солнцестояние, созвездие, мифическое — сглаженные, не пиксельные */
+  .fxbox { position: absolute; left: 0; right: 0; bottom: 0; top: calc(var(--top) + 46px); pointer-events: none; overflow: hidden; }
+  .fxbox canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+  .fxbox .bloom, .fxbox .wash { display: none; }
+  .fxbox.sun .bloom { display: block; image-rendering: auto; mix-blend-mode: screen; opacity: .42; filter: brightness(.9) contrast(3.4) saturate(1.3) blur(6px); }
+  .fxbox.sun .wash { display: block; position: absolute; inset: 0; mix-blend-mode: soft-light;
+    background: radial-gradient(130% 95% at 95% -8%, rgba(255,222,130,.85), rgba(255,180,90,.45) 45%, rgba(255,150,70,.3) 85%); }
+  canvas.myth { filter: drop-shadow(0 0 2px #c58bff) drop-shadow(0 0 5px rgba(160, 80, 255, .85)); animation: mythglow 2.4s ease-in-out infinite; }
+  @keyframes mythglow { 50% { filter: drop-shadow(0 0 3px #ead6ff) drop-shadow(0 0 10px rgba(175, 95, 255, 1)); } }
+  #farmbanners .banner.mono span { color: #ffe9a8; }
   .star canvas, canvas.star { animation: twinkle 1.6s ease-in-out infinite; }
   @keyframes twinkle { 50% { filter: brightness(1.35) drop-shadow(0 0 4px rgba(255, 220, 140, .8)); } }
   .vdetail canvas { width: 160px; height: 160px; display: block; margin: 4px auto 12px; }
@@ -361,6 +376,28 @@
   .salecount2 { color: var(--white); font-weight: 600; }
   .invgrid { position: relative; }
   .invgrid .hot4 { position: absolute; border: 3px solid var(--gold); pointer-events: none; z-index: 3; box-shadow: 0 0 10px rgba(255, 196, 105, .35); }
+  .plot .lbl.two { white-space: pre-line; text-align: center; line-height: 1.05; }
+  body[data-screen^="farm"] .plot.crat { clip-path: none; z-index: 2; }            /* кратер шире грядки: надпись над ямой, не на ней */
+  body[data-screen^="farm"] .plot.crat .lbl { bottom: 56%; }
+  /* звёздочки от кометы: лежат на ферме, покачиваются; нажал — летят в баланс */
+  .cstar { position: absolute; width: 40px; height: 40px; margin: -20px 0 0 -20px; padding: 0; border: 0; background: none; z-index: 4; animation: cstar 1.6s ease-in-out infinite; }
+  /* тёмный круг-подложка и пульсирующее сияние: звёздочку видно на траве и на цветах */
+  .cstar::before { content: ""; position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(40, 20, 70, .85) 0 45%, rgba(255, 214, 120, .55) 46% 58%, rgba(255, 214, 120, 0) 72%); animation: cglow 1.1s ease-in-out infinite; }
+  .cstar img, .cstar img.ico { position: relative; width: auto; height: 22px; margin: 0; image-rendering: pixelated; filter: drop-shadow(0 0 1px #2a1406) drop-shadow(0 0 1px #2a1406) drop-shadow(0 0 6px rgba(255, 230, 150, 1)); }
+  .cstar span { position: absolute; left: 50%; top: -14px; transform: translateX(-50%); padding: 1px 5px; border-radius: 4px; background: rgba(42, 20, 6, .85);
+    font: 700 11px var(--pix, inherit); color: #ffe7a8; white-space: nowrap; }
+  @keyframes cstar { 50% { transform: translateY(-3px); } }
+  @keyframes cglow { 50% { transform: scale(1.18); } }
+  .cstar img, .cstar img.ico { animation: cshine 1.4s ease-in-out infinite; animation-delay: var(--shd, 0s); }   /* звезда сама сияет */
+  .cstar::after { content: ""; position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px; pointer-events: none;
+    background: linear-gradient(90deg, transparent 0 46%, rgba(255, 250, 220, .95) 48% 52%, transparent 54%) center / 100% 3px no-repeat,
+                linear-gradient(0deg, transparent 0 46%, rgba(255, 250, 220, .95) 48% 52%, transparent 54%) center / 3px 100% no-repeat;
+    animation: cglint 2.2s ease-in-out infinite; animation-delay: var(--gld, 0s); opacity: 0; }   /* блик-крестик вспыхивает и гаснет */
+  @keyframes cshine {
+    0%, 100% { transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 1px #2a1406) drop-shadow(0 0 1px #2a1406) drop-shadow(0 0 4px rgba(255, 230, 150, .8)) brightness(1); }
+    50% { transform: scale(1.14) rotate(-8deg); filter: drop-shadow(0 0 1px #2a1406) drop-shadow(0 0 1px #2a1406) drop-shadow(0 0 10px rgba(255, 240, 180, 1)) brightness(1.35); } }
+  @keyframes cglint { 0%, 55%, 100% { opacity: 0; transform: scale(.3) rotate(0deg); } 70% { opacity: 1; transform: scale(1) rotate(45deg); } 85% { opacity: 0; transform: scale(.6) rotate(90deg); } }
   .bnrow { display: grid; grid-template-columns: 46px 1fr; gap: 12px; align-items: center; margin-top: 10px; }
   .bnrow .slot { width: 46px; height: 46px; aspect-ratio: 1; }
   .bnrow .slot canvas { width: 70%; height: auto; image-rendering: pixelated; }
@@ -1580,15 +1617,23 @@
   // рост: растёт только пока полито; сухое дольше dry_limit — засыхает (кроме «стойких»)
   // погода общая для всех: дни лунного ливня поливают грядки сами (интервалы присылает сервер)
   function showers() { return (F.state && F.state.showers) || (F.visiting && F.visiting.showers) || []; }
+  function farmOf() { return document.body.dataset.screen === "farm-visit" ? F.visiting : F.state; }   // чья ферма на экране
+  function boosts() { var f = farmOf(); return (f && f.boost) || []; }
+  function marksOf(f) { return (f && f.marks) || []; }
+  function marksAt(i, f) { return marksOf(f || F.state).filter(function (m) { return m.idx === i; }).map(function (m) { return m.kind; }); }
+  function near4(i) { return [i - 3, i + 3, i % 3 ? i - 1 : -1, i % 3 < 2 ? i + 1 : -1].filter(function (x) { return x >= 0 && x < 9; }); }
+  function mythNear(i, f) { f = f || F.state; return near4(i).some(function (j) { var p = f.plots[j]; return p && p.crop && f.strains[p.crop] && f.strains[p.crop].myth; }); }
   function weatherNow() { var w = (F.state && F.state.weather) || (F.visiting && F.visiting.weather); return w && w.today; }
   function plotInfo(pl, t, ss, dryLim) {
     var s = ss && ss[pl.crop]; if (!s) return null;
-    var a = pl.wet_from, w = Math.min(t, pl.water_until), wetT = Math.max(0, w - a), lastWet = Math.max(pl.water_until, pl.planted), raining = false;
+    var a = pl.wet_from, w = Math.min(t, pl.water_until), parts = w > a ? [[a, w]] : [], wetT = 0, lastWet = Math.max(pl.water_until, pl.planted), raining = false;
     showers().forEach(function (iv) {
-      var s0 = Math.max(iv[0], a), s1 = Math.min(iv[1], t);
-      if (s1 > s0) { wetT += Math.max(0, s1 - Math.max(s0, w > a ? w : a)); lastWet = Math.max(lastWet, s1); }
+      var s0 = Math.max(iv[0], a), s1 = Math.min(iv[1], t), b0 = Math.max(s0, w > a ? w : a);
+      if (s1 > s0) { if (s1 > b0) parts.push([b0, s1]); lastWet = Math.max(lastWet, s1); }
       if (iv[0] <= t && t < iv[1]) raining = true;
     });
+    var bo = boosts();                                      // Солнцестояние: политое время внутри него считается дважды (рост ×2)
+    parts.forEach(function (x) { wetT += x[1] - x[0]; bo.forEach(function (b) { wetT += Math.max(0, Math.min(x[1], b[1], t) - Math.max(x[0], b[0])); }); });
     var need = s.minutes * 60, g = pl.grown + wetT, ripe = g >= need, dryFor = raining ? 0 : t - lastWet;
     return { s: s, need: need, g: g, f: Math.min(1, g / need), ripe: ripe, wet: !ripe && (raining || t < pl.water_until), shower: raining,
              dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: need - g, wetLeft: raining ? 1e9 : pl.water_until - t };
@@ -1610,6 +1655,23 @@
 
   // грядка-ромб: дощатый бортик, земля бороздами (политая — тёмная и блестит, сухая — светлая), 9 растений;
   // закрытая — заросла травой, на ней табличка
+  function drawCrater(c, i, t) {                                                     // кратер от кометы: круглая воронка, чуть шире грядки
+    var cx = BC[i][0], cy = BC[i][1];
+    var ellF = function (ex, ey, rx, ry, col) { for (var yy = -ry; yy <= ry; yy++) { var ww = Math.round(rx * Math.sqrt(Math.max(0, 1 - (yy * yy) / (ry * ry)))); if (ww > 0) px(c, ex - ww, ey + yy, ww * 2 + 1, 1, col); } };
+    var cy2 = cy;                                                                     // по центру грядки; надпись — над валом
+    ellF(cx, cy2 + 1, 18, 9, "rgba(60,35,15,.35)");                                // тень вала на земле вокруг — выходит за край грядки
+    ellF(cx, cy2, 17, 8, "#8a5a38");                                                // выброшенная земля (вал)
+    ellF(cx, cy2 - 1, 16, 7, "#b98a5a"); ellF(cx - 1, cy2 - 2, 13, 6, "#d6a46c");    // светлый край вала, освещён слева сверху
+    ellF(cx, cy2, 12, 6, "#4a2e1a"); ellF(cx, cy2 + 1, 9, 4, "#2e1c10");             // склон внутрь
+    ellF(cx + 1, cy2 + 2, 6, 3, "#140c06");                                         // дно
+    px(c, cx - 10, cy2 - 1, 5, 1, "#3a2414"); px(c, cx + 6, cy2 - 1, 4, 1, "#a07650"); // тень и свет на склонах
+    px(c, cx, cy2 + 1, 2, 2, "#c4b5fd"); px(c, cx + 1, cy2 + 1, 1, 1, "#ffffff");    // осколок кометы на дне
+    for (var ki = 0; ki < 10; ki++) {                                                 // комья и тлеющие искры по валу
+      var ang = ki / 10 * 6.283 + i, rx2 = Math.round(cx + Math.cos(ang) * 17), ry2 = Math.round(cy2 + Math.sin(ang) * 8);
+      px(c, rx2, ry2, 2, 1, "#6e4425");
+      if ((Math.floor(t / 380) + ki) % 3 === 0) px(c, Math.round(cx + Math.cos(ang) * 11), Math.round(cy2 + Math.sin(ang) * 5), 1, 1, ki % 2 ? "#ff9f43" : "#ffd166");
+    }
+  }
   function drawBed(c, pl, i, now, t, ss, dryLim, own, sign) {
     var cx = BC[i][0], cy = BC[i][1];
     if (pl.locked) {
@@ -1633,7 +1695,21 @@
     }
     if (wet) for (var w = 0; w < 6; w++) { var wa = ((w * 37 + i * 11) % 100) / 60 - .8, wb = ((w * 53 + i * 7) % 100) / 60 - .8;
       if (Math.abs(wa) + Math.abs(wb) < .9 && (Math.floor(t / 500) + w) % 3) px(c, Math.round(cx + wa * HW), Math.round(cy + wb * HH), 1, 1, "rgba(160,215,255,.6)"); }
+    if (pl.crater) return;                                                            // кратер рисуется поверх всех грядок (drawCrater): он шире грядки
+    if (pl.frost) {                                                                   // иней: грядка замёрзла (ледяное событие)
+      rhomb(c, cx, cy, HW - 3, HH - 2, "rgba(200,235,255,.82)");
+      for (var fi = 0; fi < 12; fi++) { var fa = ((fi * 41 + i * 13) % 100) / 55 - .9, fb = ((fi * 67 + i * 5) % 100) / 55 - .9;
+        if (Math.abs(fa) + Math.abs(fb) < .85) px(c, Math.round(cx + fa * HW), Math.round(cy + fb * HH), 1, 1, (Math.floor(t / 600) + fi) % 4 ? "#ffffff" : "#8fd3f5"); }
+      seg(c, cx - 7, cy - 1, cx + 6, cy + 2, "#e9f8ff"); seg(c, cx - 2, cy - 3, cx + 3, cy + 3, "#e9f8ff");
+      return;
+    }
     if (!inf) return;
+    if (pl.coal) {                                                                    // огненное сгорело: кучка угля, тлеют искры
+      for (var ci = 0; ci < 5; ci++) { var cp = spot(i, ci); px(c, cp[0] - 3, cp[1] - 2, 6, 3, "#24242c"); px(c, cp[0] - 2, cp[1] - 3, 4, 1, "#45454f");
+        if ((Math.floor(t / 300) + ci) % 3) px(c, cp[0] - 1 + (ci % 3), cp[1] - 2, 1, 1, ci % 2 ? "#ff7a2e" : "#ffd166"); }
+      if (Math.floor(t / 500) % 2) px(c, cx, cy - 10, 1, 2, "rgba(200,200,210,.5)");
+      return;
+    }
     var s = inf.s, rows = CROP[s.shape] || CROP.moss, st = inf.f >= 1 ? 3 : inf.f > .6 ? 2 : inf.f > .25 ? 1 : 0;
     if (inf.dead) st = Math.max(2, st);
     for (var n = 0; n < NSP; n++) {
@@ -1642,6 +1718,11 @@
       if (st === 3 && (Math.floor(t / 350) + n * 5 + i * 3) % 9 === 0) {                    // созрело — по растениям бегают искорки
         var top = p[1] - sp.length - 2; px(c, p[0], top - 1, 1, 3, "#ffffff"); px(c, p[0] - 1, top, 3, 1, "#ffffff"); px(c, p[0], top, 1, 1, C.gold);
       }
+    }
+    if (pl.comet) {                                                                   // комета прилетела: над грядкой сияет звезда
+      var gl = .5 + .5 * Math.sin(t / 220), sx2 = cx, sy2 = cy - HH - 10;
+      px(c, sx2 - 3, sy2, 7, 1, "rgba(255,230,150," + (.5 + gl * .5).toFixed(2) + ")"); px(c, sx2, sy2 - 3, 1, 7, "rgba(255,230,150," + (.5 + gl * .5).toFixed(2) + ")");
+      px(c, sx2 - 1, sy2 - 1, 3, 3, "#fff6df"); px(c, sx2 + 4, sy2 - 5, 6, 1, "rgba(255,210,120,.45)"); px(c, sx2 + 7, sy2 - 7, 5, 1, "rgba(255,210,120,.25)");
     }
     if (own && dry && !inf.dead && (Math.floor(t / 450) % 2)) {                             // мигающая капля: «полей меня»
       var qx = cx - 2, qy = cy - HH - 9;
@@ -1789,6 +1870,8 @@
     drawMill(c, t, kit, own, now);
     var nextLock = -1; (plots || []).forEach(function (pl, k) { if (pl.locked && nextLock < 0) nextLock = k; });
     BORDER.forEach(function (k) { if (plots && plots[k] && BC[k]) drawBed(c, plots[k], k, now, t, ss, dryLim, own, k === nextLock); });   // дальние грядки — раньше
+    (plots || []).forEach(function (pl, k) { if (pl && pl.crater && BC[k]) drawCrater(c, k, t); });
+    if (nextLock >= 0 && BC[nextLock] && (plots || []).some(function (pl) { return pl && pl.crater; })) drawSign(c, BC[nextLock][0], BC[nextLock][1] + 2, true, plots[nextLock].price);   // табличка цены — поверх кратера
     c.drawImage(L.front, 0, 0);
     drawOven(c, t, kit, own, now);
     if (CHEST_ON) drawChest(c, own);
@@ -1937,6 +2020,7 @@
     }, function (e) { F.pending--; toast("Не получилось: " + e.message); if (!F.pending) call("/api/farm").then(setFarm).catch(function () {}); throw e; });
   }
   function cropIcon(cv, s, bare) {                                                // значок сорта: созревшее растение на земле (bare — без земли)
+    cv.classList.toggle("myth", !!(s && s.myth));                                 // мифическое — фиолетовое сияние
     var rows = (CROP[s.shape] || CROP.moss)[3], w = rows[0].length + 4, h = 13, c = cv.getContext("2d");
     cv.width = w; cv.height = h; c.clearRect(0, 0, w, h); if (!bare) { px(c, 1, h - 2, w - 2, 2, C.so); px(c, 1, h - 2, w - 2, 1, C.sol); }
     sprS(c, 2, h - 2, rows, s);
@@ -1956,8 +2040,10 @@
   var PP = { k: "#3a2414", W: "#fbf4e4", w: "#ddd0b6", x: "#b8ab90", m: "#7a4a26", y: "#ffd166",
              h: "#f2c27a", b: "#d99a52", B: "#9a6430", R: "#ff4f9a", r: "#a82868", p: "#ffd3e6",
              c: "#efe8d6", C: "#b8ad96", u: "#5b8fd6", g: "#7cc757", G: "#3f8f3a", e: "#b6ee88",
-             o: "#ff9f43", O: "#c8661a", v: "#c4a3ff", V: "#7a52c8", n: "#a0683a", N: "#6e4425", s: "#f4f0ff" };
+             o: "#ff9f43", O: "#c8661a", v: "#c4a3ff", V: "#7a52c8", n: "#a0683a", N: "#6e4425", s: "#f4f0ff",
+             a: "#24242c", A: "#45454f", z: "#6c6c78", f: "#ff7a2e", F: "#ffd166" };
   var DISH = {
+    "p:coal":    ["......F.......", ".....kfk......", "...kkAzkk.....", "..kAzzAaAkk...", ".kAzAaAfAzAk..", ".kaAaFaAaAaAk.", "kaAfaAaAzaAaAk", "kaaAaaAfaAaaak", ".kkaaaaaaaakk.", "...kkkkkkkk..."],
     "p:flour":   ["......kk......", ".....kmmk.....", "....kWWWWk....", "...kWWWWWwk...", "..kWWWWWWwwk..", "..kWWyyyWwwk..", ".kWWWyWyWWwxk.", ".kWWWyyyWWwxk.", ".kWWWWWWWwwxk.", ".kwWWWWWWwxxk.", "..kxwwwwwxxk..", "...kkkkkkkk..."],
     "p:bread":   ["..............", "....kkkkkk....", "..kkhhyhhbkk..", ".khhyhhbhhbbk.", "khyhbhhyhbbbBk", "kbhhbbhhbbbbBk", "kbbbbbbbbbbBBk", ".kBbbbbbbbBBk.", "..kkkkkkkkkk.."],
     "p:soup":    ["...s....s.....", "....s....s....", "...s....s.....", ".kkkkkkkkkkkk.", "kegGgeggGgegGk", "kcccccccccccCk", ".kcuuuuuuuuCk.", "..kcccccccCk..", "...kkkkkkkk..."],
@@ -1981,11 +2067,13 @@
   }
   function itemIcon(cv, id) {
     if (id.indexOf("p:") !== 0) return fruitIcon(cv, itemOf(id));
+    var it0 = F.state && itemOf(id); cv.classList.toggle("myth", !!(it0 && it0.myth));   // еда с мифическим — светится
     var rows = DISH["p:" + recKey(id)] || DISH["p:bread"], c = cv.getContext("2d"), h = rows.length + 2; cv.width = 16; cv.height = Math.max(12, h); c.clearRect(0, 0, 16, cv.height);
     var it = F.state && itemOf(id), pal = it && it.color && it.color !== "sun" ? PAL[it.color] : null;
     px(c, 2, cv.height - 1, 12, 1, "rgba(40,25,10,.3)"); dishDraw(c, 1, cv.height - 2, rows, pal);
   }
   function fruitIcon(cv, s) {
+    cv.classList.toggle("myth", !!(s && s.myth));
     var rows = FRUIT[s.shape] || FRUIT.moss, c = cv.getContext("2d");
     var h = Math.max(10, rows.length + 2);
     cv.width = 12; cv.height = h; c.clearRect(0, 0, 12, h);
@@ -2001,14 +2089,136 @@
     if (CANIMG.n < 2) { cv.width = 12; cv.height = 9; c.clearRect(0, 0, 12, 9); spr(c, 1, 8, CAN); return; }
     var im = empty ? CANIMG.empty : CANIMG.full; cv.width = im.width; cv.height = im.height; c.clearRect(0, 0, cv.width, cv.height); c.drawImage(im, 0, 0);
   }
+  // ---------- события моно-фермы на экране (2026-11-15): слой эффектов поверх фермы, сглаженный, не пиксельный ----------
+  var MONO_INFO = {
+    solstice: { icon: "☀", name: "Солнцестояние", text: "Вся ферма засажена солнечными растениями — наступило Солнцестояние. Сутки все растения растут вдвое быстрее." },
+    constellation: { icon: "✨", name: "Созвездие", text: "Над звёздной фермой сложилось созвездие. Следующий сбор с каждой его грядки даст урожай ×2. После сбора звезда гаснет; созвездие держится трое суток." },
+    myth: { icon: "", name: "Мифическое семя", text: "Туманная ферма подарила мифическое семя — оно уже в инвентаре и светится фиолетовым. Посади его: пока оно растёт, следующий сбор с каждой соседней грядки (слева, справа, сверху, снизу) даст звёздной пыли втрое больше. Само растение даёт один мифический плод — он втрое дороже, и еда с ним втрое дороже, — но семян не даёт. Созревшее мифическое растение ждёт сутки, потом рассыпается." },
+  };
+  var MONO_RULE = "Такие события случаются, когда все открытые грядки — не меньше пяти — засажены растениями одной расцветки. У каждой расцветки своё событие. Не чаще раза в трое суток.";
+  var MONO_COLOR = { solstice: "солнечными", constellation: "звёздными", myth: "туманными" };
+  var MONO_FARM = { solstice: "солнечной", constellation: "звёздной", myth: "туманной" };
+  function monoRule(kind) { return "Это событие " + MONO_FARM[kind] + " фермы: все открытые грядки — не меньше пяти — засажены " + MONO_COLOR[kind] + " растениями. Бывает не чаще раза в трое суток."; }
+  function monoOf(f, now) {
+    var m = f && f.mono; if (!m || m.until <= now) return null;
+    if (m.kind === "constellation" && !marksOf(f).some(function (k) { return k.kind === "star"; })) return null;   // все звёзды собраны
+    return m;
+  }
+  function monoSheet(kind, fresh) {
+    var info = MONO_INFO[kind]; if (!info) return;
+    sheet(function (sh, close) {
+      var n = el("div", "mono", fresh ? "Событие фермы!" : "Событие фермы"); n.style.color = "var(--gold)"; sh.appendChild(n);
+      sh.appendChild(el("h3", "", (info.icon ? info.icon + " " : "") + info.name));
+      sh.appendChild(el("div", "sub", info.text)); sh.appendChild(el("div", "sub", monoRule(kind)));
+      sh.appendChild(btn("Здорово", "", close));
+    });
+  }
+  function fxLayer(cv) {
+    if (cv._fx) return cv._fx;
+    var box = el("div", "fxbox"), bloom = el("canvas", "bloom"), wash = el("div", "wash"), fx = el("canvas", "fxc");
+    box.appendChild(bloom); box.appendChild(wash); box.appendChild(fx);
+    cv.parentNode.insertBefore(box, cv.nextSibling);
+    return (cv._fx = { box: box, bloom: bloom, wash: wash, fx: fx });
+  }
+  function hash01(n) { var x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+  function star4(c, x, y, r, a, col) {                                               // четырёхлучевая искра
+    c.globalAlpha = Math.max(0, Math.min(1, a)); c.fillStyle = col; c.beginPath(); c.moveTo(x, y - r);
+    c.quadraticCurveTo(x, y, x + r, y); c.quadraticCurveTo(x, y, x, y + r); c.quadraticCurveTo(x, y, x - r, y); c.quadraticCurveTo(x, y, x, y - r); c.fill(); c.globalAlpha = 1;
+  }
+  function drawFxLayer(cv, f, now, t) {
+    var L = fxLayer(cv), m = monoOf(f, now), sun = !!(m && m.kind === "solstice"), ss = (f && f.strains) || {};
+    var stars = marksOf(f).filter(function (k) { return k.kind === "star" && BC[k.idx]; }).sort(function (a, b) { return a.n - b.n; });
+    var myth = ((f && f.plots) || []).filter(function (p) { return p && p.crop && ss[p.crop] && ss[p.crop].myth && BC[p.idx]; });
+    var near = myth.length ? marksOf(f).filter(function (k) { return k.kind === "myth" && BC[k.idx]; }) : [];
+    L.box.classList.toggle("sun", sun);
+    if (!sun && !stars.length && !myth.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    L.box.hidden = false;
+    var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
+    var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
+    if (L.fx.width !== cw || L.fx.height !== ch) { L.fx.width = cw; L.fx.height = ch; }
+    var c = L.fx.getContext("2d"), kx = cw / FW, ky = ch / FH; c.clearRect(0, 0, cw, ch);
+    c.save(); c.globalCompositeOperation = "lighter";
+    if (sun) {
+      if (L.bloom.width !== FW) { L.bloom.width = FW; L.bloom.height = FH; }
+      var bc = L.bloom.getContext("2d"); bc.clearRect(0, 0, FW, FH); bc.drawImage(cv, 0, 0);   // свечение ярких мест: копия фермы, размытая CSS-фильтром
+      var sx = cw * 1.03, sy = -ch * .1, len = Math.hypot(cw, ch) * 1.35;
+      for (var r = 0; r < 9; r++) {                                                    // солнечные лучи из-за верхнего правого угла
+        var ang = Math.PI * (.56 + r * .052) + Math.sin(t / 4200 + r * 1.3) * .03, wd = .016 + .014 * hash01(r), a = .09 + .09 * (.5 + .5 * Math.sin(t / 1700 + r * 2.1));
+        var g = c.createLinearGradient(sx, sy, sx + Math.cos(ang) * len, sy + Math.sin(ang) * len);
+        g.addColorStop(0, "rgba(255,238,175," + Math.min(1, a * 1.8) + ")"); g.addColorStop(.55, "rgba(255,214,130," + a + ")"); g.addColorStop(1, "rgba(255,200,120,0)");
+        c.fillStyle = g; c.beginPath(); c.moveTo(sx, sy);
+        c.lineTo(sx + Math.cos(ang - wd) * len, sy + Math.sin(ang - wd) * len); c.lineTo(sx + Math.cos(ang + wd) * len, sy + Math.sin(ang + wd) * len); c.closePath(); c.fill();
+      }
+      for (var q = 0; q < 28; q++) {                                                   // пылинки в лучах
+        var ph = (t / 9000 + hash01(q + 7)) % 1, mx0 = hash01(q) * cw + Math.sin(t / 2000 + q) * 6 * dpr, my0 = (hash01(q + 3) * ch + ph * ch * .3) % ch;
+        c.globalAlpha = .45 * Math.sin(ph * Math.PI); c.fillStyle = "#fff0c0"; c.beginPath(); c.arc(mx0, my0, (1 + hash01(q + 9) * 1.4) * dpr, 0, 7); c.fill();
+      }
+      c.globalAlpha = 1;
+    }
+    myth.forEach(function (p) {                                                        // мифическое растение: фиолетовое сияние и искры вверх
+      var x = BC[p.idx][0] * kx, y = (BC[p.idx][1] - 5) * ky, pu = .5 + .5 * Math.sin(t / 700 + p.idx), R = (20 + 4 * pu) * kx;
+      c.globalCompositeOperation = "source-over";                                      // фиолетовая дымка видна и на светлом
+      var g0 = c.createRadialGradient(x, y, 0, x, y, R);
+      g0.addColorStop(0, "rgba(140,60,255," + (.45 + .15 * pu) + ")"); g0.addColorStop(.55, "rgba(120,50,240," + (.22 + .08 * pu) + ")"); g0.addColorStop(1, "rgba(100,40,230,0)");
+      c.fillStyle = g0; c.beginPath(); c.ellipse(x, y, R, R * .75, 0, 0, 7); c.fill();
+      c.globalCompositeOperation = "lighter";
+      var g = c.createRadialGradient(x, y - 4 * ky, 0, x, y - 4 * ky, R * .6);
+      g.addColorStop(0, "rgba(230,190,255," + (.55 + .25 * pu) + ")"); g.addColorStop(1, "rgba(170,90,255,0)");
+      c.fillStyle = g; c.beginPath(); c.ellipse(x, y - 4 * ky, R * .6, R * .5, 0, 0, 7); c.fill();
+      c.shadowColor = "rgba(170,90,255,1)"; c.shadowBlur = 8 * dpr;
+      for (var j = 0; j < 10; j++) {
+        var ph2 = (t / 2600 + hash01(j + p.idx * 9)) % 1, mx = x + (hash01(j * 3 + p.idx) - .5) * 30 * kx + Math.sin(t / 500 + j) * 2 * dpr, my = y + 4 * ky - ph2 * 30 * ky;
+        star4(c, mx, my, (2.5 + 3 * hash01(j)) * dpr * (1 - ph2 * .4), Math.sin(ph2 * Math.PI), j % 2 ? "#f3e6ff" : "#c79bff");
+      }
+      c.shadowBlur = 0;
+    });
+    near.forEach(function (mk) {                                                       // соседи мифического: фиолетовая обводка грядки — бонус ещё не взят
+      var x = BC[mk.idx][0] * kx, y = BC[mk.idx][1] * ky, pu = .5 + .5 * Math.sin(t / 600 + mk.idx * 1.7);
+      c.strokeStyle = "rgba(190,120,255," + (.35 + .4 * pu) + ")"; c.lineWidth = 2 * dpr; c.shadowColor = "#a45cff"; c.shadowBlur = 10 * dpr;
+      c.beginPath(); c.moveTo(x, y - (HH + 1) * ky); c.lineTo(x + (HW + 1) * kx, y); c.lineTo(x, y + (HH + 1) * ky); c.lineTo(x - (HW + 1) * kx, y); c.closePath(); c.stroke();
+      c.shadowBlur = 0;
+    });
+    if (stars.length) {                                                                // созвездие: звёзды над грядками и искрящиеся линии между ними
+      c.globalCompositeOperation = "source-over";                                      // на светлой земле «lighter» почти не виден — ореол обычной краской
+      var pts = stars.map(function (k) {                                              // звезда — над серединой своей грядки, чуть смещена: созвездие, а не обводка
+        return [(BC[k.idx][0] + (hash01(k.idx * 5 + 1) - .5) * 10) * kx, (BC[k.idx][1] - 4 + (hash01(k.idx * 7 + 2) - .5) * 5) * ky]; });
+      c.lineCap = "round";
+      for (var i2 = 0; i2 + 1 < pts.length; i2++) {
+        var a0 = pts[i2], a1 = pts[i2 + 1], fl = .5 + .5 * Math.sin(t / 260 + i2 * 2.3) * Math.sin(t / 410 + i2);
+        c.strokeStyle = "rgba(60,80,200," + (.35 + .15 * fl) + ")"; c.lineWidth = 6 * dpr; c.shadowColor = "rgba(80,110,255,.9)"; c.shadowBlur = 10 * dpr;
+        c.beginPath(); c.moveTo(a0[0], a0[1]); c.lineTo(a1[0], a1[1]); c.stroke(); c.shadowBlur = 0;     // синий ореол
+        c.strokeStyle = "rgba(235,242,255," + (.75 + .25 * fl) + ")"; c.lineWidth = 2 * dpr;
+        c.beginPath(); c.moveTo(a0[0], a0[1]); c.lineTo(a1[0], a1[1]); c.stroke();                       // светлая сердцевина
+        c.strokeStyle = "#ffffff"; c.lineWidth = 2.6 * dpr; c.setLineDash([2 * dpr, 9 * dpr]); c.lineDashOffset = -t / 40;
+        c.beginPath(); c.moveTo(a0[0], a0[1]); c.lineTo(a1[0], a1[1]); c.stroke(); c.setLineDash([]);    // бегущие блёстки
+        for (var s3 = 0; s3 < 6; s3++) {                                               // искры вспыхивают на линии
+          var u = (t / 1900 + s3 / 6 + i2 * .13) % 1, tw = Math.pow(Math.abs(Math.sin(t / 130 + s3 * 7 + i2 * 3)), 3);
+          var ex = a0[0] + (a1[0] - a0[0]) * u, ey = a0[1] + (a1[1] - a0[1]) * u;
+          c.shadowColor = "rgba(120,160,255,1)"; c.shadowBlur = 6 * dpr * tw;
+          star4(c, ex, ey, (1.5 + 4.5 * tw) * dpr, .4 + .6 * tw, "#ffffff"); c.shadowBlur = 0;
+        }
+      }
+      pts.forEach(function (p2, j2) {
+        var tw2 = .6 + .4 * Math.sin(t / 380 + j2 * 1.9), g2 = c.createRadialGradient(p2[0], p2[1], 0, p2[0], p2[1], 16 * dpr);
+        g2.addColorStop(0, "rgba(120,150,255," + .75 * tw2 + ")"); g2.addColorStop(1, "rgba(80,110,255,0)");
+        c.fillStyle = g2; c.beginPath(); c.arc(p2[0], p2[1], 16 * dpr, 0, 7); c.fill();
+        c.shadowColor = "rgba(70,100,255,1)"; c.shadowBlur = 8 * dpr;
+        star4(c, p2[0], p2[1], (8 + 2.5 * tw2) * dpr, 1, "#ffffff"); c.shadowBlur = 0; star4(c, p2[0], p2[1], 3.2 * dpr, 1, "#fff2b8");
+      });
+    }
+    c.restore();
+  }
   function farmNow() { return F.state ? F.state.now + (Date.now() - F.fetched) / 1000 : Date.now() / 1000; }
   function farmAnim() {
     if (F.anim) return;
-    var last = 0;
+    var last = 0, lastFx = 0;
     var step = function (ts) {
       var scr = document.body.dataset.screen;
       if (scr !== "farm" && scr !== "farm-visit") { F.anim = 0; return; }
       F.anim = requestAnimationFrame(step);
+      if (ts - lastFx >= 33) { lastFx = ts; var tf = Date.now();                    // слой эффектов — плавнее, ~30 кадров
+        if (scr === "farm" && F.state) drawFxLayer($("scenecv"), F.state, farmNow(), tf);
+        if (scr === "farm-visit" && F.visiting) drawFxLayer($("visitcv"), F.visiting, F.visiting.now + (Date.now() - F.visiting.fetched) / 1000, tf); }
       if (ts - last < 120) return; last = ts; F.frame = (F.frame || 0) + 1;      // счётчик перерисовок — ровный шаг для покадровых анимаций
       var t = Date.now();
       if (scr === "farm" && F.state) drawFarm($("scenecv"), 47, F.state.plots, farmNow(), t, F.state.rain_until > farmNow(), F.state.strains, F.state.dry_limit, true, F.state);
@@ -2046,14 +2256,36 @@
       b.style.width = HW * 2 / FW * 100 + "%"; b.style.height = (HH * 2 + 11) / FH * 100 + "%";
       var lbl = document.createElement("span"), inf = pl.crop ? plotInfo(pl, now, ss, dryLim) : null; lbl.className = "lbl";
       if (pl.locked) lbl.textContent = "";
+      else if (pl.crater) { lbl.textContent = own ? "починить" : "кратер"; lbl.classList.add("ready"); b.classList.add("crat"); }
+      else if (pl.frost) { lbl.textContent = "лёд\n" + fmtShort(pl.frost - now).replace(/ /g, "\u00a0"); lbl.classList.add("water", "two"); }
+      else if (pl.coal) { lbl.textContent = own ? "уголь!" : "уголь"; lbl.classList.add("ready"); }
       else if (!pl.crop) lbl.textContent = own ? "посадить" : "пусто";
       else if (!inf) lbl.textContent = "…";
       else if (inf.dead) { lbl.textContent = own ? "убрать" : "засохло"; lbl.classList.add("dead"); }
-      else if (inf.ripe) { lbl.textContent = own ? "собрать!" : "созрело"; lbl.classList.add("ready"); }
+      else if (inf.ripe && inf.s.myth) {                                         // мифическое ждёт сутки, потом рассыпается
+        var mr = marksOf(own ? F.state : F.visiting).filter(function (m) { return m.idx === pl.idx && m.kind === "mythripe"; })[0];
+        lbl.textContent = (own ? "собрать!" : "созрело") + (mr ? "\n" + fmtShort(mr.until - now).replace(/ /g, "\u00a0") : ""); lbl.classList.add("ready"); if (mr) lbl.classList.add("two");
+      }
+      else if (inf.ripe) { lbl.textContent = pl.comet ? "комета!" : own ? "собрать!" : "созрело"; lbl.classList.add("ready"); }
       else if (!inf.wet) { lbl.textContent = own ? (inf.dryFor > dryLim / 2 ? "сохнет!" : "полить!") : "сухо"; lbl.classList.add("water"); }
       else lbl.textContent = fmtShort(inf.left);
       b.appendChild(lbl);
       if (own) b.onclick = function () { plotTap(pl); };
+      box.appendChild(b);
+    });
+    if (own) (F.state.stars || []).forEach(function (st) {                          // звёздочки от кометы
+      var b = el("button", "cstar"); b.type = "button"; b.style.left = st.x / FW * 100 + "%"; b.style.top = st.y / FH * 100 + "%";
+      var ph = function (ms) { return -((Date.now() + st.id * 230) % ms) / 1000 + "s"; };
+      b.style.animationDelay = ph(1600); b.style.setProperty("--shd", ph(1400)); b.style.setProperty("--gld", ph(2200));   // ферма перерисовывается каждую секунду — покачивание не сбивается
+      b.appendChild(ICON_IMG["✦"].cloneNode(false)); b.appendChild(el("span", "", "+" + st.dust));
+      b.onclick = function () {                                                     // сразу: в баланс с полётом, сервер подтвердит
+        haptic("light"); var cs = F.state; cs.stars = (cs.stars || []).filter(function (x) { return x.id !== st.id; });
+        var r = b.getBoundingClientRect(), d = $("dustpill").getBoundingClientRect(), n = el("div", "", "+" + st.dust + " ✦");
+        n.style.color = "#ffe7a8"; n.style.font = "700 14px var(--pix)"; n.style.textShadow = "0 1px 2px rgba(0,0,0,.7)"; n.style.whiteSpace = "nowrap";
+        flyNode(n, [r.left + r.width / 2, r.top + r.height / 2], [d.left + d.width / 2, d.top + d.height / 2], 0, 650);
+        setTimeout(function () { cs.dust += st.dust; renderFarm(); var p = $("dustpill"); p.classList.remove("bump"); void p.offsetWidth; p.classList.add("bump"); }, 650);
+        b.remove(); farmCall("/api/farm/star", { id: st.id }).catch(function () {});
+      };
       box.appendChild(b);
     });
     if (own) {                                                                      // колодец: набрать воды в лейку
@@ -2098,7 +2330,9 @@
     var now = farmNow();
     setText($("dustpill"), "✦ " + s.dust);
     setText($("waterpill"), "💧 " + s.water + "/" + s.can_max);
-    var ban = $("farmbanners"); ban.innerHTML = "";
+    var ban = $("farmbanners"), mo = monoOf(s, now);
+    var sig = JSON.stringify([mo && mo.kind, s.gifts, s.sales]);               // строки пересобираются, только когда меняется их суть — иначе нажатие «теряется»
+    var monoLine = function () { var mi = MONO_INFO[mo.kind]; return (mi.icon ? mi.icon + " " : "") + mi.name + " · ещё " + fmtShort(mo.until - now); };
     var wz = $("weather"), wt = s.weather && s.weather.today, wn = s.weather && s.weather.tomorrow;   // погода дня — значком в шапке
     wz.hidden = !wt;
     if (wt) {
@@ -2106,6 +2340,12 @@
       wz.setAttribute("aria-label", wt.name);
       wz.classList.toggle("calm", wt.id === "clear");
       wz.onclick = function () { haptic("light"); toast(wt.icon + " " + wt.name + ": " + wt.effect + ". Ещё " + fmtLeft(wt.until - farmNow()) + ". Завтра: " + wn.icon + " " + wn.name.toLowerCase() + "."); };
+    }
+    if (ban._sig === sig) { if (mo && ban._mono) setText(ban._mono, monoLine()); }
+    else { ban._sig = sig; ban.innerHTML = ""; ban._mono = null;
+    if (mo) {                                               // событие моно-фермы: строкой под фермой, по нажатию — что это
+      var mb = el("div", "banner mono"), mk2 = mo.kind; ban._mono = el("span", "", monoLine()); mb.appendChild(ban._mono);
+      var mq = el("button", "", "Что это?"); mq.onclick = function () { haptic("light"); monoSheet(mk2); }; mb.appendChild(mq); ban.appendChild(mb);
     }
     if (s.gifts.length) {
       var g = el("div", "banner gift"); var names = s.gifts.map(function (x) { return x.from; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
@@ -2124,6 +2364,7 @@
       sb.appendChild(el("span", "", "🛒 В твоей лавке купили семена на ✦ " + sum + ": " + who.slice(0, 3).join(", ") + (who.length > 3 ? " и др." : "")));
       var ok = el("button", "", "Ок"); ok.onclick = function () { s.sales = []; renderFarm(); farmCall("/api/farm/sales/seen").catch(function () {}); };
       sb.appendChild(ok); ban.appendChild(sb);
+    }
     }
     renderPlots($("plots"), s.plots, now, true, s.strains, s.dry_limit);
     renderHotbar();
@@ -2191,6 +2432,17 @@
         if (s.dust < pl.price) b.disabled = true; sh.appendChild(b);
       });
     }
+    if (pl.crater) {                                                                // кратер — восстановить грядку, бесплатно; семя вернётся
+      haptic("success"); F.state.plots[pl.idx] = { idx: pl.idx, crop: null }; renderFarm(); floatText(pl.idx, "грядка восстановлена");
+      return farmCall("/api/farm/crater", { idx: pl.idx }).catch(function () {});
+    }
+    if (pl.frost) { haptic("error"); return toast("Грядка замёрзла. Оттает через " + fmtLeft(pl.frost - now) + " — или посади огненное растение рядом, оно растопит лёд."); }
+    if (pl.coal) {                                                                  // уголь — сразу в амбар (без амбара — пылью)
+      var cs = F.state, hb2 = hasBuild(cs, "barn"); haptic("success"); addFx("harvest", pl.idx, { shape: "moss", color: "ember" });
+      if (hb2) { barnAdd("p:coal", 1); floatText(pl.idx, "+ звёздный уголь в амбар", "big"); } else { cs.dust += 120; floatText(pl.idx, "+120 ✦ за уголь", "big"); }
+      cs.plots[pl.idx] = { idx: pl.idx, crop: null }; renderFarm();
+      return farmCall("/api/farm/coal", { idx: pl.idx }).catch(function () {});
+    }
     if (!pl.crop) {
       var picked = !isTool(F.sel) && bagOf(F.sel);
       if (picked && picked.count - picked.listed > 0) return plantNow(pl, s.strains[F.sel], picked);
@@ -2204,15 +2456,23 @@
     }
     if (inf.ripe) {                                                                 // созрело — собрать сразу, без вопросов
       var gain = s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1, hasB = hasBuild(s, "barn");   // есть амбар — урожай туда, нет — сразу в пыль
+      var mk = marksAt(pl.idx), starX = mk.indexOf("star") >= 0, mythX = !inf.s.myth && mk.indexOf("myth") >= 0 && mythNear(pl.idx);
+      if (starX) gain *= 2;                                                         // грядка созвездия — урожай ×2
+      s.marks = marksOf(s).filter(function (m) { return !(m.idx === pl.idx && (m.kind === "star" || m.kind === "myth")) && !(inf.s.myth && (m.kind === "myth" || m.kind === "mythripe")); });
       var pts = " · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков");
       haptic("success"); addFx("harvest", pl.idx, inf.s);
       if (hasB) { floatText(pl.idx, "+" + gain + " в амбар" + pts); barnAdd(inf.s.id, gain); flyFruit(pl.idx, inf.s, gain); }
       else { floatText(pl.idx, "+" + gain * inf.s.dust + " ✦" + pts); s.dust += gain * inf.s.dust; flyDust(pl.idx); }
+      if (starX) setTimeout(function () { floatText(pl.idx, "созвездие: урожай ×2!", "big"); }, 250);
+      if (mythX) { var md = gain * inf.s.dust * 2; s.dust += md; setTimeout(function () { floatText(pl.idx, "мифическая пыль +" + md + " ✦", "big"); flyDust(pl.idx); }, 300); }
       s.plots[pl.idx] = { idx: pl.idx, crop: null }; renderFarm();   // сразу, не дожидаясь сервера
-      setTimeout(function () { flySeeds(pl.idx, inf.s); }, 260);
+      if (!inf.s.myth) setTimeout(function () { flySeeds(pl.idx, inf.s); }, 260);
       return farmCall("/api/farm/harvest", { idx: pl.idx }).then(function (r) {
         if (r.error) return;
         if (r.double) floatText(pl.idx, "×2 щедрый урожай!", "big");
+        if (r.comet) floatText(pl.idx, "комета! +" + r.comet + " ✦", "big");
+        if (r.frost) setTimeout(function () { floatText(pl.idx, "грядку сковал лёд", "big"); }, 600);
+        if (r.sunbeam >= 0) setTimeout(function () { haptic("success"); floatText(r.sunbeam, "луч солнца — созрело!", "big"); }, 400);
         if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в инвентарь", "seedf"); }, 450);
         if (r.vinyl) F.items = null;
         var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl); };
@@ -2289,7 +2549,9 @@
     var s = F.state; haptic("light"); addFx("plant", pl.idx, st); floatText(pl.idx, "+1 очко", "pts");
     var t0 = farmNow(); it.count--;
     s.plots[pl.idx] = { idx: pl.idx, crop: st.id, planted: t0, grown: 0, wet_from: t0, water_until: t0 }; renderFarm();
-    farmCall("/api/farm/plant", { idx: pl.idx, crop: st.id }).catch(function () {});
+    farmCall("/api/farm/plant", { idx: pl.idx, crop: st.id }).then(function (r) {
+      if (r && r.mono) { haptic("success"); setTimeout(function () { monoSheet(r.mono.kind, true); }, 450); }   // вся ферма одной расцветки — событие
+    }).catch(function () {});
   }
   // свойства семени простыми словами; для своих выведенных сортов — продажа в своей лавке
   function seedSheet(st, opt) {
@@ -2508,12 +2770,12 @@
         return m;
       };
       // страницы: как играть, гибриды, формы растений, погода, особые свойства, кухня, лавка и пыль, благодарности
-      var N = SHAPES.length + 7;
+      var N = SHAPES.length + 8;
       var rules = function (list) { list.forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); }); };
       var draw = function (dir) {
         var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage)), SH = SHAPES.length;
         // порядок страниц (его решение 2026-11-15): сначала текстовые, потом виды растений, в конце благодарности
-        var ORDER = [0, 1, SH + 2, SH + 3, SH + 4, SH + 5], q;
+        var ORDER = [0, 1, SH + 2, SH + 3, SH + 7, SH + 4, SH + 5], q;
         for (var oi = 2; oi <= SH + 1; oi++) ORDER.push(oi);
         ORDER.push(SH + 6); q = ORDER[p];
         page.innerHTML = ""; page.scrollTop = 0; page.className = "bpage" + (dir ? (dir > 0 ? " fwd" : " back") : "");
@@ -2583,6 +2845,27 @@
             if (BN_FRAMES) { var sl = el("div", "slot bn bn-" + k), cv = el("canvas", "pix"); cropIcon(cv, { shape: "moss", color: "moss" }); sl.appendChild(cv); d.appendChild(sl); }
             var t = el("p", "brule"); t.appendChild(el("b", "", BONUS_NAME[k] + ". ")); t.append((data.bonuses[k] || "").replace(/^./, function (ch) { return ch.toUpperCase(); }) + ".");
             d.appendChild(t); page.appendChild(d);
+          });
+        } else if (q === SH + 7) {
+          // события расцветок: что ещё не случалось у игрока — под «???», пусть открывают сами
+          var seen = (F.state && F.state.events_seen) || [];
+          page.appendChild(el("h3", "", "События"));
+          page.appendChild(el("div", "bsub", "Редкие случаи с растениями некоторых расцветок"));
+          [["burn", "Огненные", "Вспышка", "Огненное растение может вспыхнуть, пока растёт. На грядке остаётся звёздный уголь — редкий и ценный: в пыль за 120 или на продажу. Урожай пропадает."],
+           ["comet", "Кометные", "Падение кометы", "На кометное растение может упасть комета. На грядке остаётся кратер, а по ферме рассыпаются звёздочки — собери их, они дают пыль. Кратер восстанавливается нажатием, бесплатно, а семя вернётся. Бывает редко, не чаще раза в сутки."],
+           ["frost", "Ледяные", "Иней", "Собранное ледяное растение может заморозить свою грядку на сутки. Огненное растение, посаженное рядом, растопит лёд сразу."],
+           ["sun", "Солнечные", "Луч с неба", "Когда собираешь солнечное растение, луч может ударить в другую грядку — растение на ней тут же созреет."]]
+            .forEach(function (x) {
+              var d = el("p", "brule"), ok = seen.indexOf(x[0]) >= 0;
+              d.appendChild(el("b", "", x[1] + ". " + (ok ? x[2] + ". " : "")));
+              d.append(ok ? x[3] : "??? — случится, узнаешь."); page.appendChild(d);
+            });
+          page.appendChild(el("h3", "", "Ферма одной расцветки"));                    // события моно-фермы
+          page.appendChild(el("div", "bsub", MONO_RULE));
+          [["solstice", "Солнечная ферма"], ["constellation", "Звёздная ферма"], ["myth", "Туманная ферма"]].forEach(function (x) {
+            var d = el("p", "brule"), ok = seen.indexOf("mono_" + x[0]) >= 0, mi = MONO_INFO[x[0]];
+            d.appendChild(el("b", "", x[1] + ". " + (ok ? mi.name + ". " : "")));
+            d.append(ok ? mi.text : "??? — случится, узнаешь."); page.appendChild(d);
           });
         } else if (q === SH + 4) {
           page.appendChild(el("h3", "", "Кухня"));
@@ -3192,6 +3475,12 @@
   function bestOf(vs) { var b = null; (vs || []).forEach(function (v) { if (better(v, b)) b = v; }); return b; }
   function finCls(fin) { return fin === "foil" ? " foil" : fin === "star" ? " star" : ""; }
   var coverCache = {};
+  function foilWrap(cv, fx, fy, fs) {                       // фольга: обёртка с бегущим радужным бликом поверх конверта
+    var p = cv.parentNode; if (!p) return requestAnimationFrame(function () { if (cv.parentNode) foilWrap(cv, fx, fy, fs); });
+    var box = p.classList.contains("foilbox") ? p : el("span", "foilbox");
+    if (box !== p) { p.insertBefore(box, cv); box.appendChild(cv); }
+    box.style.setProperty("--fx", fx); box.style.setProperty("--fy", fy); box.style.setProperty("--fs", fs);
+  }
   function drawVinyl(cv, track, size, tier, finish) {     // tier = null — пластинка ещё не найдена (силуэт)
     var S = size, c = cv.getContext("2d"); cv.width = S; cv.height = S; c.clearRect(0, 0, S, S);
     var owned = !!tier, tc = owned ? (TIER[tier] || TIER.common)[1] : "#4a4466";
@@ -3212,6 +3501,7 @@
       if (tier === "legendary" || tier === "epic") { px(c, x0 + 1, y0 + 1, sl - 2, 1, tc); px(c, x0 + 1, y0 + sl - 2, sl - 2, 1, tc); }
       if (finish === "foil") for (var k = -sl; k < sl; k += 3) for (var t = 0; t < sl; t++) { var xx = x0 + t, yy = y0 + t + k;
         if (yy > y0 && yy < y0 + sl - 1 && xx > x0 && xx < x0 + sl - 1) px(c, xx, yy, 1, 1, ["rgba(255,90,200,.28)", "rgba(90,220,255,.28)", "rgba(255,240,120,.28)"][((k / 3) % 3 + 3) % 3]); }
+      if (finish === "foil") foilWrap(cv, x0 / S, y0 / S, sl / S);
       if (finish === "star") [[2, 2], [sl - 4, 4], [4, sl - 5], [sl - 6, sl - 4], [sl / 2 | 0, 1]].forEach(function (q) {
         px(c, x0 + q[0], y0 + q[1], 1, 3, "#fff6df"); px(c, x0 + q[0] - 1, y0 + q[1] + 1, 3, 1, "#fff6df"); });
     };
@@ -3354,7 +3644,7 @@
       if (v.error) return toast(v.error);
       F.visiting = { pub: pub, seed: parseInt(pub.slice(0, 6), 16), rain_until: v.rain_until, plots: v.plots, now: v.now, fetched: Date.now(),
                      strains: v.strains, dry_limit: v.dry_limit, weather: v.weather, showers: v.showers,
-                     builds: v.builds || [], jobs: v.jobs || [] };            // постройки соседа — иначе в гостях видны пустые участки
+                     builds: v.builds || [], jobs: v.jobs || [], mono: v.mono, marks: v.marks || [], boost: v.boost || [] };            // постройки соседа — иначе в гостях видны пустые участки
       show("farm-visit"); $("vtitle").textContent = v.name;
       drawFarm($("visitcv"), F.visiting.seed, v.plots, v.now, Date.now(), v.rain_until > v.now, v.strains, v.dry_limit, false, v); farmAnim();
       renderPlots($("visitplots"), v.plots, v.now, false, v.strains, v.dry_limit);

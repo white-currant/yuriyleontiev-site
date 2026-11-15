@@ -39,6 +39,14 @@ CREATE INDEX IF NOT EXISTS f_stall_listed ON f_stall (listed);
 -- своя цена продавца (2026-11-14): на семена и товары прилавка, в пределах 70–130% от цены игры; нет строки — цена игры
 -- сундук (2026-11-14): лишние семена из инвентаря; в сундуке их не посадить и не продать, пока не достанешь
 CREATE TABLE IF NOT EXISTS f_chest (user INTEGER NOT NULL, strain TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, strain));
+-- события расцветок (2026-11-15): на грядке — уголь (огненный сгорел), комета (кометный созрел с прибавкой), иней (ледяной заморозил пустую грядку)
+CREATE TABLE IF NOT EXISTS f_plotev (user INTEGER NOT NULL, idx INTEGER NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, until INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, idx));
+CREATE TABLE IF NOT EXISTS f_evlog (user INTEGER NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS f_evlog_u ON f_evlog (user, kind, at);
+-- звёздочки от упавшей кометы: лежат на ферме, игрок собирает нажатием (x, y — точка на картинке фермы)
+CREATE TABLE IF NOT EXISTS f_stars (id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER NOT NULL, x INTEGER NOT NULL, y INTEGER NOT NULL, dust INTEGER NOT NULL, at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS f_stars_u ON f_stars (user);
+CREATE TABLE IF NOT EXISTS f_cratercrop (user INTEGER NOT NULL, idx INTEGER NOT NULL, crop TEXT NOT NULL, PRIMARY KEY (user, idx));
 CREATE TABLE IF NOT EXISTS f_prices (user INTEGER NOT NULL, item TEXT NOT NULL, price INTEGER NOT NULL, PRIMARY KEY (user, item));
 CREATE TABLE IF NOT EXISTS f_sales (id INTEGER PRIMARY KEY AUTOINCREMENT, seller INTEGER NOT NULL, buyer_name TEXT, strain TEXT NOT NULL,
   price INTEGER NOT NULL, at INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0);
@@ -55,3 +63,6 @@ CREATE TABLE IF NOT EXISTS f_given (from_user INTEGER NOT NULL, to_user INTEGER 
   PRIMARY KEY (from_user, to_user, day));
 CREATE TABLE IF NOT EXISTS f_daily (user INTEGER NOT NULL, day TEXT NOT NULL, points INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user, day));
+-- события моно-фермы (2026-11-15): вся открытая ферма одной расцветки → крупное событие; отметки на грядках (созвездие, мифическое соседство)
+CREATE TABLE IF NOT EXISTS f_mono (user INTEGER NOT NULL, kind TEXT NOT NULL, started INTEGER NOT NULL, until INTEGER NOT NULL, PRIMARY KEY (user, started));
+CREATE TABLE IF NOT EXISTS f_monomark (user INTEGER NOT NULL, idx INTEGER NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, at INTEGER NOT NULL DEFAULT 0, until INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, idx, kind));
