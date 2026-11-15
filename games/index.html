@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611150407";
+    var BUILD = "202611150429";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -192,6 +192,11 @@
   .fxbox.sun .bloom { display: block; image-rendering: auto; mix-blend-mode: screen; opacity: .42; filter: brightness(.9) contrast(3.4) saturate(1.3) blur(6px); }
   .fxbox.sun .wash { display: block; position: absolute; inset: 0; mix-blend-mode: soft-light;
     background: radial-gradient(130% 95% at 95% -8%, rgba(255,222,130,.85), rgba(255,180,90,.45) 45%, rgba(255,150,70,.3) 85%); }
+  .fxbox.moss .wash { display: block; position: absolute; inset: 0; mix-blend-mode: soft-light;
+    background: radial-gradient(120% 90% at 50% 60%, rgba(90,200,170,.6), rgba(40,140,120,.5) 60%, rgba(30,100,90,.55)); }
+  .cstar.clump::before { background: radial-gradient(circle, rgba(30,60,25,.85) 0 45%, rgba(150,230,120,.55) 46% 58%, rgba(150,230,120,0) 72%); }
+  .cstar.clump { display: flex; align-items: center; justify-content: center; }
+  .cstar.clump canvas { position: relative; height: 20px; width: auto; image-rendering: pixelated; filter: drop-shadow(0 0 1px #13240c) drop-shadow(0 0 5px rgba(170,255,150,.9)); }
   canvas.myth { filter: drop-shadow(0 0 2px #c58bff) drop-shadow(0 0 5px rgba(160, 80, 255, .85)); animation: mythglow 2.4s ease-in-out infinite; }
   @keyframes mythglow { 50% { filter: drop-shadow(0 0 3px #ead6ff) drop-shadow(0 0 10px rgba(175, 95, 255, 1)); } }
   #farmbanners .banner.mono span { color: #ffe9a8; }
@@ -1456,6 +1461,7 @@
       seg(c, R0[0], R0[1], R1[0], R1[1], roof[2]); seg(c, e0[0], e0[1] + 1, e1[0], e1[1] + 1, "rgba(60,30,20,.5)");
       for (i = 0; i <= 12; i++) { var q2 = lerp([R1[0] + 1, R1[1]], [Cc[0] + 2, Cc[1] - H + 1], i / 12); px(c, Math.round(q2[0]), Math.round(q2[1]), 2, 2, roof[1]); }
       px(c, A[0] - 4, A[1] - 2, 3, 3, "#e8c45a"); px(c, A[0] - 3, A[1] - 3, 2, 1, "#f6dc85");                               // клок сена у стены
+      MOSSGEO.barn = { A: A, B: B, Cc: Cc, H: H, e0: e0, e1: e1, R0: R0, R1: R1 };                                            // для мха во время события
     })();
     c = back2.getContext("2d");                                                       // дальше — то, что стоит перед амбаром
     // задний забор двора
@@ -1529,6 +1535,7 @@
     for (i = 0; i < 10; i++) flower(c, 44 + (r() * 20 | 0), 86 + (r() * 5 | 0) - (i % 3), C.flowers[i % C.flowers.length]);
     spr(c, 104, 68, BARROW); spr(c, 122, 70, BARREL); spr(c, 131, 74, BARREL);
     var smoke = [chx + 3, chy - 14];
+    MOSSGEO.house = { A: A, B: B, Cc: Cc, H: H, e0: e0, e1: e1, g0: g0, g1: g1, sag: sag, ch: [chx, chy] };
     var glows = [[Math.round(onL(.24, 8)[0]), Math.round(onL(.24, 8)[1]), 6], [Math.round(onR(.5, 8)[0]), Math.round(onR(.5, 8)[1]), 6], [lan[0], lan[1] + 1, 4], [Math.round(rw[0]), Math.round(rw[1]), 4]];
 
     // колодец в изометрии: круглый каменный сруб, вода, два столба, островерхая крыша, ведро
@@ -1550,6 +1557,7 @@
     seg(c, el2[0], el2[1], ef[0], ef[1], roof[1]); seg(c, ef[0], ef[1], er[0], er[1], "rgba(60,30,20,.6)"); seg(c, ap[0], ap[1], ef[0], ef[1], roof[2]);
     px(c, wx, wy - 36, 1, 3, C.gold); px(c, wx - 1, wy - 35, 3, 1, C.gold);
     for (i = 0; i < 5; i++) flower(c, wx - 14 + i * 7 + (r() * 2 | 0), wy + 12 + (i % 2) * 2, C.flowers[(i * 3) % C.flowers.length]);
+    MOSSGEO.well = { wx: wx, wy: wy, ap: ap, el: el2, ef: ef, er: er };
     // деревья и цветы по углам луга
     tree(c, 10, 160, 9, TREES[0]); tree(c, 172, 166, 10, TREES[0]); tree(c, 181, 136, 7, TREES[1]); tree(c, 5, 96, 6, TREES[1]);
     for (i = 0; i < 26; i++) { x = 2 + (r() * (FW - 4) | 0); y = 150 + (r() * (FH - 154) | 0); if (Math.abs(x - YC[2][0]) < 14 || (x > 60 && y < 166)) continue; flower(c, x, y, C.flowers[(i * 7) % C.flowers.length]); }
@@ -1655,6 +1663,87 @@
 
   // грядка-ромб: дощатый бортик, земля бороздами (политая — тёмная и блестит, сухая — светлая), 9 растений;
   // закрытая — заросла травой, на ней табличка
+  // «Мох захватил ферму» (его выбор 2026-11-15): на постройках, печке и мельнице мох растёт по их пикселям — куртинами,
+  // гуще у карнизов, конька и низа стен, с прядями с края кровли; по земле — россыпь бирюзовых кочек мимо построек и грядок.
+  // Считается один раз из неподвижных слоёв (у мельницы — только неподвижная башня, крылья крутятся).
+  var MOSSC = ["#1d4a41", "#2f7a68", "#47a88f", "#6fd0b4", "#a8f2db"], MOSSGEO = {}, mossCache = {};
+  function mossLayer(L, kit, key) {
+    if (mossCache[key]) return mossCache[key];
+    var W = FW, H = FH, barn = hasBuild(kit, "barn");
+    var mk = function () { var cv = document.createElement("canvas"); cv.width = W; cv.height = H; return cv; };
+    var full = mk(), fc = full.getContext("2d"), extra = mk(), ec = extra.getContext("2d");
+    if (hasBuild(kit, "oven") && ARTS.ok) ec.drawImage(ARTS.oven, OVEN[0] - 14, OVEN[1] + 4 - ARTS.oven.height);
+    if (hasBuild(kit, "mill")) {                                                      // башня мельницы: то, что не меняется между кадрами
+      var m1 = mk(), m2 = mk(), k0 = { builds: ["mill"], jobs: [] };
+      drawMill(m1.getContext("2d"), 0, k0, false, 0); drawMill(m2.getContext("2d"), 2345, k0, false, 0);
+      var d1 = m1.getContext("2d").getImageData(0, 0, W, H), d2 = m2.getContext("2d").getImageData(0, 0, W, H).data;
+      for (var q = 0; q < W * H * 4; q += 4) if (d1.data[q + 3] < 200 || d2[q + 3] < 200 || Math.abs(d1.data[q] - d2[q]) + Math.abs(d1.data[q + 1] - d2[q + 1]) > 6) d1.data[q + 3] = 0;
+      var tm = mk(); tm.getContext("2d").putImageData(d1, 0, 0); ec.drawImage(tm, 0, 0);
+    }
+    fc.drawImage(L.back, 0, 0); if (barn) fc.drawImage(L.shed, 0, 0); fc.drawImage(L.back2, 0, 0); fc.drawImage(L.front, 0, 0); fc.drawImage(extra, 0, 0);
+    var img = fc.getImageData(0, 0, W, H).data, obj = new Uint8Array(W * H), green = new Uint8Array(W * H);
+    var lay = [L.back2, L.front, extra].concat(barn ? [L.shed] : []).map(function (cv) { return cv.getContext("2d").getImageData(0, 0, W, H).data; });
+    for (var i = 0; i < W * H; i++) {
+      var R = img[i * 4], G = img[i * 4 + 1], B = img[i * 4 + 2];
+      green[i] = G > R + 8 && G > B + 8 ? 1 : 0;                                      // трава, листва, плющ
+      for (var l = 0; l < lay.length; l++) if (lay[l][i * 4 + 3] > 200) { obj[i] = 1; break; }
+    }
+    var hsh = function (x, y, s2) { var v = Math.sin(x * 127.1 + y * 311.7 + s2 * 74.7) * 43758.5453; return v - Math.floor(v); };
+    var vn = function (x, y, cell, s2) {                                              // пятнистый шум: мох растёт куртинами
+      var gx = Math.floor(x / cell), gy = Math.floor(y / cell), fx = x / cell - gx, fy = y / cell - gy;
+      fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+      var a0 = hsh(gx, gy, s2), a1 = hsh(gx + 1, gy, s2), b0 = hsh(gx, gy + 1, s2), b1 = hsh(gx + 1, gy + 1, s2);
+      return (a0 + (a1 - a0) * fx) + ((b0 + (b1 - b0) * fx) - (a0 + (a1 - a0) * fx)) * fy;
+    };
+    var at = function (a, x, y) { return x < 0 || y < 0 || x >= W || y >= H ? 0 : a[y * W + x]; };
+    var inBed = function (x, y) { for (var k = 0; k < 9; k++) { var q2 = BC[k]; if (q2 && Math.abs(x - q2[0]) / (HW + 3) + Math.abs(y - q2[1] - 1) / (HH + 5) < 1) return true; } return false; };
+    var M = new Uint8Array(W * H), x, y;
+    for (y = 30; y < H; y++) for (x = 0; x < W; x++) {
+      var i2 = y * W + x; if (green[i2] || inBed(x, y)) continue;
+      var n = vn(x, y, 6, 1) * .7 + vn(x, y, 2, 2) * .3;
+      if (obj[i2]) {
+        var eave = !at(obj, x, y + 1) || !at(obj, x, y + 2) || at(green, x, y + 1);   // низ: край кровли, низ стены, основание столба
+        var top = !at(obj, x, y - 1) || !at(obj, x, y - 2);                           // верх: конёк, верх забора
+        if (n + (eave ? .4 : 0) + (top ? .25 : 0) > .6) M[i2] = 1;
+      } else {                                                                        // земля и дорожки — у края травы
+        var edge = at(green, x - 1, y) || at(green, x + 1, y) || at(green, x, y - 1) || at(green, x, y + 1) || at(green, x - 2, y) || at(green, x + 2, y);
+        if (edge && n > .45) M[i2] = 1;
+      }
+    }
+    var out = mk(), oc = out.getContext("2d"), spots = [];
+    // кочки по земле (как ему понравилось раньше): бирюзовые подушки россыпью, но не на постройках и грядках
+    var r = rng(4242), cols = ["#24584d", "#3a8f7b", "#58c2a6", "#9ff0d6"];
+    for (var k3 = 0; k3 < 288; k3++) {
+      var tx = Math.round(r() * W), ty = Math.round(28 + r() * (H - 30)), w = 3 + Math.floor(r() * 6), h = 1 + Math.floor(r() * 2), sh = r(), mush = r() < .1;
+      var clear = ty > 40; for (var dx = -1; dx <= w && clear; dx++) for (var dy = -3; dy <= h && clear; dy++) if (at(obj, tx + dx, ty + dy) || inBed(tx + dx, ty + dy)) clear = false;
+      if (!clear) continue;
+      var pxo = function (x0, y0, w0, h0, col) { oc.fillStyle = col; oc.fillRect(x0, y0, w0, h0); };
+      pxo(tx, ty + h, w, 1, "rgba(15,40,35,.4)"); pxo(tx, ty, w, h, cols[1]);
+      pxo(tx + 1, ty - 1, Math.max(1, w - 2), 1, cols[sh < .5 ? 2 : 1]); if (w > 4) pxo(tx + 2, ty - 2, w - 4, 1, cols[2]);
+      pxo(tx + Math.floor(w / 2), ty - (w > 4 ? 2 : 1), 1, 1, cols[3]); pxo(tx, ty + h - 1, 1, 1, cols[0]); pxo(tx + w - 1, ty + h - 1, 1, 1, cols[0]);
+      if (mush) spots.push([tx + 1, ty - 1]);
+    }
+    for (y = 30; y < H; y++) for (x = 0; x < W; x++) {                                  // мох на постройках
+      var i3 = y * W + x; if (!M[i3]) continue;
+      var lum = (img[i3 * 4] * .3 + img[i3 * 4 + 1] * .59 + img[i3 * 4 + 2] * .11), dark = lum < 95 ? 1 : 0;   // теневая сторона темнее
+      var up = at(M, x, y - 1), dn = at(M, x, y + 1), d2b = hsh(x, y, 9);
+      var ci = !up ? 3 : !dn ? 0 : d2b < .3 ? 2 : 1; ci = Math.max(0, ci - dark);
+      if (!up && d2b > .85 && !dark) ci = 4;
+      oc.fillStyle = MOSSC[ci]; oc.fillRect(x, y, 1, 1);
+      if (obj[i3] && !dn && !at(obj, x, y + 1) && hsh(x, y, 5) > .72) {             // прядь с края кровли
+        var len = 1 + Math.floor(hsh(x, y, 6) * 3);
+        for (var k2 = 1; k2 <= len; k2++) { oc.fillStyle = MOSSC[k2 === len ? 0 : 1]; oc.fillRect(x, y + k2, 1, 1); }
+      }
+    }
+    return (mossCache[key] = { cv: out, spots: spots.slice(0, 16) });
+  }
+  function mossOn(f, now) { var m = f && f.mono; return !!(m && m.kind === "moss" && m.until > now); }
+  function drawMossOver(c, f, now, t, L, key) {
+    if (!mossOn(f, now)) return;
+    var ml = mossLayer(L, f, key); c.drawImage(ml.cv, 0, 0);
+    ml.spots.forEach(function (q, k) { var pu = .5 + .5 * Math.sin(t / 500 + k * 1.7);                  // светящиеся грибочки в кочках
+      px(c, q[0] + 1, q[1] - 2, 1, 2, "#e8f0d0"); px(c, q[0], q[1] - 3, 3, 1, pu > .5 ? "#c8ffe8" : "#6fd8c0"); });
+  }
   function drawCrater(c, i, t) {                                                     // кратер от кометы: круглая воронка, чуть шире грядки
     var cx = BC[i][0], cy = BC[i][1];
     var ellF = function (ex, ey, rx, ry, col) { for (var yy = -ry; yy <= ry; yy++) { var ww = Math.round(rx * Math.sqrt(Math.max(0, 1 - (yy * yy) / (ry * ry)))); if (ww > 0) px(c, ex - ww, ey + yy, ww * 2 + 1, 1, col); } };
@@ -1874,6 +1963,7 @@
     if (nextLock >= 0 && BC[nextLock] && (plots || []).some(function (pl) { return pl && pl.crater; })) drawSign(c, BC[nextLock][0], BC[nextLock][1] + 2, true, plots[nextLock].price);   // табличка цены — поверх кратера
     c.drawImage(L.front, 0, 0);
     drawOven(c, t, kit, own, now);
+    drawMossOver(c, kit, now, t, L, seed + ["barn", "mill", "oven"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
     if (CHEST_ON) drawChest(c, own);
     if (own) drawFx(c, t);
     for (i = 0; i < 4; i++) {                                                      // дым из трубы
@@ -2093,12 +2183,15 @@
   var MONO_INFO = {
     solstice: { icon: "☀", name: "Солнцестояние", text: "Вся ферма засажена солнечными растениями — наступило Солнцестояние. Сутки все растения растут вдвое быстрее." },
     constellation: { icon: "✨", name: "Созвездие", text: "Над звёздной фермой сложилось созвездие. Следующий сбор с каждой его грядки даст урожай ×2. После сбора звезда гаснет; созвездие держится трое суток." },
+    moss: { icon: "", name: "Мох захватил ферму", text: "Лунный мох разросся по всей ферме: по дорожкам, забору и крышам. Сутки что ни посади — пробивается мох, а семя остаётся в мешке. Зато урожай мха в это время вдвое больше. Когда мох отцветёт, по ферме раскатятся мшистые комочки со звёздной пылью — собери их." },
     myth: { icon: "", name: "Мифическое семя", text: "Туманная ферма подарила мифическое семя — оно уже в инвентаре и светится фиолетовым. Посади его: пока оно растёт, следующий сбор с каждой соседней грядки (слева, справа, сверху, снизу) даст звёздной пыли втрое больше. Само растение даёт один мифический плод — он втрое дороже, и еда с ним втрое дороже, — но семян не даёт. Созревшее мифическое растение ждёт сутки, потом рассыпается." },
   };
   var MONO_RULE = "Такие события случаются, когда все открытые грядки — не меньше пяти — засажены растениями одной расцветки. У каждой расцветки своё событие. Не чаще раза в трое суток.";
-  var MONO_COLOR = { solstice: "солнечными", constellation: "звёздными", myth: "туманными" };
-  var MONO_FARM = { solstice: "солнечной", constellation: "звёздной", myth: "туманной" };
-  function monoRule(kind) { return "Это событие " + MONO_FARM[kind] + " фермы: все открытые грядки — не меньше пяти — засажены " + MONO_COLOR[kind] + " растениями. Бывает не чаще раза в трое суток."; }
+  var MONO_COLOR = { solstice: "солнечными", constellation: "звёздными", myth: "туманными", moss: "лунными" };
+  var MONO_FARM = { solstice: "солнечной", constellation: "звёздной", myth: "туманной", moss: "лунной" };
+  function monoRule(kind) {
+    if (kind === "moss") return "Это событие случается, когда все открытые грядки — не меньше пяти — засажены мхом любой расцветки. Бывает не чаще раза в трое суток.";
+    return "Это событие " + MONO_FARM[kind] + " фермы: все открытые грядки — не меньше пяти — засажены " + MONO_COLOR[kind] + " растениями. Бывает не чаще раза в трое суток."; }
   function monoOf(f, now) {
     var m = f && f.mono; if (!m || m.until <= now) return null;
     if (m.kind === "constellation" && !marksOf(f).some(function (k) { return k.kind === "star"; })) return null;   // все звёзды собраны
@@ -2130,8 +2223,9 @@
     var stars = marksOf(f).filter(function (k) { return k.kind === "star" && BC[k.idx]; }).sort(function (a, b) { return a.n - b.n; });
     var myth = ((f && f.plots) || []).filter(function (p) { return p && p.crop && ss[p.crop] && ss[p.crop].myth && BC[p.idx]; });
     var near = myth.length ? marksOf(f).filter(function (k) { return k.kind === "myth" && BC[k.idx]; }) : [];
-    L.box.classList.toggle("sun", sun);
-    if (!sun && !stars.length && !myth.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    var mossy = !!(m && m.kind === "moss");
+    L.box.classList.toggle("sun", sun); L.box.classList.toggle("moss", mossy);
+    if (!sun && !mossy && !stars.length && !myth.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
     var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
     var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
@@ -2155,6 +2249,12 @@
       }
       c.globalAlpha = 1;
     }
+    if (mossy) for (var sp = 0; sp < 34; sp++) {                                        // споры мха плывут вверх и светятся
+      var ph3 = (t / 7000 + hash01(sp + 40)) % 1, sx3 = hash01(sp * 2 + 5) * cw + Math.sin(t / 1500 + sp) * 8 * dpr, sy3 = ch - ph3 * ch * 1.1;
+      c.globalAlpha = .7 * Math.sin(ph3 * Math.PI); c.fillStyle = sp % 3 ? "#c8ff9a" : "#9ff5de";
+      c.beginPath(); c.arc(sx3, sy3, (1.1 + hash01(sp + 3) * 1.6) * dpr, 0, 7); c.fill();
+    }
+    c.globalAlpha = 1;
     myth.forEach(function (p) {                                                        // мифическое растение: фиолетовое сияние и искры вверх
       var x = BC[p.idx][0] * kx, y = (BC[p.idx][1] - 5) * ky, pu = .5 + .5 * Math.sin(t / 700 + p.idx), R = (20 + 4 * pu) * kx;
       c.globalCompositeOperation = "source-over";                                      // фиолетовая дымка видна и на светлом
@@ -2285,6 +2385,20 @@
         flyNode(n, [r.left + r.width / 2, r.top + r.height / 2], [d.left + d.width / 2, d.top + d.height / 2], 0, 650);
         setTimeout(function () { cs.dust += st.dust; renderFarm(); var p = $("dustpill"); p.classList.remove("bump"); void p.offsetWidth; p.classList.add("bump"); }, 650);
         b.remove(); farmCall("/api/farm/star", { id: st.id }).catch(function () {});
+      };
+      box.appendChild(b);
+    });
+    if (own) (F.state.clumps || []).forEach(function (st) {                         // мшистые комочки после «Мох захватил ферму»
+      var b = el("button", "cstar clump"); b.type = "button"; b.style.left = st.x / FW * 100 + "%"; b.style.top = st.y / FH * 100 + "%";
+      b.style.animationDelay = -((Date.now() + st.id * 230) % 1600) / 1000 + "s";
+      var cv = el("canvas", "pix"); cropIcon(cv, F.state.strains.moss, true); b.appendChild(cv); b.appendChild(el("span", "", "+" + st.dust));
+      b.onclick = function () {
+        haptic("light"); var cs = F.state; cs.clumps = (cs.clumps || []).filter(function (x) { return x.id !== st.id; });
+        var r = b.getBoundingClientRect(), d = $("dustpill").getBoundingClientRect(), n = el("div", "", "+" + st.dust + " ✦");
+        n.style.color = "#d6ffb0"; n.style.font = "700 14px var(--pix)"; n.style.textShadow = "0 1px 2px rgba(0,0,0,.7)"; n.style.whiteSpace = "nowrap";
+        flyNode(n, [r.left + r.width / 2, r.top + r.height / 2], [d.left + d.width / 2, d.top + d.height / 2], 0, 650);
+        setTimeout(function () { cs.dust += st.dust; renderFarm(); var p = $("dustpill"); p.classList.remove("bump"); void p.offsetWidth; p.classList.add("bump"); }, 650);
+        b.remove(); farmCall("/api/farm/clump", { id: st.id }).catch(function () {});
       };
       box.appendChild(b);
     });
@@ -2458,12 +2572,14 @@
       var gain = s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1, hasB = hasBuild(s, "barn");   // есть амбар — урожай туда, нет — сразу в пыль
       var mk = marksAt(pl.idx), starX = mk.indexOf("star") >= 0, mythX = !inf.s.myth && mk.indexOf("myth") >= 0 && mythNear(pl.idx);
       if (starX) gain *= 2;                                                         // грядка созвездия — урожай ×2
+      var mo2 = monoOf(s, now), mossX = !!(mo2 && mo2.kind === "moss" && inf.s.shape === "moss"); if (mossX) gain *= 2;   // мох захватил ферму — мох ×2
       s.marks = marksOf(s).filter(function (m) { return !(m.idx === pl.idx && (m.kind === "star" || m.kind === "myth")) && !(inf.s.myth && (m.kind === "myth" || m.kind === "mythripe")); });
       var pts = " · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков");
       haptic("success"); addFx("harvest", pl.idx, inf.s);
       if (hasB) { floatText(pl.idx, "+" + gain + " в амбар" + pts); barnAdd(inf.s.id, gain); flyFruit(pl.idx, inf.s, gain); }
       else { floatText(pl.idx, "+" + gain * inf.s.dust + " ✦" + pts); s.dust += gain * inf.s.dust; flyDust(pl.idx); }
       if (starX) setTimeout(function () { floatText(pl.idx, "созвездие: урожай ×2!", "big"); }, 250);
+      else if (mossX) setTimeout(function () { floatText(pl.idx, "мох разросся: ×2!", "big"); }, 250);
       if (mythX) { var md = gain * inf.s.dust * 2; s.dust += md; setTimeout(function () { floatText(pl.idx, "мифическая пыль +" + md + " ✦", "big"); flyDust(pl.idx); }, 300); }
       s.plots[pl.idx] = { idx: pl.idx, crop: null }; renderFarm();   // сразу, не дожидаясь сервера
       if (!inf.s.myth) setTimeout(function () { flySeeds(pl.idx, inf.s); }, 260);
@@ -2547,9 +2663,11 @@
   }
   function plantNow(pl, st, it) {
     var s = F.state; haptic("light"); addFx("plant", pl.idx, st); floatText(pl.idx, "+1 очко", "pts");
-    var t0 = farmNow(); it.count--;
+    var t0 = farmNow(), mm = monoOf(s, t0), seedId = st.id;                        // на сервер — что сажали; он сам решит, что вырастет
+    if (mm && mm.kind === "moss" && st.id !== "moss") { st = s.strains.moss || st; setTimeout(function () { floatText(pl.idx, "пробился мох!", "big"); }, 300); }   // семя остаётся в мешке
+    else it.count--;
     s.plots[pl.idx] = { idx: pl.idx, crop: st.id, planted: t0, grown: 0, wet_from: t0, water_until: t0 }; renderFarm();
-    farmCall("/api/farm/plant", { idx: pl.idx, crop: st.id }).then(function (r) {
+    farmCall("/api/farm/plant", { idx: pl.idx, crop: seedId }).then(function (r) {
       if (r && r.mono) { haptic("success"); setTimeout(function () { monoSheet(r.mono.kind, true); }, 450); }   // вся ферма одной расцветки — событие
     }).catch(function () {});
   }
@@ -2862,7 +2980,7 @@
             });
           page.appendChild(el("h3", "", "Ферма одной расцветки"));                    // события моно-фермы
           page.appendChild(el("div", "bsub", MONO_RULE));
-          [["solstice", "Солнечная ферма"], ["constellation", "Звёздная ферма"], ["myth", "Туманная ферма"]].forEach(function (x) {
+          [["solstice", "Солнечная ферма"], ["constellation", "Звёздная ферма"], ["myth", "Туманная ферма"], ["moss", "Ферма во мху"]].forEach(function (x) {
             var d = el("p", "brule"), ok = seen.indexOf("mono_" + x[0]) >= 0, mi = MONO_INFO[x[0]];
             d.appendChild(el("b", "", x[1] + ". " + (ok ? mi.name + ". " : "")));
             d.append(ok ? mi.text : "??? — случится, узнаешь."); page.appendChild(d);

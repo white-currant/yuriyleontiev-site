@@ -66,3 +66,6 @@ CREATE TABLE IF NOT EXISTS f_daily (user INTEGER NOT NULL, day TEXT NOT NULL, po
 -- события моно-фермы (2026-11-15): вся открытая ферма одной расцветки → крупное событие; отметки на грядках (созвездие, мифическое соседство)
 CREATE TABLE IF NOT EXISTS f_mono (user INTEGER NOT NULL, kind TEXT NOT NULL, started INTEGER NOT NULL, until INTEGER NOT NULL, PRIMARY KEY (user, started));
 CREATE TABLE IF NOT EXISTS f_monomark (user INTEGER NOT NULL, idx INTEGER NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, at INTEGER NOT NULL DEFAULT 0, until INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, idx, kind));
+-- мшистые комочки (2026-11-15): после события «Мох захватил ферму» раскатываются по ферме с пылью, как звёздочки кометы
+CREATE TABLE IF NOT EXISTS f_clumps (id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER NOT NULL, x INTEGER NOT NULL, y INTEGER NOT NULL, dust INTEGER NOT NULL, at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS f_clumps_u ON f_clumps (user);

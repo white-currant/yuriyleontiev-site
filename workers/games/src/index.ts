@@ -401,6 +401,7 @@ async function handle(req: Request): Promise<Response> {
     // «Лунная ферма»
     case "/api/farm": return json(await farm.farmState(user));
     case "/api/farm/star": return json(await farm.takeStar(user, Number(body.id)));
+    case "/api/farm/clump": return json(await farm.takeClump(user, Number(body.id)));
     case "/api/farm/crater": return json(await farm.fixCrater(user, Number(body.idx)));
     case "/api/farm/coal": return json(await farm.takeCoal(user, Number(body.idx)));
     case "/api/farm/dig": return json(await farm.dig(user, Number(body.idx)));

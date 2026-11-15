@@ -387,9 +387,33 @@ export async function takeCoal(u: any, idx: number) {
 // звёздная — «Созвездие» (на случайных грядках складывается созвездие; следующий сбор с каждой его грядки — урожай ×2);
 // туманная — «Мифическое семя» (одно семя случайного растения: светится фиолетовым, плод ×3, семян не даёт;
 //   пока растёт, следующий сбор с каждой соседней грядки — пыль ×3; созревшее ждёт сутки, потом рассыпается).
-// Лунная — «Лунное эхо» (×2 к продаже еды по заказам) — когда появятся заказы.
+// вся ферма во мху любой расцветки — «Мох захватил ферму» (его шутка 2026-11-15 над любителем мха): сутки что ни посади — пробивается мох,
+//   семя не тратится; урожай мха ×2; ферма зарастает; когда мох отцветает — по ферме раскатываются мшистые комочки с пылью.
+// лунная расцветка — «Лунное эхо» (×2 к продаже еды по заказам) — потом, с заказами.
 const MONO_MIN = 5, MONO_EVERY = 3 * DAY, SOLSTICE_FOR = DAY, CONST_FOR = 3 * DAY, MYTH_WAIT = DAY, CONST_N = 4;
 const MONO_OF: Record<string, string> = { sun: "solstice", berry: "constellation", nebula: "myth" };
+const MOSS_FOR = DAY, MOSS_DUST = 8;                         // мох держится сутки; комочков в сумме — по 8 пыли за открытую грядку
+async function mossNow(uid: number) { return (await q("SELECT 1 FROM f_mono WHERE user = ? AND kind = 'moss' AND until > ?", [uid, now()])).length > 0; }
+async function mossEnd(uid: number) {                       // мох отцвёл — раскатать комочки (один раз на событие)
+  const t = now(), rows = await q("SELECT started FROM f_mono WHERE user = ? AND kind = 'moss' AND until <= ?", [uid, t]);
+  for (const [started] of rows) {
+    const key = "mossend:" + started;
+    if ((await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?", [uid, key])).length) continue;
+    const [[open]] = await q("SELECT unlocked FROM f_farms WHERE user = ?", [uid]), total = MOSS_DUST * Number(open), n = 5 + Math.floor(Math.random() * 3);
+    const spots = STAR_SPOTS.slice().sort(() => Math.random() - 0.5).slice(0, n), w = spots.map(() => 0.6 + Math.random()), sumW = w.reduce((a, b) => a + b, 0);
+    let left = total;
+    await DB.batch([DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, ?, ?)").bind(uid, key, t),
+      ...spots.map(([x, y], j) => { const d = j === spots.length - 1 ? left : Math.max(1, Math.round(total * w[j] / sumW)); left -= d;
+        return DB.prepare("INSERT INTO f_clumps (user, x, y, dust, at) VALUES (?, ?, ?, ?, ?)").bind(uid, x + Math.round(Math.random() * 6 - 3), y + Math.round(Math.random() * 4 - 2), Math.max(1, d), t); })]);
+  }
+}
+export async function takeClump(u: any, id: number) {
+  await ensureFarm(u);
+  const [r] = await q("DELETE FROM f_clumps WHERE id = ? AND user = ? RETURNING dust", [id, u.id]);
+  if (!r) return { error: "Комочек уже собрали" };
+  await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [Number(r[0]), u.id]);
+  return { dust: Number(r[0]), farm: await farmState(u) };
+}
 async function boostOf(uid: number): Promise<[number, number][]> {
   return (await q("SELECT started, until FROM f_mono WHERE user = ? AND kind = 'solstice'", [uid])).map((r) => [Number(r[0]), Number(r[1])] as [number, number]);
 }
@@ -419,10 +443,11 @@ async function checkMono(uid: number) {
   const plots = await q("SELECT idx, crop FROM f_plots WHERE user = ? AND idx < ?", [uid, open]);
   if (plots.length < open) return null;
   const ss = await strains(plots.map((p) => String(p[1]))), colors = new Set(plots.map((p) => ss[String(p[1])]?.color));
-  const kind = colors.size === 1 ? MONO_OF[String([...colors][0])] : "";
+  const allMoss = plots.every((p) => ss[String(p[1])]?.shape === "moss");     // мох любой расцветки — главнее расцветки
+  const kind = allMoss ? "moss" : colors.size === 1 ? MONO_OF[String([...colors][0])] : "";
   if (!kind) return null;
   if ((await q("SELECT 1 FROM f_mono WHERE user = ? AND started > ?", [uid, t - MONO_EVERY])).length) return null;
-  const until = t + (kind === "solstice" ? SOLSTICE_FOR : kind === "constellation" ? CONST_FOR : DAY);
+  const until = t + (kind === "solstice" ? SOLSTICE_FOR : kind === "constellation" ? CONST_FOR : kind === "moss" ? MOSS_FOR : DAY);
   if (!(await q("INSERT OR IGNORE INTO f_mono (user, kind, started, until) VALUES (?, ?, ?, ?) RETURNING 1", [uid, kind, t, until])).length) return null;
   await q("INSERT INTO f_evlog (user, kind, at) VALUES (?, ?, ?)", [uid, "mono_" + kind, t]);
   const out: any = { kind, until };
@@ -451,7 +476,7 @@ async function mythTick(uid: number) {
 }
 export async function farmState(u: any) {
   await ensureFarm(u);
-  await mythTick(u.id);
+  await mythTick(u.id); await mossEnd(u.id);
   const EVS = await plotEvents(u.id);
   const [[dust, unlocked, pub, water]] = await q("SELECT dust, unlocked, pub, water FROM f_farms WHERE user = ?", [u.id]);
   const plots = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [u.id]);
@@ -470,6 +495,7 @@ export async function farmState(u: any) {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked), EVS[i])), events_seen: await seenEvents(u.id),
     stars: (await q("SELECT id, x, y, dust FROM f_stars WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
+    clumps: (await q("SELECT id, x, y, dust FROM f_clumps WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
     ...(await kitchenOf(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...(await q("SELECT recipe FROM f_jobs WHERE user = ?", [u.id])).map((x) => "p:" + x[0])])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY),
@@ -504,9 +530,13 @@ export async function plant(u: any, idx: number, crop: string) {
   if ((await q("SELECT 1 FROM f_plotev WHERE user = ? AND idx = ? AND kind = 'frost'", [u.id, idx])).length) return { error: "Грядка замёрзла" };
   if ((await q("SELECT 1 FROM f_plotev WHERE user = ? AND idx = ? AND kind = 'crater'", [u.id, idx])).length) return { error: "Сначала восстанови грядку после кометы" };
   const t = now();
+  // мох захватил ферму: что ни посади — пробивается лунный мох, а семя остаётся в мешке
+  const mossy = crop !== "moss" && await mossNow(u.id);
   // сажаем всегда из мешка; выставленные в лавку не трогаем
-  const ok = await q("UPDATE f_inv SET count = count - 1 WHERE user = ? AND strain = ? AND count - listed > 0 RETURNING 1", [u.id, crop]);
+  const ok = mossy ? await q("SELECT 1 FROM f_inv WHERE user = ? AND strain = ? AND count - listed > 0", [u.id, crop])
+                   : await q("UPDATE f_inv SET count = count - 1 WHERE user = ? AND strain = ? AND count - listed > 0 RETURNING 1", [u.id, crop]);
   if (!ok.length) return { error: "Таких семян у тебя нет" };
+  if (mossy) crop = "moss";
   // посадили сухим — сразу после посадки нужно полить
   await DB.batch([
     DB.prepare(`INSERT INTO f_plots (user, ${PLOT_COLS}) VALUES (?, ?, ?, ?, 0, ?, ?)`).bind(u.id, idx, crop, t, t, t),
@@ -533,7 +563,7 @@ export async function plant(u: any, idx: number, crop: string) {
       ...nb.map((i) => DB.prepare("INSERT OR REPLACE INTO f_monomark (user, idx, kind, at) VALUES (?, ?, 'myth', ?)").bind(u.id, i, t))]);
   }
   const mono = await checkMono(u.id);
-  return { points: POINTS_PLANT, thawed, mono, farm: await farmState(u) };
+  return { points: POINTS_PLANT, thawed, mono, mossy, farm: await farmState(u) };
 }
 
 // «Семенная лавка станции»: базовые семена в мешок за пыль
@@ -594,7 +624,8 @@ export async function harvest(u: any, idx: number) {
   // урожай идёт в амбар (решение 2026-11-14): превратить в звёздную пыль (по цене сорта) или пустить на кухню
   // без амбара (его покупают) урожай сразу превращается в пыль, как было до кухни
   const star = marks.includes("star");                                    // грядка созвездия — урожай ×2
-  const crop = (rain ? (s.bonus === "rain" ? 3 : 2) : 1) * (double ? 2 : 1) * (star ? 2 : 1);
+  const mossX = s.shape === "moss" && await mossNow(u.id);               // пока мох захватил ферму — урожай мха ×2
+  const crop = (rain ? (s.bonus === "rain" ? 3 : 2) : 1) * (double ? 2 : 1) * (star ? 2 : 1) * (mossX ? 2 : 1);
   // сосед мифического растения (оно ещё на грядке): пыль ×3 — сверх урожая сразу +2 его цены
   const mythNear = !s.myth && marks.includes("myth") && all.some((x) => near4(idx).includes(Number(x[0])) && ss[x[1]]?.myth);
   const points = s.points;
@@ -645,7 +676,7 @@ export async function harvest(u: any, idx: number) {
                       DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'sun', ?)").bind(u.id, t)]);
     }
   }
-  return { crop, dust, comet: cometDust, myth_dust: mythDust, star, frost, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
+  return { crop, dust, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, frost, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
 }
 
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
@@ -1015,7 +1046,7 @@ export async function monoFeed(after: number) {                 // для объ
 }
 export async function forgetFarm(uid: number) {
   for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM g_items WHERE user = ? AND game = 'farm'",
-                     "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?", "DELETE FROM f_stall WHERE user = ?", "DELETE FROM f_plotev WHERE user = ?", "DELETE FROM f_evlog WHERE user = ?", "DELETE FROM f_stars WHERE user = ?", "DELETE FROM f_cratercrop WHERE user = ?", "DELETE FROM f_mono WHERE user = ?", "DELETE FROM f_monomark WHERE user = ?", "DELETE FROM f_chest WHERE user = ?", "DELETE FROM f_prices WHERE user = ?",
+                     "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?", "DELETE FROM f_stall WHERE user = ?", "DELETE FROM f_plotev WHERE user = ?", "DELETE FROM f_evlog WHERE user = ?", "DELETE FROM f_stars WHERE user = ?", "DELETE FROM f_cratercrop WHERE user = ?", "DELETE FROM f_mono WHERE user = ?", "DELETE FROM f_monomark WHERE user = ?", "DELETE FROM f_clumps WHERE user = ?", "DELETE FROM f_chest WHERE user = ?", "DELETE FROM f_prices WHERE user = ?",
                      "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?", "DELETE FROM f_builds WHERE user = ?", "DELETE FROM f_jobs WHERE user = ?"]) await q(sql, [uid]);
   await q("DELETE FROM f_given WHERE from_user = ? OR to_user = ?", [uid, uid]);
 }
