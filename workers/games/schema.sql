@@ -69,3 +69,8 @@ CREATE TABLE IF NOT EXISTS f_monomark (user INTEGER NOT NULL, idx INTEGER NOT NU
 -- мшистые комочки (2026-11-15): после события «Мох захватил ферму» раскатываются по ферме с пылью, как звёздочки кометы
 CREATE TABLE IF NOT EXISTS f_clumps (id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER NOT NULL, x INTEGER NOT NULL, y INTEGER NOT NULL, dust INTEGER NOT NULL, at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS f_clumps_u ON f_clumps (user);
+-- лента «Новости фермы» (2026-11-15): кто что выставил, купил, подарил, у кого началось большое событие
+CREATE TABLE IF NOT EXISTS f_feed (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, kind TEXT NOT NULL, actor INTEGER NOT NULL, target INTEGER, item TEXT, n INTEGER NOT NULL DEFAULT 1);
+CREATE INDEX IF NOT EXISTS f_feed_at ON f_feed (at);
+-- игрок разрешил боту писать ему в личку о событиях своей фермы
+CREATE TABLE IF NOT EXISTS f_notify (user INTEGER PRIMARY KEY, on_ INTEGER NOT NULL DEFAULT 1, at INTEGER NOT NULL);

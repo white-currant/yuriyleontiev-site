@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151145";
+    var BUILD = "202611151211";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -196,6 +196,24 @@
     background: radial-gradient(120% 90% at 50% 60%, rgba(90,200,170,.6), rgba(40,140,120,.5) 60%, rgba(30,100,90,.55)); }
   .fxbox.fire .wash { display: block; position: absolute; inset: 0; mix-blend-mode: soft-light;
     background: radial-gradient(110% 80% at 50% 62%, rgba(255,150,60,.75), rgba(190,60,30,.55) 55%, rgba(60,10,30,.7)); }
+  /* «Новости фермы» */
+  .feed { list-style: none; margin: 14px 3px 0; padding: 0; }
+  .feed li { padding: 10px 0; border-bottom: 1px solid rgba(255, 233, 190, .12); font-size: 14.5px; line-height: 1.35; color: var(--cream); }
+  .feed li.mine { color: #ffe7a8; }
+  .feed li small { display: block; margin-top: 2px; font-size: 12px; color: rgba(246, 239, 227, .55); }
+  .feed b.who { display: inline; cursor: pointer; text-decoration: underline; text-decoration-color: rgba(255, 231, 168, .4); text-underline-offset: 3px; }
+  .feed .ev { color: #b9f58a; }
+  /* всплывающие уведомления в игре: новость выезжает сверху и сама уходит */
+  .pings { position: fixed; left: 12px; right: 12px; top: calc(var(--top) + 58px); z-index: 45; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .ping { pointer-events: auto; padding: 8px 12px; background: var(--cream); color: var(--ink); font-size: 13.5px; line-height: 1.3;
+    box-shadow: var(--frame), 0 6px 0 rgba(0, 0, 0, .25); animation: pingin .25s ease-out; transition: opacity .3s, transform .3s; }
+  .ping.out { opacity: 0; transform: translateY(-8px); }
+  .ping b, .ping b.who { display: inline; color: #7a3b12; } .ping .ev { color: #2f7a3a; font-weight: 700; } .ping small { display: none; }
+  .ping.mine { background: #ffe7a8; }
+  @keyframes pingin { from { transform: translateY(-14px) scale(.97); } }   /* без прозрачности: если анимации стоят, плашку всё равно видно */
+  .feednote { margin: 12px 3px 0; font-size: 13.5px; line-height: 1.4; color: rgba(246, 239, 227, .75); }
+  #toneighbors.dot, #ntabs button.dot { position: relative; }
+  #toneighbors.dot::after, #ntabs button.dot::after { content: ""; position: absolute; top: 6px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: #ff6a4a; box-shadow: 0 0 0 2px rgba(42, 20, 6, .6); }
   .cstar.clump::before { background: radial-gradient(circle, rgba(30,60,25,.85) 0 45%, rgba(150,230,120,.55) 46% 58%, rgba(150,230,120,0) 72%); }
   .cstar.clump { display: flex; align-items: center; justify-content: center; }
   .cstar.clump canvas { position: relative; height: 20px; width: auto; image-rendering: pixelated; filter: drop-shadow(0 0 1px #13240c) drop-shadow(0 0 5px rgba(170,255,150,.9)); }
@@ -775,6 +793,8 @@
 
   <section class="screen" id="farm-neighbors" hidden>
     <div class="farm-top"><button class="exit" type="button" data-go="farm">← На ферму</button><div class="mono">Соседи</div></div>
+    <div class="tabs" id="ntabs"><button type="button" data-nt="list" aria-pressed="true">Соседи</button><button type="button" data-nt="feed" aria-pressed="false">Новости</button></div>
+    <div id="feedbox" hidden></div>
     <ul class="nlist" id="nlist"></ul>
     <div class="farm-note" id="giftnote">Каждому соседу можно раз в день оставить подарок — 5 звёздной пыли.</div>
   </section>
@@ -1828,7 +1848,7 @@
       return;
     }
     if (!inf) return;
-    if (pl.coal) {                                                                    // огненное сгорело: кучка угля, тлеют искры
+    if (pl.coal || pl.burning) {                                                     // огненное сгорело (или ещё горит): кучка угля, тлеют искры
       for (var ci = 0; ci < 5; ci++) { var cp = spot(i, ci); px(c, cp[0] - 3, cp[1] - 2, 6, 3, "#24242c"); px(c, cp[0] - 2, cp[1] - 3, 4, 1, "#45454f");
         if ((Math.floor(t / 300) + ci) % 3) px(c, cp[0] - 1 + (ci % 3), cp[1] - 2, 1, 1, ci % 2 ? "#ff7a2e" : "#ffd166"); }
       if (Math.floor(t / 500) % 2) px(c, cx, cy - 10, 1, 2, "rgba(200,200,210,.5)");
@@ -2220,20 +2240,20 @@
     solstice: { icon: "☀", name: "Солнцестояние", text: "Вся ферма засажена солнечными растениями — наступило Солнцестояние. Сутки все растения растут вдвое быстрее." },
     constellation: { icon: "✨", name: "Созвездие", text: "Над звёздной фермой сложилось созвездие. Следующий сбор с каждой его грядки даст урожай ×2. После сбора звезда гаснет; созвездие держится трое суток." },
     moss: { icon: "", name: "Мох захватил ферму", text: "Лунный мох разросся по всей ферме: по дорожкам, забору и крышам. Сутки что ни посади — пробивается мох, а семя остаётся в мешке. Зато урожай мха в это время вдвое больше. Когда мох отцветёт, по ферме раскатятся мшистые комочки со звёздной пылью — собери их." },
-    fire: { icon: "", name: "Огненная ночь", text: "Вся ферма засажена огненными растениями — и разом вспыхнула. Урожай сгорел, зато на каждой грядке остался звёздный уголь, редкий и ценный. Собери его." },
+    fire: { icon: "", name: "Огненная ночь", text: "Вся ферма засажена огненными растениями — и разом вспыхнула. Урожай сгорел. Грядки горят 6 часов, и пока горят, с ними ничего не сделать. Потом на каждой останется звёздный уголь — редкий и ценный. Не хочешь ждать — потуши грядку лейкой: один полив, и уголь сразу твой." },
     comet: { icon: "", name: "Кометный дождь", text: "На кометную ферму обрушился кометный дождь. На месте грядок — один большой кратер, а по ферме рассыпались осколки со звёздной пылью: собери их. Кратер убирают лопатой: выбери её и нажми на кратер — грядки вернутся, семена тоже." },
     myth: { icon: "", name: "Мифическое семя", text: "Туманная ферма подарила мифическое семя — оно уже в инвентаре и светится фиолетовым. Посади его: пока оно растёт, следующий сбор с каждой соседней грядки (слева, справа, сверху, снизу) даст звёздной пыли втрое больше. Само растение даёт один мифический плод — он втрое дороже, и еда с ним втрое дороже, — но семян не даёт. Созревшее мифическое растение ждёт сутки, потом рассыпается." },
   };
-  var MONO_RULE = "Такие события случаются, когда все открытые грядки — не меньше пяти — засажены растениями одной расцветки. У каждой расцветки своё событие. Не чаще раза в трое суток.";
+  var MONO_RULE = "Такие события случаются, когда все открытые грядки — не меньше пяти — засажены растениями одной расцветки. У каждой расцветки своё событие. Случаются не каждый раз — как повезёт, и не чаще раза в трое суток.";
   var MONO_COLOR = { solstice: "солнечными", constellation: "звёздными", myth: "туманными", moss: "лунными", fire: "огненными", comet: "кометными" };
   var MONO_FARM = { solstice: "солнечной", constellation: "звёздной", myth: "туманной", moss: "лунной", fire: "огненной", comet: "кометной" };
   function monoRule(kind) {
     if (kind === "moss") return "Это событие случается, когда все открытые грядки — не меньше пяти — засажены мхом любой расцветки. Случается не каждый раз — как повезёт, и не чаще раза в трое суток.";
-    return "Это событие " + MONO_FARM[kind] + " фермы: все открытые грядки — не меньше пяти — засажены " + MONO_COLOR[kind] + " растениями. Бывает не чаще раза в трое суток."; }
+    return "Это событие " + MONO_FARM[kind] + " фермы: все открытые грядки — не меньше пяти — засажены " + MONO_COLOR[kind] + " растениями. Случается не каждый раз — как повезёт, и не чаще раза в трое суток."; }
   function monoOf(f, now) {
     var m = f && f.mono; if (!m || m.until <= now) return null;
     if (m.kind === "constellation" && !marksOf(f).some(function (k) { return k.kind === "star"; })) return null;   // все звёзды собраны
-    if (m.kind === "fire" && !(f.plots || []).some(function (p) { return p && p.coal; })) return null;            // уголь собран
+    if (m.kind === "fire" && !(f.plots || []).some(function (p) { return p && (p.coal || p.burning); })) return null;   // всё потушено и уголь собран
     if (m.kind === "comet" && !(f.plots || []).some(function (p) { return p && p.big; }) && !((f.stars || []).length)) return null;   // кратер убран, осколки собраны
     return m;
   }
@@ -2263,7 +2283,7 @@
     var stars = marksOf(f).filter(function (k) { return k.kind === "star" && BC[k.idx]; }).sort(function (a, b) { return a.n - b.n; });
     var myth = ((f && f.plots) || []).filter(function (p) { return p && p.crop && ss[p.crop] && ss[p.crop].myth && BC[p.idx]; });
     var near = myth.length ? marksOf(f).filter(function (k) { return k.kind === "myth" && BC[k.idx]; }) : [];
-    var mossy = !!(m && m.kind === "moss"), fire = !!(m && m.kind === "fire");
+    var mossy = !!(m && m.kind === "moss"), fire = !!(m && m.kind === "fire") && ((f && f.plots) || []).some(function (p) { return p && p.burning; });
     L.box.classList.toggle("sun", sun); L.box.classList.toggle("moss", mossy); L.box.classList.toggle("fire", fire);
     if (!sun && !mossy && !fire && !stars.length && !myth.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
@@ -2291,7 +2311,7 @@
     }
     if (fire) {                                                                        // огненная ночь: язычки пламени над углём и искры в небо
       ((f && f.plots) || []).forEach(function (p) {
-        if (!p || !p.coal || !BC[p.idx]) return;
+        if (!p || !p.burning || !BC[p.idx]) return;                                   // горит — большое пламя; потушено — только уголь
         var bx = BC[p.idx][0] * kx, by = (BC[p.idx][1] - 2) * ky;
         var gl = c.createRadialGradient(bx, by, 0, bx, by, 20 * kx); gl.addColorStop(0, "rgba(255,150,60,.5)"); gl.addColorStop(1, "rgba(255,90,20,0)");
         c.fillStyle = gl; c.beginPath(); c.ellipse(bx, by, 20 * kx, 13 * ky, 0, 0, 7); c.fill();
@@ -2422,6 +2442,7 @@
       }
       else if (pl.crater) { lbl.textContent = own ? "починить" : "кратер"; lbl.classList.add("ready"); b.classList.add("crat"); }
       else if (pl.frost) { lbl.textContent = "лёд\n" + fmtShort(pl.frost - now).replace(/ /g, "\u00a0"); lbl.classList.add("water", "two"); }
+      else if (pl.burning) { lbl.textContent = (own ? "потушить" : "горит") + "\n" + fmtShort(pl.burning - now).replace(/ /g, "\u00a0"); lbl.classList.add("dead", "two"); }
       else if (pl.coal) { lbl.textContent = own ? "уголь!" : "уголь"; lbl.classList.add("ready"); }
       else if (!pl.crop) lbl.textContent = own ? "посадить" : "пусто";
       else if (!inf) lbl.textContent = "…";
@@ -2545,7 +2566,7 @@
     }
     }
     renderPlots($("plots"), s.plots, now, true, s.strains, s.dry_limit);
-    renderHotbar();
+    renderHotbar(); feedDot();
   }
   // ✦ и 💧 в тексте интерфейса → его пиксельные значки (art/dust.png, art/water.png); копируется как прежний знак
   // погода — его иконки 16×16 (2026-11-14): значки погоды приходят с сервера символами и тоже заменяются картинками
@@ -2622,6 +2643,12 @@
       return farmCall("/api/farm/crater", { idx: pl.idx }).catch(function () {});
     }
     if (pl.frost) { haptic("error"); return toast("Грядка замёрзла. Оттает через " + fmtLeft(pl.frost - now) + " — или посади огненное растение рядом, оно растопит лёд."); }
+    if (pl.burning) {                                                               // горит: потушить лейкой — уголь сразу; без воды — ждать
+      if (F.state.water <= 0) { haptic("error"); return toast("Грядка горит ещё " + fmtLeft(pl.burning - now) + ". Потушить можно лейкой — набери воды в колодце."); }
+      haptic("success"); addFx("water", pl.idx, { shape: "moss", color: "ember" });
+      F.state.water--; delete pl.burning; pl.coal = true; renderFarm(); floatText(pl.idx, "потушено — уголь!", "big");
+      return farmCall("/api/farm/water", { idx: pl.idx }).catch(function () {});
+    }
     if (pl.coal) {                                                                  // уголь — сразу в амбар (без амбара — пылью)
       var cs = F.state, hb2 = hasBuild(cs, "barn"); haptic("success"); addFx("harvest", pl.idx, { shape: "moss", color: "ember" });
       if (hb2) { barnAdd("p:coal", 1); floatText(pl.idx, "+ звёздный уголь в амбар", "big"); } else { cs.dust += 120; floatText(pl.idx, "+120 ✦ за уголь", "big"); }
@@ -3051,7 +3078,7 @@
             });
           var mh3 = el("h3", "", "Большие события"); mh3.style.marginTop = "18px"; page.appendChild(mh3);   // события моно-фермы
           page.appendChild(el("div", "bsub", "Когда вся ферма засажена одинаково"));
-          page.appendChild(el("p", "brule", "Случаются, когда все открытые грядки — не меньше пяти — засажены растениями одной расцветки или мхом любой расцветки. У каждой расцветки своё событие. Не чаще раза в трое суток."));
+          page.appendChild(el("p", "brule", "Случаются, когда все открытые грядки — не меньше пяти — засажены растениями одной расцветки или мхом любой расцветки. У каждой расцветки своё событие. Случаются не каждый раз — как повезёт, и не чаще раза в трое суток."));
           [["solstice", "Солнечная ферма"], ["constellation", "Звёздная ферма"], ["myth", "Туманная ферма"], ["fire", "Огненная ферма"], ["comet", "Кометная ферма"], ["moss", "Ферма во мху"]].forEach(function (x) {
             var d = el("p", "brule"), ok = seen.indexOf("mono_" + x[0]) >= 0, mi = MONO_INFO[x[0]];
             d.appendChild(el("b", "", x[1] + ". " + (ok ? mi.name + ". " : "")));
@@ -3833,8 +3860,95 @@
   }
 
   // ---------- соседи и гости ----------
+  // ---------- «Новости фермы» (2026-11-15): кто что выставил, купил, подарил, у кого событие ----------
+  function feedSeen() { try { return Number(localStorage.getItem("feed-seen") || 0); } catch (e) { return 0; } }
+  function feedDot() {                                          // точка «есть новое» на кнопке «Соседи» и вкладке «Новости»
+    var on = !!(F.state && F.state.feed_top > feedSeen());
+    $("toneighbors").classList.toggle("dot", on); var tb = document.querySelector('#ntabs [data-nt="feed"]'); if (tb) tb.classList.toggle("dot", on);
+  }
+  function agoText(at) {
+    var d = Math.max(0, Date.now() / 1000 - at);
+    return d < 60 ? "только что" : d < 3600 ? Math.floor(d / 60) + " мин назад" : d < 86400 ? Math.floor(d / 3600) + " ч назад" : Math.floor(d / 86400) === 1 ? "вчера" : Math.floor(d / 86400) + " дн назад";
+  }
+  function feedLine(x) {
+    var li = el("li", x.actor && x.actor.me || x.target && x.target.me ? "mine" : "");
+    var who = function (p, cap) {
+      if (!p) return document.createTextNode("сосед");
+      if (p.me) return document.createTextNode(cap ? "Ты" : "тебя");
+      var b = el("b", "who", p.name); if (p.pub) b.onclick = function () { haptic("light"); visit(p.pub); }; return b;
+    };
+    var me = x.actor && x.actor.me, it = x.item ? x.item.name + (x.n > 1 ? " ×" + x.n : "") : "";
+    if (x.kind === "list") { li.appendChild(who(x.actor, true)); li.append(me ? " выставляешь в лавку: " : " выставляет в лавку: " ); li.append(it); }
+    else if (x.kind === "buy") { li.appendChild(who(x.actor, true)); li.append(me ? " покупаешь у " : " покупает у "); li.appendChild(who(x.target)); li.append(": " + it); }
+    else if (x.kind === "gift") { li.appendChild(who(x.actor, true)); li.append(me ? " оставляешь подарок для " : " оставляет подарок для "); li.appendChild(who(x.target)); }
+    else if (x.kind === "event") {                                                    // «На ферме Evilin — Мох захватил ферму»: имя не склоняем
+      if (me) li.append("На твоей ферме — "); else { li.append("На ферме "); li.appendChild(who(x.actor)); li.append(" — "); }
+      li.appendChild(el("span", "ev", x.item ? x.item.name : "событие"));
+    }
+    li.appendChild(el("small", "", agoText(x.at)));
+    return li;
+  }
+  function openFeed() {
+    var box = $("feedbox"); box.innerHTML = ""; box.appendChild(el("div", "feednote", "Загружаю…"));
+    call("/api/farm/feed").then(function (r) {
+      box.innerHTML = "";
+      var nb = el("div", "feednote");                            // бот пишет в личку о событиях своей фермы — только с разрешения
+      var drawNote = function (on) {
+        nb.innerHTML = "";
+        nb.append(on ? "Бот пишет тебе в личку, когда на твоей ферме начинается событие." : "Бот может писать тебе в личку, когда на твоей ферме начинается событие. Это видишь только ты.");
+        var a = el("div", "invacts");
+        a.appendChild(btn(on ? "Не присылать" : "Присылать мне", on ? "ghost" : "", function () {
+          haptic("light");
+          if (on) { drawNote(false); return call("/api/farm/notify", { on: false }).catch(function () {}); }
+          var turnOn = function () { drawNote(true); call("/api/farm/notify", { on: true }).catch(function () {}); };
+          if (tg && tg.requestWriteAccess) tg.requestWriteAccess(function (allowed) { if (allowed) turnOn(); else toast("Без разрешения бот не может написать тебе"); });
+          else turnOn();
+        }));
+        nb.appendChild(a);
+      };
+      drawNote(!!r.notify); box.appendChild(nb);
+      if (!r.items.length) { box.appendChild(el("div", "feednote", "Пока тихо. Здесь появится, кто что выставил в лавку, купил, подарил и у кого началось событие.")); return; }
+      var ul = el("ul", "feed"); r.items.forEach(function (x) { ul.appendChild(feedLine(x)); }); box.appendChild(ul);
+      var top = r.items.reduce(function (m, x) { return Math.max(m, x.id); }, 0);
+      try { localStorage.setItem("feed-seen", String(Math.max(top, feedSeen()))); } catch (e) {}
+      feedDot();
+    }).catch(function () { box.innerHTML = ""; box.appendChild(el("div", "feednote", "Не получилось загрузить новости")); });
+  }
+  // всплывающие уведомления: пока игра открыта, раз в 20 секунд спрашиваем свежие новости и показываем их сверху
+  F.pingSince = 0;
+  function pingCheck() {
+    var scr = document.body.dataset.screen || "";
+    if (document.hidden || scr.indexOf("farm") !== 0 || !F.state) return;
+    if (!F.pingSince) { F.pingSince = F.state.feed_top || 1; return; }          // старое при входе не показываем — только то, что случится дальше
+    if ((F.state.feed_top || 0) <= F.pingSince && F.pingPoll && Date.now() - F.pingPoll < 20000) return;
+    F.pingPoll = Date.now();
+    call("/api/farm/feed", { since: F.pingSince }).then(function (r) {
+      var fresh = (r.items || []).filter(function (x) { return x.id > F.pingSince; }).reverse();
+      if (!fresh.length) return;
+      F.pingSince = fresh[fresh.length - 1].id;
+      var touchesMe = false;
+      fresh.forEach(function (x) { if (x.actor && x.actor.me) return; if (x.target && x.target.me) touchesMe = true; showPing(x); });
+      if (touchesMe && !F.pending) call("/api/farm").then(setFarm).catch(function () {});   // у тебя купили / тебе подарили — сразу видно пыль и подарок
+    }).catch(function () {});
+  }
+  function showPing(x) {
+    var box = document.querySelector(".pings"); if (!box) { box = el("div", "pings"); document.body.appendChild(box); }
+    while (box.children.length >= 3) box.removeChild(box.firstChild);
+    var li = feedLine(x), p = el("div", "ping" + (x.target && x.target.me ? " mine" : ""));
+    while (li.firstChild) p.appendChild(li.firstChild);
+    p.onclick = function (e) { if (e.target.closest && e.target.closest("b.who")) return; haptic("light"); p.remove(); openNeighbors(); neighborsTab("feed"); };
+    box.appendChild(p);
+    setTimeout(function () { p.classList.add("out"); setTimeout(function () { p.remove(); }, 320); }, 5000);
+  }
+  setInterval(pingCheck, 5000);
+  function neighborsTab(k) {
+    document.querySelectorAll("#ntabs button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.nt === k)); });
+    $("feedbox").hidden = k !== "feed"; $("nlist").hidden = k === "feed"; $("giftnote").hidden = k === "feed";
+    if (k === "feed") openFeed();
+  }
+  document.querySelectorAll("#ntabs button").forEach(function (b) { b.onclick = function () { haptic("light"); neighborsTab(b.dataset.nt); }; });
   function openNeighbors() {
-    show("farm-neighbors");
+    show("farm-neighbors"); neighborsTab("list"); feedDot();
     var ul = $("nlist"); ul.innerHTML = "<li class='empty' style='display:block'>Загружаю…</li>";
     call("/api/farm/neighbors").then(function (r) {
       ul.innerHTML = "";

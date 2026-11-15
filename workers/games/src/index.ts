@@ -414,6 +414,8 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/sell": return json(await farm.sellCrop(user, String(body.strain || ""), Number(body.n || 1)));
     case "/api/farm/gifts": return json(await farm.openGifts(user));
     case "/api/farm/neighbors": return json(await farm.neighbors(user, await hiddenIds()));
+    case "/api/farm/feed": return json(await farm.feed(user, await hiddenIds(), Number(body.since) || 0));
+    case "/api/farm/notify": return json(await farm.setNotify(user, !!body.on));
     case "/api/farm/visit": return json(await farm.visit(user, String(body.pub || "")));
     case "/api/farm/water": return json(await farm.water(user, Number(body.idx)));
     case "/api/farm/fill": return json(await farm.fill(user));
