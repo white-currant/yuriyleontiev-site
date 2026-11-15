@@ -922,7 +922,8 @@ async function ordersOf(uid: number, builds: string[]) {
   const out = [];
   for (let slot = 0; slot < 3; slot++) {
     let row = rows.get(slot), items = row ? JSON.parse(String(row[1])) : [];
-    const stale = !row || (items.length && Number(row[3]) <= t) || (!items.length && Number(row[4]) <= t);
+    const oldSimple = slot === 0 && items.length && !String(items[0].r).startsWith("*");   // простой заказ старого вида (конкретные блюда) — сразу на новый
+    const stale = !row || oldSimple || (items.length && Number(row[3]) <= t) || (!items.length && Number(row[4]) <= t);
     if (stale) {
       const g = genOrder(slot, builds); if (!g) continue;
       await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [uid, slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]);
