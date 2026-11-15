@@ -896,7 +896,10 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
 // по рецептам (сорт муки неважен); платит пылью в 1,5 / 1,7 / 2 раза больше, чем стоят эти блюда. Срок — от суток до трёх
 // (простой — сутки, сложный — двое, особый — трое; его правка 2026-11-15);
 // выполнил — новый заказ через полчаса, срок вышел — сразу новый. Раз в сутки можно заменить неудобный заказ.
-const ORDER_FOR = [DAY, 2 * DAY, 3 * DAY], ORDER_NEXT = 30 * 60, ORDER_X = [1.5, 1.7, 2], ORDER_TIER = ["Простой", "Сложный", "Особый"];
+const ORDER_FOR = [DAY, 2 * DAY, 3 * DAY], ORDER_NEXT = 30 * 60, ORDER_X = [1.5, 1.5, 2], ORDER_TIER = ["Простой", "Сложный", "Особый"];   // названия вернул по его просьбе
+// его правка 2026-11-15: простой — выгоден дешёвой еде (фиксированно ✦50 за штуку: хлеб и суп из мха дешевле, булочки и пироги дороже),
+// сложный — ×1,5 цены блюд, особый (дорогие блюда) — ×2
+const SIMPLE_PER = 50;
 // простой заказ (его правка 2026-11-15): без конкретного блюда — «любая выпечка ×N» (или «любая мука», пока нет печи)
 const ANY_NAME: Record<string, string> = { "*oven": "Любая выпечка", "*mill": "Любая мука" };
 function anyOf(r: string) { const kind = r.slice(1); return Object.keys(RECIPES).filter((k) => RECIPES[k].kind === kind); }
@@ -906,8 +909,7 @@ function genOrder(slot: number, builds: string[]) {
   if (!can.length) return null;
   if (slot === 0) {
     const any = builds.includes("oven") ? "*oven" : "*mill", n = 2 + Math.floor(Math.random() * 3);
-    const cheap = Math.min(...anyOf(any).map((k) => RECIPES[k].dust));
-    return { items: [{ r: any, n }], reward: Math.max(10, Math.round(n * cheap * ORDER_X[0] / 5) * 5) };
+    return { items: [{ r: any, n }], reward: n * (any === "*mill" ? 12 : SIMPLE_PER) };
   }
   const r = Math.random, pool = slot === 2 ? can.slice().sort((a, b) => RECIPES[b].dust - RECIPES[a].dust).slice(0, Math.max(3, Math.ceil(can.length / 2))) : can;
   const types = Math.min(pool.length, slot === 0 ? 1 + Math.floor(r() * 2) : slot === 1 ? 2 + Math.floor(r() * 2) : 3);
@@ -922,7 +924,8 @@ async function ordersOf(uid: number, builds: string[]) {
   const out = [];
   for (let slot = 0; slot < 3; slot++) {
     let row = rows.get(slot), items = row ? JSON.parse(String(row[1])) : [];
-    const oldSimple = slot === 0 && items.length && !String(items[0].r).startsWith("*");   // простой заказ старого вида (конкретные блюда) — сразу на новый
+    const oldSimple = slot === 0 && items.length && (!String(items[0].r).startsWith("*")   // простой заказ старого вида (конкретные блюда) — сразу на новый
+      || (items[0].r === "*oven" && Number(row![2]) !== Number(items[0].n) * SIMPLE_PER));      // или со старой наградой — пересчитать
     const stale = !row || oldSimple || (items.length && Number(row[3]) <= t) || (!items.length && Number(row[4]) <= t);
     if (stale) {
       const g = genOrder(slot, builds); if (!g) continue;
