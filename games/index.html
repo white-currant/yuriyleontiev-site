@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611151258";
+    var BUILD = "202611151307";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1711,6 +1711,7 @@
     var mk = function () { var cv = document.createElement("canvas"); cv.width = W; cv.height = H; return cv; };
     var full = mk(), fc = full.getContext("2d"), extra = mk(), ec = extra.getContext("2d");
     if (hasBuild(kit, "oven") && ARTS.ok) ec.drawImage(ARTS.oven, OVEN[0] - 14, OVEN[1] + 4 - ARTS.oven.height);
+    if (hasBuild(kit, "shop")) drawShop(ec, 0, { builds: ["shop"] }, false, true);                                   // магазин тоже зарастает: крыша, маркизы, площадка, ящики
     if (hasBuild(kit, "mill")) {                                                      // башня мельницы: то, что не меняется между кадрами
       var m1 = mk(), m2 = mk(), k0 = { builds: ["mill"], jobs: [] };
       drawMill(m1.getContext("2d"), 0, k0, false, 0); drawMill(m2.getContext("2d"), 2345, k0, false, 0);
@@ -1914,7 +1915,7 @@
   var LOTS = { barn: [[82, 51], [100, 60], [116, 52], [98, 43]], mill: [[125, 62], [138, 67], [151, 62], [138, 57]], oven: [[26, 156], [40, 161], [54, 156], [40, 151]],
                shop: [[127, 167], [151, 179], [175, 167], [151, 155]] };
   // магазин: прилавок под полосатым навесом, на прилавке — хлеб, банки, пирог; когда есть заказ, который можно сдать, — искорка
-  function drawShop(c, t, kit, own) {                                             // магазин в изометрии: каменная площадка, вход с козырьком и ступенями, прилавки с маркизами, ящики с товаром
+  function drawShop(c, t, kit, own, mossy) {                                             // магазин в изометрии: каменная площадка, вход с козырьком и ступенями, прилавки с маркизами, ящики с товаром
     if (!hasBuild(kit, "shop")) return drawLot(c, LOTS.shop, own, lotPrice(kit, "shop"));
     var A = [129, 166], B = [151, 177], Cc = [173, 166], D = [151, 155], H = 20, i, roof = ROOFS[0];
     var up = function (p, h) { return [p[0], p[1] - h]; }, lerp = function (p, q, k) { return [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k]; };
@@ -1969,14 +1970,14 @@
     for (i = 1; i < 4; i++) { var r0 = lerp(ap, eA, i / 4), r1 = lerp(ap, eB, i / 4), r2 = lerp(ap, eC, i / 4);
       seg(c, r0[0], r0[1], r1[0], r1[1], roof[2]); seg(c, r1[0], r1[1], r2[0], r2[1], "#8c3a20"); }
     seg(c, eA[0], eA[1], eB[0], eB[1], "#7a2e1a"); seg(c, eB[0], eB[1], eC[0], eC[1], "#6a2614"); seg(c, ap[0], ap[1], eB[0], eB[1], roof[2]);
-    var GOLD = ["#ffd166", "#f2b33d"];                                                                                // золотая гирлянда — чёткие огоньки 2×2
+    var GOLD = mossy ? ["#9ff0d6", "#58c2a6"] : ["#ffd166", "#f2b33d"], DIM = mossy ? "#2f7a68" : "#9a6a2a";        // золотая гирлянда; во мху — мятные огоньки, как светящиеся грибы
     [[eA, eB], [eB, eC]].forEach(function (e, side) {
       for (var gk = 1; gk < 7; gk++) { var q = R(lerp(e[0], e[1], gk / 7)), o2 = (blink + gk + side) % 3;
-        px(c, q[0] - 1, q[1] - 1, 2, 2, o2 ? GOLD[gk % 2] : "#9a6a2a"); if (o2 === 1) px(c, q[0] - 1, q[1] - 1, 1, 1, "#fff6df"); }
+        px(c, q[0] - 1, q[1] - 1, 2, 2, o2 ? GOLD[gk % 2] : DIM); if (o2 === 1) px(c, q[0] - 1, q[1] - 1, 1, 1, "#fff6df"); }
     });
     [eA, eB, eC].forEach(function (corner, side) {
       for (var gk = 1; gk <= 3; gk++) { var q = R(lerp(ap, corner, gk / 4)), o3 = (blink + gk + side * 2) % 3;
-        px(c, q[0], q[1], 2, 2, o3 ? GOLD[(gk + side) % 2] : "#9a6a2a"); if (o3 === 1) px(c, q[0], q[1], 1, 1, "#fff6df"); }
+        px(c, q[0], q[1], 2, 2, o3 ? GOLD[(gk + side) % 2] : DIM); if (o3 === 1) px(c, q[0], q[1], 1, 1, "#fff6df"); }
     });
     // снаружи — ящики с товаром
     var crate = function (x, y, a, b2) { px(c, x, y + 4, 7, 1, "rgba(30,55,15,.35)"); px(c, x, y, 7, 4, C.wd); px(c, x, y, 7, 1, C.wdl); px(c, x, y + 2, 7, 1, C.wdd);
@@ -2110,8 +2111,8 @@
     if (nextLock >= 0 && BC[nextLock] && (plots || []).some(function (pl) { return pl && pl.crater; })) drawSign(c, BC[nextLock][0], BC[nextLock][1] + 2, true, plots[nextLock].price);   // табличка цены — поверх кратера
     c.drawImage(L.front, 0, 0);
     drawOven(c, t, kit, own, now);
-    drawShop(c, t, kit, own);
-    drawMossOver(c, kit, now, t, L, seed + ["barn", "mill", "oven"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
+    drawShop(c, t, kit, own, mossOn(kit, now));
+    drawMossOver(c, kit, now, t, L, seed + ["barn", "mill", "oven", "shop"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
     if (CHEST_ON) drawChest(c, own);
     if (own) drawFx(c, t);
     for (i = 0; i < 4; i++) {                                                      // дым из трубы
@@ -3084,12 +3085,12 @@
         return m;
       };
       // страницы: как играть, гибриды, формы растений, погода, особые свойства, кухня, лавка и пыль, благодарности
-      var N = SHAPES.length + 8;
+      var N = SHAPES.length + 9;
       var rules = function (list) { list.forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); }); };
       var draw = function (dir) {
         var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage)), SH = SHAPES.length;
         // порядок страниц (его решение 2026-11-15): сначала текстовые, потом виды растений, в конце благодарности
-        var ORDER = [0, 1, SH + 2, SH + 3, SH + 7, SH + 4, SH + 5], q;
+        var ORDER = [0, 1, SH + 2, SH + 3, SH + 7, SH + 4, SH + 8, SH + 5], q;   // SH + 8 — магазин, сразу после кухни
         for (var oi = 2; oi <= SH + 1; oi++) ORDER.push(oi);
         ORDER.push(SH + 6); q = ORDER[p];
         page.innerHTML = ""; page.scrollTop = 0; page.className = "bpage" + (dir ? (dir > 0 ? " fwd" : " back") : "");
@@ -3182,6 +3183,17 @@
             d.appendChild(el("b", "", x[1] + ". " + (ok ? mi.name + ". " : "")));
             d.append(ok ? mi.text : "??? — случится, узнаешь."); page.appendChild(d);
           });
+        } else if (q === SH + 8) {                                                    // магазин: заказы на блюда
+          page.appendChild(el("h3", "", "Магазин"));
+          page.appendChild(el("div", "bsub", "Жители станции заказывают блюда"));
+          rules([
+            ["Постройка", "Магазин стоит ✦ 500 и строится в правом нижнем углу луга. Построить его можно, когда уже есть мельница или печь: магазину нужны блюда."],
+            ["Заказы", "На доске всегда три заказа: простой, сложный и особый. В заказе несколько блюд — сколько каждого нужно и сколько уже есть в амбаре. Сорт муки неважен: подойдёт хлеб из любой пшеницы."],
+            ["Награда", "Заказ платит звёздной пылью больше, чем стоят те же блюда по отдельности: простой — в полтора раза, сложный — почти вдвое, особый — вдвое."],
+            ["Сроки", "На простой заказ — сутки, на сложный — двое, на особый — трое. Не успел — заказ уходит, и на его месте сразу появляется новый."],
+            ["Сдать", "Когда всех блюд хватает, над магазином мигает искорка. Нажми «Сдать»: блюда уйдут из амбара — сначала самые дешёвые, — а пыль сразу придёт тебе. Новый заказ появится через полчаса."],
+            ["Другой заказ", "Если заказ неудобный — например, нужен джем, а кактусов нет, — его можно заменить на другой. Один раз в сутки, бесплатно."],
+          ]);
         } else if (q === SH + 4) {
           page.appendChild(el("h3", "", "Кухня"));
           page.appendChild(el("div", "bsub", "Постройки на ферме покупаются за звёздную пыль"));
@@ -3189,7 +3201,7 @@
             ["Амбар", "Хранит урожай, муку и еду. Без амбара урожай сразу превращается в пыль, а мельница и печь не работают."],
             ["Мельница", "Мелет колосья в муку: один сноп — одна мука. У каждого сорта колосьев своя мука — дороже, если дорогой колос."],
             ["Печь", "Печёт еду из урожая и муки. Выпечка помнит сорт муки: из разных колосьев выходит разный хлеб. Пока печь работает, в ней горит огонь."],
-            ["Готовое", "Мука и еда ложатся в амбар. Их можно превратить в пыль — еда стоит дороже, чем блюда по отдельности, — или продать другим игрокам в лавке. За выпечку дают очки."],
+            ["Готовое", "Мука и блюда ложатся в амбар. Их можно превратить в пыль — блюдо стоит дороже, чем урожай, из которого оно приготовлено, — продать другим игрокам в лавке или сдать по заказу в магазин. За выпечку дают очки."],
           ]);
           var rs = (F.state && F.state.recipes) || {}, NEEDW = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука" };
           var rl = el("div", "recipes");
