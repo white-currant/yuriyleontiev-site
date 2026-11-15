@@ -218,7 +218,13 @@ async function hiddenIds(): Promise<number[]> {
   try { return JSON.parse((await q("SELECT value FROM g_meta WHERE key = 'hidden'"))[0]?.[0] || "[]"); } catch { return []; }
 }
 
+// рейтинг открывают часто, а меняется он медленно — держим готовый ответ 30 секунд в памяти сервера
+let TOP_CACHE: { at: number; v: any } = { at: 0, v: null };
 async function top() {
+  if (TOP_CACHE.v && Date.now() - TOP_CACHE.at < 30000) return TOP_CACHE.v;
+  const v = await topFresh(); TOP_CACHE = { at: Date.now(), v }; return v;
+}
+async function topFresh() {
   const h = await hiddenIds();
   const not = h.length ? ` AND user NOT IN (${h.map(() => "?").join(",")})` : "";
   const all = await q(`SELECT name, points, title, avatar, user FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 500`, h);   // все игроки (потолок — от случайной лавины)
@@ -226,7 +232,7 @@ async function top() {
   // «Сегодня» — все очки за сутки (по Минску) из всех игр: начисления g_events, а не только раунды «Угадай трек»
   const notE = h.length ? ` AND e.user NOT IN (${h.map(() => "?").join(",")})` : "";
   const from = Math.floor((now() + TZ_SHIFT) / 86400) * 86400 - TZ_SHIFT;
-  const day = await q(`SELECT COALESCE(p.name, MAX(e.name)), SUM(e.delta) AS pts, p.avatar, p.title, e.user FROM g_events e LEFT JOIN g_profiles p ON p.user = e.user
+  const day = await q(`SELECT COALESCE(p.name, MAX(e.name)), SUM(e.delta) AS pts, p.avatar, p.title, e.user FROM g_events e INDEXED BY g_events_at LEFT JOIN g_profiles p ON p.user = e.user
                        WHERE e.at >= ? AND e.delta > 0${notE} GROUP BY e.user HAVING pts > 0 ORDER BY pts DESC LIMIT 500`, [from, ...h]);
   const av = (k: any) => (k ? `/avatar/${k}` : null);
   const ids = [...new Set([...all.map((r) => Number(r[4])), ...day.map((r) => Number(r[4]))])], refs = new Map<number, string>();
@@ -350,7 +356,7 @@ async function handle(req: Request): Promise<Response> {
       }
       if (body.consumed != null) {
         await q("INSERT INTO g_meta (key, value) VALUES ('consumed', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(body.consumed)]);
-        await q("DELETE FROM g_events WHERE id <= ? AND at < ?", [Number(body.consumed), now() - 30 * 86400]);
+        await q("DELETE FROM g_events WHERE +id <= ? AND at < ?", [Number(body.consumed), now() - 30 * 86400]);   // «+id» — искать по индексу времени, а не перебирать номера
       }
       return json({ ok: true });
     }

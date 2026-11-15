@@ -76,3 +76,8 @@ CREATE INDEX IF NOT EXISTS f_feed_at ON f_feed (at);
 CREATE TABLE IF NOT EXISTS f_notify (user INTEGER PRIMARY KEY, on_ INTEGER NOT NULL DEFAULT 1, at INTEGER NOT NULL);
 -- магазин станции (2026-11-15): у каждого игрока своя доска из трёх заказов на блюда; slot 0 — простой, 1 — сложный, 2 — особый
 CREATE TABLE IF NOT EXISTS f_orders (user INTEGER NOT NULL, slot INTEGER NOT NULL, items TEXT NOT NULL, reward INTEGER NOT NULL, until INTEGER NOT NULL, ready INTEGER NOT NULL, PRIMARY KEY (user, slot));
+-- индексы против полного перебора (2026-11-15: 92% чтения базы давали рейтинг «Сегодня» и чистки без индекса)
+CREATE INDEX IF NOT EXISTS g_events_at ON g_events (at);
+CREATE INDEX IF NOT EXISTS g_events_user ON g_events (user, id);
+CREATE INDEX IF NOT EXISTS g_rounds_started ON g_rounds (started);
+CREATE INDEX IF NOT EXISTS f_sales_seller ON f_sales (seller, seen);
