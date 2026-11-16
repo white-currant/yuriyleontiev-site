@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611170052";
+    var BUILD = "202611170103";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -487,6 +487,11 @@
   .vrow { display: grid; grid-template-columns: 40px 26px 1fr 1fr 1fr 1fr 34px; align-items: center; gap: 4px; padding: 6px 4px; border-radius: 6px; background: none; border: 0; color: inherit; text-align: center; font: inherit; }
   .vrow.head { padding-top: 0; padding-bottom: 0; font-size: 11px; color: var(--cream2); }
   .vrow.on { background: rgba(255, 214, 140, .2); box-shadow: inset 0 0 0 2px var(--gold); }
+  .vrow { position: relative; }
+  /* бирка «в продаже N» на значке варианта (его просьба 2026-11-17) */
+  .vrow.sold { padding-bottom: 20px; }
+  .vrow .vsale { position: absolute; left: 4px; bottom: 4px; padding: 1px 4px; background: #3f9e7c; color: #f2fff8; font: 700 9.5px/1.15 var(--pix, inherit);
+    white-space: nowrap; box-shadow: 0 0 0 1.5px #1d4d3c; pointer-events: none; }
   .vrow canvas { width: 34px; height: auto; image-rendering: pixelated; }
   .vrow .vn { font-weight: 800; font-size: 13px; }
   .vrow .vc { font-size: 13px; font-weight: 600; }
@@ -598,6 +603,7 @@
   /* сцена стоит в деревянной раме, под ней — доска с инвентарём */
   body[data-screen^="farm"] .scene { box-shadow: 0 4px 0 var(--ink); }
   body[data-screen^="farm"] .scene canvas { border-bottom: 4px solid var(--wood4); }
+  body[data-screen^="farm"] .scene .pills canvas { border-bottom: 0; }   /* значки в верхней панели — без «полочки» (рамка сцены цеплялась за значок пыли, его жалоба 2026-11-17) */
   body[data-screen^="farm"] .scene .decorbtn canvas { border-bottom: 0; height: auto; }   /* палитра — без полосы земли под сценой */
   body[data-screen^="farm"] .plot .lbl { bottom: 26%; transform: translateX(-50%); font-family: var(--pix); font-size: 12px; font-weight: 700; color: var(--cream);
     text-shadow: 1px 0 0 var(--ink), -1px 0 0 var(--ink), 0 1px 0 var(--ink), 0 -1px 0 var(--ink), 1px 1px 0 var(--ink), -1px 1px 0 var(--ink), 1px -1px 0 var(--ink), -1px -1px 0 var(--ink); }
@@ -3722,6 +3728,7 @@
         r.appendChild(el("span", "vc" + cls, c[2](v)));
       });
       r.appendChild(el("span", "cnt", "×" + cnt(id)));
+      var ls = (bagOf(id) || { listed: 0 }).listed; if (ls > 0) { r.classList.add("sold"); r.appendChild(el("span", "vsale", "в продаже " + ls)); }
       r.onclick = function () {
         if (!onPick) return; haptic("light");
         t.querySelectorAll(".vrow.on").forEach(function (x) { x.classList.remove("on"); }); r.classList.add("on"); onPick(id);
