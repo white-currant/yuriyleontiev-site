@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611170010";
+    var BUILD = "202611170019";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -785,6 +785,9 @@
   body[data-screen^="farm"] #farmbanners .banner { font-family: var(--pix); font-size: 14px; color: var(--cream); text-shadow: none; margin-top: 16px; }
   body[data-screen^="farm"] #farmbanners .banner button { border-radius: 0; font-family: var(--pix); font-weight: 700; background: var(--pgold); color: var(--ink);
     box-shadow: 0 -2px 0 var(--ink), 0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink); }
+  /* лавка: описание выбранного товара и кнопки «Купить» / «Подробнее» прижаты к низу экрана и видны всегда, даже когда полка длинная (его просьба 2026-11-17) */
+  body[data-screen^="farm"] #shopview .wareinfo { position: sticky; bottom: 0; z-index: 5; margin: 24px -16px 0; padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    background: var(--wood2); box-shadow: 0 -4px 0 var(--ink); }
   body[data-screen^="farm"] #farm-shop .farm-top { background: var(--wood2); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 4px 0 var(--ink); padding-bottom: 12px; }
   body[data-screen^="farm"] .empty { color: var(--cream2); font-family: var(--pix); }
   body[data-screen^="farm"] .nlist .av { border-radius: 0 !important; box-shadow: 0 -2px 0 var(--ink), 0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink); }
