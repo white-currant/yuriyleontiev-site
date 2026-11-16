@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611161134";
+    var BUILD = "202611161815";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -224,6 +224,10 @@
   .ovtop { display: flex; gap: 14px; align-items: center; margin: 4px 0 10px; }
   .ovtop .ovslot { width: 76px; flex: none; }
   .ovtop .ovslot.empty { opacity: .55; }
+  .ovtop.multi { margin: 2px 0 8px; }
+  .ovtop.multi .ovslot { width: 58px; }
+  .ovacts { display: flex; gap: 8px; }
+  .ovacts .btn { flex: 1; }
   .ovinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
   .ovinfo small { opacity: .8; }
   .ovbar { height: 6px; background: rgba(0, 0, 0, .3); }
@@ -499,7 +503,7 @@
   .ware .tag { position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%) rotate(-3deg); z-index: 1; padding: 1px 6px 2px; border-radius: 3px;
     background: #f3e2c0; color: #3a2414; font-size: 11px; font-weight: 750; white-space: nowrap; box-shadow: 0 1px 0 rgba(0, 0, 0, .35); }
   .ware.on .tag { background: var(--gold); }
-  .ware .qty { position: absolute; right: 6px; top: 4px; font-size: 11px; font-weight: 750; color: rgba(255, 255, 255, .9); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+  .ware .qty { display: block; margin: 0; position: absolute; right: 6px; top: 4px;   /* не наследовать сетку счётчика .qty — иначе «×N» уезжал на соседний товар (2026-11-16) */ font-size: 11px; font-weight: 750; color: rgba(255, 255, 255, .9); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
   .ware .have { position: absolute; left: 6px; top: 4px; font-size: 11px; font-weight: 750; color: #8ff0c4; text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
   .ware .qty.sale { color: #8ff0c4; left: 0; right: 0; text-align: center; white-space: nowrap; font-size: 10.5px; }
   /* имя продавца под ценником; длинное — медленно прокручивается туда-обратно */
@@ -896,6 +900,7 @@
   function show(id) {
     ["home", "game", "nope", "farm", "farm-shop", "farm-neighbors", "farm-visit"].forEach(function (s) { $(s).hidden = s !== id; });
     var was = document.body.dataset.screen; document.body.dataset.screen = id; scrollTo(0, 0);
+    if (was && was !== id) document.querySelectorAll(".sheet-wrap").forEach(function (w) { w.remove(); });   // ушёл с экрана — его окна закрываются (баг 2026-11-16: окно семени осталось поверх гильдии)
     if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked");
     // ферма: сверху закатное небо сцены, снизу трава; остальные экраны фермы — ночное небо
     var outdoors = id === "farm" || id === "farm-visit", bgc = id.indexOf("farm") === 0 ? "#5a3820" : "#120a05";   // ферма — «деревянная» панель
@@ -2003,6 +2008,11 @@
   var SHOP = [151, 177];                                                                // низ переднего угла магазина                                                                // магазин станции: правый нижний угол луга (его выбор 2026-11-15)
   var MILL = [138, 62], OVEN = [40, 160], CHEST = [17, 95], CHEST_ON = true;   // сундук включён со спрайтом художника (2026-11-14)
   function jobOf(kit, kind) { var j = null; ((kit && kit.jobs) || []).forEach(function (x) { if (x.kind === kind) j = x; }); return j; }
+  // ячейки мельницы и печи (2026-11-16): первая — «oven», вторая и третья — «oven:1», «oven:2»; уровень = число ячеек
+  function jobsOf(kit, kind) { return ((kit && kit.jobs) || []).filter(function (x) { return x.kind === kind || String(x.kind).indexOf(kind + ":") === 0; }); }
+  function levelOf(kit, kind) { return Math.max(1, Math.min(3, ((kit && kit.levels) || {})[kind] || 1)); }
+  function slotsOf(kind, lv) { return [kind, kind + ":1", kind + ":2"].slice(0, lv); }
+  function freeSlot(kit, kind) { var r = null; slotsOf(kind, levelOf(kit, kind)).forEach(function (sl) { if (!r && !jobOf(kit, sl)) r = sl; }); return r; }
   function hasBuild(kit, kind) { return !!(kit && kit.builds && kit.builds.indexOf(kind) >= 0); }
   var DIG3 = ["111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001", "111100111001111", "111100111101111", "111001010010010", "111101111101111", "111101111001111"];   // цифры 3×5
   function drawSign(c, x, y, own, price) {                                           // табличка «здесь можно построить» с ценой
@@ -2133,7 +2143,8 @@
   function drawMill(c, t, kit, own, now) {
     var x = MILL[0], y = MILL[1];
     if (!hasBuild(kit, "mill")) return drawLot(c, LOTS.mill, own, lotPrice(kit, "mill"));
-    var job = jobOf(kit, "mill"), busy = job && job.ready > now;
+    var js = jobsOf(kit, "mill"), busy = js.some(function (j) { return j.ready > now; }), job = js.filter(function (j) { return j.ready <= now; })[0], lv = levelOf(kit, "mill");
+    if (lv >= 3) millAnnex(c, x, y);                                                     // прокачка: пристройка слева (за башней)
     poly(c, [[x - 9, y + 2], [x + 2, y + 6], [x + 14, y + 1], [x + 2, y - 3]], "rgba(30,55,15,.3)");    // тень
     for (var yy = 0; yy < 26; yy++) {                                                // башня: сужается кверху, свет слева
       var w = Math.round(7 - yy * 2.5 / 26), row = y - yy;
@@ -2151,13 +2162,43 @@
       for (var d2 = 1; d2 <= 15; d2 += .5) px(c, Math.round(hx + dx * d2), Math.round(hy + dy * d2), 1, 1, C.wdd);   // спица
     }
     px(c, hx - 1, hy - 1, 3, 3, C.wdd); px(c, hx, hy, 1, 1, C.gold);
-    if (job && job.ready <= now && own && (t / 400 | 0) % 2) { px(c, x - 1, y - 33, 3, 1, "#ffffff"); px(c, x, y - 34, 1, 3, "#ffffff"); }   // мука готова — искорка
+    if (lv >= 2) millSacks(c, x, y, t, lv);
+    if (job && own && (t / 400 | 0) % 2) { px(c, x - 1, y - 33, 3, 1, "#ffffff"); px(c, x, y - 34, 1, 3, "#ffffff"); }   // мука готова — искорка
+  }
+  // прокачка мельницы (2026-11-16): 2 ячейки — мешки муки у двери и флажок на крыше; 3 — ещё каменная пристройка и второй мешок-горка
+  function millSacks(c, x, y, t, lv) {
+    var sack = function (sx, sy) { px(c, sx, sy - 4, 4, 4, "#efe6d2"); px(c, sx + 3, sy - 4, 1, 4, "#c9bb9b"); px(c, sx, sy, 4, 1, "#b3a582"); px(c, sx + 1, sy - 5, 2, 1, "#8a5a36"); };
+    sack(x + 7, y + 1); sack(x + 10, y + 2); if (lv >= 3) sack(x + 8, y - 2);
+    var w = (t / 300 | 0) % 2;                                                           // флажок на макушке крыши колышется
+    px(c, x, y - 34, 1, 6, C.wdd); px(c, x + 1, y - 34, 4, 1, "#e2492b"); px(c, x + 1, y - 33, 3 + w, 1, "#e2492b"); px(c, x + 1, y - 32, 2, 1, "#b8331c");
+  }
+  function millAnnex(c, x, y) {
+    var ax = x - 17;                                                                     // каменная пристройка с дощатой крышей
+    poly(c, [[ax - 2, y + 1], [ax + 9, y + 4], [ax + 14, y + 2], [ax + 3, y - 1]], "rgba(30,55,15,.3)");
+    px(c, ax, y - 8, 10, 9, "#cdbfa6"); px(c, ax + 7, y - 8, 3, 9, "#a8997f");
+    for (var r = 0; r < 3; r++) for (var k = 0; k < 3; k++) px(c, ax + k * 3 + (r % 2), y - 7 + r * 3, 2, 1, "#b7a88d");
+    for (var i = 0; i < 12; i++) px(c, ax - 1 + i, y - 9 - Math.floor((11 - i) / 3), 1, 1 + Math.floor((11 - i) / 3), i < 8 ? "#9a4430" : "#76301f");
+    px(c, ax + 2, y - 5, 3, 5, C.wdd); px(c, ax + 3, y - 4, 1, 4, "#8a5a36");
+  }
+  // прокачка печи (2026-11-16): 2 ячейки — стол с хлебами справа; 3 — ещё полка-стеллаж с противнями позади стола
+  function ovenExtras(c, x, y, lv) {
+    var tx = x + 17, ty = y;
+    poly(c, [[tx - 2, ty + 2], [tx + 8, ty + 5], [tx + 14, ty + 3], [tx + 4, ty]], "rgba(30,55,15,.3)");
+    if (lv >= 3) {                                                                       // стеллаж: две стойки, три полки с противнями
+      px(c, tx + 1, ty - 18, 1, 16, "#6b4426"); px(c, tx + 9, ty - 18, 1, 16, "#5a381f");
+      for (var k = 0; k < 3; k++) { px(c, tx + 1, ty - 17 + k * 5, 9, 1, "#8a5a36"); px(c, tx + 2, ty - 18 + k * 5, 7, 1, "#9aa1a9"); px(c, tx + 3 + k, ty - 19 + k * 5, 2, 1, "#d99a4e"); }
+    }
+    px(c, tx - 1, ty - 6, 12, 2, "#a8743e"); px(c, tx - 1, ty - 6, 12, 1, "#c48d52");      // столешница
+    px(c, tx, ty - 4, 1, 5, "#6b4426"); px(c, tx + 9, ty - 4, 1, 5, "#5a381f");          // ножки
+    px(c, tx + 1, ty - 9, 4, 3, "#c8792f"); px(c, tx + 1, ty - 9, 4, 1, "#e8a457"); px(c, tx + 2, ty - 8, 1, 1, "#f2cf98");   // каравай
+    px(c, tx + 6, ty - 8, 3, 2, "#b5652a"); px(c, tx + 6, ty - 8, 3, 1, "#d98d45");     // булка
   }
   // печь: глиняный купол из кирпича на каменном основании, кирпичная арка устья, труба с колпаком, поленница и лопата
   function drawOven(c, t, kit, own, now) {
     var x = OVEN[0], y = OVEN[1];
     if (!hasBuild(kit, "oven")) return drawLot(c, LOTS.oven, own, lotPrice(kit, "oven"));
-    var job = jobOf(kit, "oven"), busy = job && job.ready > now, ready = job && job.ready <= now, i, j;
+    var js = jobsOf(kit, "oven"), busy = js.some(function (j) { return j.ready > now; }), ready = js.some(function (j) { return j.ready <= now; }), i, j, lv = levelOf(kit, "oven");
+    if (lv >= 2) ovenExtras(c, x, y, lv);                                                // прокачка: рядом, картинку художника не трогаем
     if (ARTS.ok) {                                                     // печь художника: погасшая или три кадра огня по кругу, пока печёт
       var im = busy ? ARTS["oven-fire-" + (1 + Math.floor((F.frame || 0) / 2) % 3)] : ARTS.oven;
       c.drawImage(im, x - 14, y + 4 - im.height);
@@ -2685,6 +2726,7 @@
   function fmtLeft(sec) { sec = Math.max(0, sec | 0); return sec >= 3600 ? Math.floor(sec / 3600) + " ч" + (sec % 3600 >= 60 ? " " + Math.floor(sec % 3600 / 60) + " мин" : "") : sec >= 60 ? Math.ceil(sec / 60) + " мин" : sec + " с"; }
   function fmtShort(sec) { sec = Math.max(0, sec | 0); return sec >= 3600 ? Math.floor(sec / 3600) + "ч " + Math.floor(sec % 3600 / 60) + "м" : sec >= 60 ? Math.ceil(sec / 60) + " мин" : sec + " с"; }
   function toast(text) { var t = document.createElement("div"); t.className = "toast"; t.textContent = text; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2600); }
+  var UPGRADES_ON = false;            // прокачка мельницы и печи готова, но пока выключена (его решение 2026-11-16: сначала только отмена)
   function sheet(build) {
     var w = document.createElement("div"); w.className = "sheet-wrap"; var sh = document.createElement("div"); sh.className = "sheet";
     var shut = function () { w.remove(); if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked"); };
@@ -2789,11 +2831,13 @@
       [["mill", MILL, 30, 42, "мельница", "мука готова!"], ["oven", OVEN, 40, 28, "печь", "готово!"]].forEach(function (q) {     // мельница и печь
         var kb = document.createElement("button"); kb.type = "button"; kb.className = "plot well kitchen";
         kb.style.left = (q[1][0] - q[2] / 2) / FW * 100 + "%"; kb.style.top = (q[1][1] - q[3] + 4) / FH * 100 + "%"; kb.style.width = q[2] / FW * 100 + "%"; kb.style.height = q[3] / FH * 100 + "%";
-        var st = F.state, job = jobOf(st, q[0]), tn = farmNow(), txt;
+        var st = F.state, tn = farmNow(), js = jobsOf(st, q[0]), done = js.some(function (j) { return j.ready <= tn; }), txt;
+        var soon = js.reduce(function (a, j) { return Math.min(a, j.ready); }, Infinity);   // несколько ячеек: что раньше всех будет готово
         if (!hasBuild(st, q[0])) txt = q[4];
-        else if (job) txt = job.ready <= tn ? q[5] : fmtShort(job.ready - tn);
+        else if (done) txt = q[5];
+        else if (js.length) txt = fmtShort(soon - tn);
         else txt = q[4];
-        kb.appendChild(el("span", "lbl water" + (job && job.ready <= tn ? " ready" : ""), txt));
+        kb.appendChild(el("span", "lbl water" + (done ? " ready" : ""), txt));
         kb.onclick = function () { haptic("light"); kitchenSheet(q[0]); }; box.appendChild(kb);
       });
     }
@@ -3087,11 +3131,11 @@
       line(st.base ? "Цена у станции" : "Цена в лавке", "✦ " + (st.base ? st.cost : st.price) + " за семя");
       sh.appendChild(props);
       var mine = s && !opt.foreign ? bagOf(st.id) : null;
-      var hv = null, lavDraw = null;
+      var hv = null, lavDraw = null, dq = null;
       if (mine) { hv = el("div", "sub", "У тебя: " + mine.count); sh.appendChild(hv); }
-      if (mine && freeOf(mine) > 0) {                                                // лишние семена — в пыль, сколько выберешь; окно остаётся открытым
+      if (mine) {                                                // лишние семена — в пыль, сколько выберешь; окно остаётся открытым
         var sd = seedDustOf(st);
-        qtyBox(sh, { key: "dust:" + st.id, max: function () { return freeOf(bagOf(st.id)); }, empty: "Свободных семян больше нет.",
+        dq = qtyBox(sh, { key: "dust:" + st.id, max: function () { return freeOf(bagOf(st.id)); }, empty: "Свободных семян больше нет.",
           acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + sd * n; }, cls: "ghost",
                    run: function (n) { seedsDust(st.id, n, "inv"); if (hv) hv.textContent = "У тебя: " + bagOf(st.id).count; if (lavDraw) lavDraw(); } }] });
       }
@@ -3100,7 +3144,8 @@
         sh.appendChild(el("div", "sub", "Соседи, которые зайдут к тебе в гости, смогут купить выставленные семена. Пыль придёт тебе сразу. Выставленные семена не посадить, пока не уберёшь их с продажи."));
         var lq = saleBox(sh, { key: "sale:s:" + st.id, listed: function () { return mine.listed; }, total: function () { return mine.count; },
           step: function (d) { haptic("light"); mine.listed += d; renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: d }).catch(function () {}); },
-          priceKey: "s:" + st.id, base: st.price, item: st.id, kind: "seed" });
+          priceKey: "s:" + st.id, base: st.price, item: st.id, kind: "seed",
+          after: function () { lq.draw(); if (dq) dq.draw(); } });                  // выставил или убрал — «в пыль» тоже пересчитать (баг 2026-11-16: «все 32» при 3 на прилавке)
         lavDraw = function () { lq.draw(); };
       } else if (mine && st.base) sh.appendChild(el("div", "sub", "Семена станции в своей лавке не продаются — только выведенные тобой сорта."));
       if (opt.buy) sh.appendChild(btn("Купить за ✦ " + st.price, "", function () { close(); opt.buy(); }));
@@ -3281,7 +3326,7 @@
       };
       // страницы: как играть, гибриды, формы растений, погода, особые свойства, кухня, лавка и пыль, благодарности
       var N = SHAPES.length + 9;
-      var rules = function (list) { list.forEach(function (x) { var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); }); };
+      var rules = function (list) { list.forEach(function (x) { if (!x) return; var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); }); };
       var draw = function (dir) {
         var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage)), SH = SHAPES.length;
         // порядок страниц (его решение 2026-11-15): сначала текстовые, потом виды растений, в конце благодарности
@@ -3400,6 +3445,8 @@
             ["Амбар", "Хранит урожай, муку и еду. Без амбара урожай сразу превращается в пыль, а мельница и печь не работают."],
             ["Мельница", "Мелет колосья в муку: один сноп — одна мука. Мука берёт расцветку колосьев, а сорт — по их цене: колосья до ✦7 дают муку второго сорта (✦7), до ✦10 — первого (✦11), дороже — высшего (✦15). Цену колосьев видно в карточке семени — строка «Урожай». Колосья станции дают муку второго сорта; чтобы получить высший, скрести их с ягодами или хрусталём: собери колосья, растущие рядом. Одинаковая мука лежит в одной ячейке."],
             ["Печь", "Печёт еду из урожая и муки. Каждое блюдо помнит своё сырьё — расцветку и сорт: выпечка — муку, суп и похлёбка — мох и грибы, чай — звездоцвет, джем — кактус. Чем дороже сырьё, тем выше сорт и дороже блюдо. В печи блюда разложены по категориям — в каждой то, что можно испечь из твоего сырья; выбранное готовится в ячейке печи вверху. Звёздный уголь из амбара допекает всё в печи сразу. Пока печь работает, в ней горит огонь."],
+            UPGRADES_ON && ["Ячейки", "Мельницу и печь можно прокачать — нажми на них, внизу ячеек кнопка «Ещё ячейка». Каждая прокачка — ещё одна ячейка, всего до трёх: в них готовится одновременно. Мельница: ✦ 400 и ✦ 1000, печь: ✦ 600 и ✦ 1500. Прокачка видна на ферме."],
+            ["Отменить", "Пока блюдо или мука не готовы, их можно отменить — всё сырьё вернётся в амбар. Готовое не отменить, только забрать."],
             ["Готовое", "Мука и блюда ложатся в амбар. Их можно превратить в пыль — блюдо стоит дороже, чем урожай, из которого оно приготовлено, — продать другим игрокам в лавке или сдать по заказу в магазин. За выпечку дают очки."],
           ]);
           var rs = (F.state && F.state.recipes) || {}, NEEDW = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука" };
@@ -3421,7 +3468,8 @@
             ["Метка «✓»", "В лавке на товаре, который у тебя уже есть, в углу зелёная метка «✓ 3» — столько таких у тебя: семян в инвентаре и сундуке, урожая и блюд — в амбаре и сундуке."],
             ["Выставленное", "Пока товар на продаже, его нельзя посадить, смолоть или распылить — сначала сними с продажи."],
             ["В пыль", "Урожай и еду можно превратить в пыль в амбаре, лишние семена — в окне семян. Это самый невыгодный способ: продать игрокам выгоднее, а приготовить еду — ещё выгоднее."],
-            ["Сундук", "Лишние семена можно убрать в сундук у домика, чтобы не мешали в инвентаре. Оттуда их не посадить, пока не достанешь."],
+            ["Инвентарь", "Места не кончаются: у инвентаря, сундука и амбара нет предела, ничего не пропадёт. Новые семена просто добавляются в конец списка."],
+            ["Сундук", "Лишние семена можно убрать в сундук у домика, чтобы не мешали в инвентаре. Оттуда их не посадить, пока не достанешь. Класть можно сколько угодно."],
             ["Соседи", "Загляни на фермы других игроков и оставь подарок — 5 пыли. Подарков пять в день, каждому соседу — не чаще раза в день."],
             ["Артефакты", "При сборе иногда выпадает пластинка с треком — это коллекция, она хранится в профиле. В полнолуние и у счастливых сортов — вдвое чаще."],
           ]);
@@ -3756,7 +3804,9 @@
   function takeFor(need, recipe, sort, n) {                     // сразу убрать из амбара то, что ушло в печь (сервер подтвердит)
     var s = F.state, fit = (s.barn || []).filter(function (it) { return it.count > 0 && fitsNeed(it.strain, need, recipe, sort); })
       .sort(function (a, b) { return ((itemOf(a.strain) || {}).dust || 0) - ((itemOf(b.strain) || {}).dust || 0); });
-    fit.forEach(function (it) { var t = Math.min(n, it.count); it.count -= t; n -= t; });
+    var took = [];
+    fit.forEach(function (it) { var t = Math.min(n, it.count); if (t > 0) { it.count -= t; n -= t; took.push([it.strain, t]); } });
+    return took;
   }
   // ---------- магазин: доска заказов на блюда ----------
   var ORDER_CATS = { bread: ["bread"], bun: ["bun"], soup: ["soup", "stew"], pie: ["pie", "pumpkin"], tea: ["tea"], jam: ["jam"], flour: ["flour"] };   // как на сервере
@@ -3870,66 +3920,93 @@
       return { k: k, sort: sort, r: r, can: can, outKey: outKey, pid: pid, info: info, parts: parts };
     });
   }
-  // печь (его схема 2026-11-15): вверху ячейка готовки, ниже категории блюд — в каждой маленькие ячейки того, что можно
-  // испечь из своего сырья; выбрал → «Испечь» → блюдо готовится в ячейке, окно не закрывается. Ячеек потом станет больше (прокачка печи).
+  // печь и мельница (его схема 2026-11-15, ячейки и отмена — 2026-11-16): вверху ячейки готовки (одна, после прокачки — до трёх),
+  // ниже категории — в каждой маленькие ячейки того, что можно сделать из своего сырья; выбрал → «Испечь» → готовится в свободной ячейке.
+  // Пока не готово — можно отменить: сырьё вернётся в амбар.
   var OVEN_CATS = [["Хлеб", ["bread"]], ["Булочки", ["bun"]], ["Похлёбка", ["soup", "stew"]], ["Пироги", ["pie", "pumpkin"]], ["Чай", ["tea"]], ["Джем", ["jam"]]];
-  function ovenBody(sh, close, b) {
-    var s = F.state, top = el("div", "ovtop"), body = el("div");
+  var MILL_CATS = [["Мука", ["flour"]]];
+  function kitchenBody(sh, close, b, kind) {
+    var s = F.state, mill = kind === "mill", top = el("div"), body = el("div");
     sh.appendChild(top);
-    sh.appendChild(el("div", "sub", "Выбери блюдо и нажми «Испечь» — оно будет готовиться в ячейке печи. Блюдо помнит сырьё: из дорогого сырья выходит дороже. Звёздный уголь из амбара допекает всё сразу."));
+    sh.appendChild(el("div", "sub", mill ? "Выбери колосья и нажми «Смолоть» — мука будет готовиться в свободной ячейке. Мука берёт расцветку колосьев, а сорт — по их цене."
+                                         : "Выбери блюдо и нажми «Испечь» — оно будет готовиться в свободной ячейке печи. Блюдо помнит сырьё: из дорогого сырья выходит дороже. Звёздный уголь из амбара допекает ячейку сразу."));
     sh.appendChild(body);
+    var verb = mill ? "Смолоть " : "Испечь ";
     var drawTop = function () {
       top.innerHTML = "";
-      var job = jobOf(s, "oven"), tn = farmNow(), ready = job && job.ready <= tn;
-      var cell = el("div", "slot ovslot" + (ready ? " on" : "") + (job ? "" : " empty"));
-      var info = el("div", "ovinfo");
-      if (job) {
-        var rk = recKey(job.recipe), rr = s.recipes[rk] || {}, nm = itemName("p:" + job.recipe) || rr.name || "";
-        var cv = el("canvas", "pix"); itemIcon(cv, "p:" + job.recipe); cell.appendChild(cv);
-        cell.appendChild(el("span", "n", "×" + job.n));
-        info.appendChild(el("b", "", nm));
-        info.appendChild(el("small", "", ready ? "Готово — забери в амбар" : "Готово через " + fmtLeft(job.ready - tn)));
-        if (!ready) { var bar = el("div", "ovbar"), fill = el("i"); fill.style.width = Math.round(100 * Math.min(1, (tn - job.started) / Math.max(1, job.ready - job.started))) + "%"; bar.appendChild(fill); info.appendChild(bar);
-          var coal = barnOf("p:coal");                                   // звёздный уголь: печь сразу допекает (его идея 2026-11-15)
-          if (coal && coal.count > 0) info.appendChild(btn("Подбросить уголь · " + coal.count, "ghost", function () {
-            haptic("success"); coal.count -= 1; job.ready = farmNow(); renderFarm(); drawTop();
-            toast("Уголь в печи — " + (rr.name || "блюдо").toLowerCase() + " готово");
-            farmCall("/api/farm/stoke", {}).catch(function () {});
+      var lv = levelOf(s, kind), slots = slotsOf(kind, lv), tn = farmNow();
+      slots.forEach(function (sl) {
+        var job = jobOf(s, sl), ready = job && job.ready <= tn, row = el("div", "ovtop" + (lv > 1 ? " multi" : ""));
+        var cell = el("div", "slot ovslot" + (ready ? " on" : "") + (job ? "" : " empty")), info = el("div", "ovinfo");
+        if (job) {
+          var rk = recKey(job.recipe), rr = s.recipes[rk] || {}, nm = itemName("p:" + job.recipe) || rr.name || "";
+          var cv = el("canvas", "pix"); itemIcon(cv, "p:" + job.recipe); cell.appendChild(cv);
+          cell.appendChild(el("span", "n", "×" + job.n));
+          info.appendChild(el("b", "", nm));
+          info.appendChild(el("small", "", ready ? "Готово — забери в амбар" : "Готово через " + fmtLeft(job.ready - tn)));
+          if (!ready) {
+            var bar = el("div", "ovbar"), fill = el("i"); fill.style.width = Math.round(100 * Math.min(1, (tn - job.started) / Math.max(1, job.ready - job.started))) + "%"; bar.appendChild(fill); info.appendChild(bar);
+            var acts = el("div", "ovacts"), coal = barnOf("p:coal");
+            if (!mill && coal && coal.count > 0) acts.appendChild(btn("Уголь · " + coal.count, "ghost", function () {     // звёздный уголь: ячейка сразу готова (его идея 2026-11-15)
+              haptic("success"); coal.count -= 1; job.ready = farmNow(); renderFarm(); drawTop();
+              toast("Уголь в печи — " + (rr.name || "блюдо").toLowerCase() + " готово");
+              farmCall("/api/farm/stoke", { slot: sl }).catch(function () {});
+            }));
+            if (job.undo) acts.appendChild(btn("Отменить", "ghost", function () {
+              haptic("light");
+              s.jobs = s.jobs.filter(function (j) { return j !== job; });
+              (job.took || []).forEach(function (t) { barnAdd(t[0], t[1]); });                  // своё только что загруженное — сразу назад; остальное вернёт сервер
+              renderFarm(); drawTop(); drawCats();
+              toast("Отменено — сырьё вернулось в амбар");
+              farmCall("/api/farm/uncook", { slot: sl }).catch(function () {});
+            }));
+            if (acts.childNodes.length) info.appendChild(acts);
+          }
+          else info.appendChild(btn("Забрать в амбар", "", function () {
+            haptic("success");
+            s.jobs = s.jobs.filter(function (j) { return j !== job; }); barnAdd("p:" + job.recipe, job.n); renderFarm();
+            toast("+" + job.n + " " + (rr.name || "").toLowerCase() + " в амбар" + (rr.points ? " · +" + rr.points * job.n + " " + plural(rr.points * job.n, "очко", "очка", "очков") : ""));
+            farmCall("/api/farm/collect", { kind: sl }).catch(function () {});
+            drawTop(); drawCats();
           }));
+        } else {
+          info.appendChild(el("b", "", "Ячейка свободна"));
+          info.appendChild(el("small", "", mill ? "Выбери колосья ниже" : "Выбери блюдо ниже"));
         }
-        else info.appendChild(btn("Забрать в амбар", "", function () {
-          haptic("success");
-          s.jobs = s.jobs.filter(function (j) { return j.kind !== "oven"; }); barnAdd("p:" + job.recipe, job.n); renderFarm();
-          toast("+" + job.n + " " + (rr.name || "").toLowerCase() + " в амбар" + (rr.points ? " · +" + rr.points * job.n + " " + plural(rr.points * job.n, "очко", "очка", "очков") : ""));
-          farmCall("/api/farm/collect", { kind: "oven" }).catch(function () {});
-          drawTop(); drawCats();
-        }));
-      } else {
-        info.appendChild(el("b", "", "Печь свободна"));
-        info.appendChild(el("small", "", "Выбери блюдо ниже"));
+        row.appendChild(cell); row.appendChild(info); top.appendChild(row);
+      });
+      var up = (b.up || [])[lv - 1];                                   // прокачка: ещё одна ячейка, всего до трёх (его решение 2026-11-16)
+      if (up && UPGRADES_ON) {
+        var ub = btn("Ещё ячейка · ✦ " + up, "ghost", function () {
+          if (s.dust < up) { haptic("error"); return toast("Не хватает звёздной пыли"); }
+          haptic("success"); s.dust -= up; s.levels = s.levels || {}; s.levels[kind] = lv + 1; renderFarm(); drawTop(); drawCats();
+          toast(b.name + ": теперь " + (lv + 1) + " " + plural(lv + 1, "ячейка", "ячейки", "ячеек"));
+          farmCall("/api/farm/upgrade", { kind: kind }).catch(function () {});
+        });
+        if (s.dust < up) ub.disabled = true;
+        top.appendChild(ub);
       }
-      top.appendChild(cell); top.appendChild(info);
     };
     var drawCats = function () {
       body.innerHTML = "";
-      var rows = kitchenRows("oven", b.max), busy = !!jobOf(s, "oven"), sel = F.ovenSel;
-      OVEN_CATS.forEach(function (c) {
+      var rows = kitchenRows(kind, b.max), slot = freeSlot(s, kind), sel = F.ovenSel;
+      (mill ? MILL_CATS : OVEN_CATS).forEach(function (c) {
         var pl = el("div", "order ovcat"); pl.appendChild(el("b", "", c[0]));
         var vs = rows.filter(function (v) { return c[1].indexOf(v.k) >= 0 && v.can >= 1; })
           .sort(function (a, z) { return (a.info.dust || 0) - (z.info.dust || 0); });
         if (!vs.length) {
           var need = c[1].map(function (k) { var r = s.recipes[k]; return r ? r.name.toLowerCase() + ": " + Object.keys(r.needs).map(function (nd) { return NEED[nd] + " ×" + r.needs[nd]; }).join(" + ") : ""; });
-          pl.appendChild(el("div", "sub", "Не из чего испечь. Нужно — " + need.join("; ") + "."));
+          pl.appendChild(el("div", "sub", (mill ? "Не из чего смолоть" : "Не из чего испечь") + ". Нужно — " + need.join("; ") + "."));
           body.appendChild(pl); return;
         }
         var g = el("div", "invgrid"), picked = null;
         vs.forEach(function (v) {
-          var on = sel && sel.k === v.k && sel.sort === v.sort; if (on) picked = v;
+          var on = sel && sel.kind === kind && sel.k === v.k && sel.sort === v.sort; if (on) picked = v;
           var cell = el("div", "slot" + (on ? " on" : "")); cell.setAttribute("aria-label", itemName(v.pid) || v.r.name);
           var cv = el("canvas", "pix"); itemIcon(cv, v.pid); cell.appendChild(cv);
           cell.appendChild(el("span", "n", String(v.can)));
           cell.appendChild(el("span", "vars", "✦ " + v.info.dust));
-          cell.onclick = function () { haptic("light"); F.ovenSel = on ? null : { k: v.k, sort: v.sort }; drawCats(); };
+          cell.onclick = function () { haptic("light"); F.ovenSel = on ? null : { kind: kind, k: v.k, sort: v.sort }; drawCats(); };
           g.appendChild(cell);
         });
         pl.appendChild(g);
@@ -3938,14 +4015,15 @@
           d.appendChild(el("b", "", itemName(v.pid) || r.name));
           var s1 = el("small", "", v.parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + v.info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : ""));
           d.appendChild(s1); d.appendChild(s2); pl.appendChild(d);
-          if (busy) { var no = btn("Печь занята", "ghost", function () {}); no.disabled = true; pl.appendChild(no); }
+          if (!slot) { var no = btn("Все ячейки заняты", "ghost", function () {}); no.disabled = true; pl.appendChild(no); }
           else qtyBox(pl, { key: "cook:" + v.k + ":" + v.sort, max: function () { return v.can; },
-            acts: [{ t: function (n) { return "Испечь " + n + " · ⏱ " + fmtLeft(r.min * 60 * n); }, run: function (n) {
+            acts: [{ t: function (n) { return verb + n + " · ⏱ " + fmtLeft(r.min * 60 * n); }, run: function (n) {
               haptic("success");
-              var t0 = farmNow(), rk = v.outKey ? v.k + "@" + v.outKey : v.k;
-              s.jobs = (s.jobs || []).concat([{ kind: "oven", recipe: rk, n: n, started: t0, ready: t0 + r.min * 60 * n }]);
-              Object.keys(r.needs).forEach(function (nd) { takeFor(nd, v.k, v.sort, r.needs[nd] * n); }); renderFarm();
-              toast("В печи: " + (itemName(v.pid) || r.name).toLowerCase() + " ×" + n);
+              var t0 = farmNow(), rk = v.outKey ? v.k + "@" + v.outKey : v.k, took = [];
+              Object.keys(r.needs).forEach(function (nd) { took = took.concat(takeFor(nd, v.k, v.sort, r.needs[nd] * n)); });
+              s.jobs = (s.jobs || []).concat([{ kind: slot, recipe: rk, n: n, started: t0, ready: t0 + r.min * 60 * n, undo: true, took: took }]);
+              renderFarm();
+              toast((mill ? "Мельница мелет: " : "В печи: ") + (itemName(v.pid) || r.name).toLowerCase() + " ×" + n);
               farmCall("/api/farm/cook", { recipe: v.k, n: n, sort: v.sort }).catch(function () {});
               F.ovenSel = null; drawTop(); drawCats();
             } }] });
@@ -3955,10 +4033,10 @@
     };
     drawTop(); drawCats();
     sh.appendChild(btn("Закрыть", "ghost", close));
-    var lastLbl = "", tick = setInterval(function () {               // отсчёт в ячейке; когда окно закрыто — таймер гасим
+    var lastLbl = "", tick = setInterval(function () {               // отсчёт в ячейках; когда окно закрыто — таймер гасим
       if (!sh.isConnected) return clearInterval(tick);
-      var job = jobOf(s, "oven"); if (!job) return;
-      var lbl = job.ready <= farmNow() ? "ready" : fmtLeft(job.ready - farmNow()); if (lbl !== lastLbl) { lastLbl = lbl; drawTop(); }
+      var tn = farmNow(), lbl = jobsOf(s, kind).map(function (j) { return j.ready <= tn ? "ready" : fmtLeft(j.ready - tn); }).join("|");
+      if (lbl !== lastLbl) { lastLbl = lbl; drawTop(); }
     }, 1000);
   }
   function kitchenSheet(kind) {
@@ -3981,7 +4059,7 @@
         if (kind !== "barn" && !hasBuild(s, "barn")) sh.appendChild(el("div", "sub", "Работать она будет, только когда появится амбар: блюдам нужно где-то лежать."));
         sh.appendChild(bb); sh.appendChild(btn("Не сейчас", "ghost", close)); return;
       }
-      if (kind === "oven" && hasBuild(s, "barn")) { ovenBody(sh, close, b); return; }
+      if ((kind === "oven" || kind === "mill") && hasBuild(s, "barn")) { kitchenBody(sh, close, b, kind); return; }
       var job = jobOf(s, kind), tn = farmNow();
       if (job) {
         var r = { name: itemName("p:" + job.recipe) || (s.recipes[recKey(job.recipe)] || {}).name, points: (s.recipes[recKey(job.recipe)] || {}).points }, cv = el("canvas", "pix bigseed"); itemIcon(cv, "p:" + job.recipe); sh.appendChild(cv);
@@ -4091,7 +4169,7 @@
   function saleBox(d, o) {
     var stat = el("div", "salecount"); d.appendChild(stat);
     var upd = function () { stat.textContent = "На продаже: " + o.listed() + " из " + o.total(); }; upd();
-    var q = qtyBox(d, { key: o.key, max: function () { return o.total(); },
+    var q = qtyBox(d, { key: o.key, max: function () { return Math.max(o.total() - o.listed(), o.listed()); },   // больше, чем можно выставить или убрать, не набрать
       acts: [{ t: function (n) { return "Выставить " + n; }, max: function () { return o.total() - o.listed(); }, run: function (n) { o.step(n); if (o.after) o.after(); else upd(); } },
              { t: function (n) { return "Убрать " + n; }, cls: "ghost", max: function () { return o.listed(); }, run: function (n) { o.step(-n); if (o.after) o.after(); else upd(); } }] });
     var pr = el("div"); d.appendChild(pr);
@@ -4553,7 +4631,7 @@
       if (v.error) return toast(v.error);
       F.visiting = { pub: pub, seed: parseInt(pub.slice(0, 6), 16), rain_until: v.rain_until, plots: v.plots, now: v.now, fetched: Date.now(),
                      strains: v.strains, dry_limit: v.dry_limit, weather: v.weather, showers: v.showers,
-                     builds: v.builds || [], jobs: v.jobs || [], mono: v.mono, marks: v.marks || [], boost: v.boost || [] };            // постройки соседа — иначе в гостях видны пустые участки
+                     builds: v.builds || [], jobs: v.jobs || [], levels: v.levels || {}, mono: v.mono, marks: v.marks || [], boost: v.boost || [] };            // постройки соседа — иначе в гостях видны пустые участки
       show("farm-visit"); $("vtitle").textContent = v.name;
       drawFarm($("visitcv"), F.visiting.seed, v.plots, v.now, Date.now(), v.rain_until > v.now, v.strains, v.dry_limit, false, v); farmAnim();
       renderPlots($("visitplots"), v.plots, v.now, false, v.strains, v.dry_limit);
@@ -4579,7 +4657,8 @@
     b.onclick = function () { var to = b.dataset.go; if (to === "home") home(); else if (to === "farm") openFarm(); else if (to === "farm-neighbors") openNeighbors(); };
   });
   function back() {
-    var cur = document.body.dataset.screen;
+    var cur = document.body.dataset.screen, ws = document.querySelectorAll(".sheet-wrap");
+    if (ws.length) { ws[ws.length - 1].click(); return; }      // «Назад» Телеграма сначала закрывает открытое окно, а не уходит с экрана
     if (cur === "farm-visit") openNeighbors(); else if (cur === "farm-neighbors" || cur === "farm-shop") openFarm(); else home();
   }
 

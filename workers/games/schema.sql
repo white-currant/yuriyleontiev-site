@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS f_barn (user INTEGER NOT NULL, strain TEXT NOT NULL, 
 CREATE TABLE IF NOT EXISTS f_builds (user INTEGER NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (user, kind));
 CREATE TABLE IF NOT EXISTS f_jobs (user INTEGER NOT NULL, kind TEXT NOT NULL, recipe TEXT NOT NULL, n INTEGER NOT NULL,
   started INTEGER NOT NULL, ready INTEGER NOT NULL, PRIMARY KEY (user, kind));
+-- прокачка мельницы и печи (2026-11-16): уровень = число ячеек (нет строки — одна); что списано в ячейку — для отмены
+CREATE TABLE IF NOT EXISTS f_levels (user INTEGER NOT NULL, kind TEXT NOT NULL, level INTEGER NOT NULL, PRIMARY KEY (user, kind));
+CREATE TABLE IF NOT EXISTS f_jobtake (user INTEGER NOT NULL, slot TEXT NOT NULL, strain TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (user, slot, strain));
 -- амбар стал покупным (2026-11-14): у кого в амбаре уже был урожай — амбар даётся бесплатно (повтор безвреден)
 INSERT OR IGNORE INTO f_builds (user, kind, at) SELECT DISTINCT user, 'barn', 0 FROM f_barn;
 CREATE INDEX IF NOT EXISTS f_inv_listed ON f_inv (user, listed);

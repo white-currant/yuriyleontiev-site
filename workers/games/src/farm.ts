@@ -178,6 +178,9 @@ export async function mergeSortsOnce() {
                      DB.prepare("DELETE FROM f_prices WHERE item = ?").bind(pid));
         }
       }
+      stmts.push(DB.prepare(`INSERT INTO f_jobtake (user, slot, strain, n) SELECT user, slot, ?, n FROM f_jobtake WHERE strain = ? AND true
+                             ON CONFLICT(user, slot, strain) DO UPDATE SET n = n + excluded.n`).bind(keep, old),
+                 DB.prepare("DELETE FROM f_jobtake WHERE strain = ?").bind(old));
       const js = await q("SELECT user, kind, recipe FROM f_jobs WHERE recipe LIKE ?", ["%@" + old]);
       for (const [user, kind, recipe] of js)
         stmts.push(DB.prepare("UPDATE f_jobs SET recipe = ? WHERE user = ? AND kind = ?").bind(String(recipe).slice(0, String(recipe).length - old.length) + keep, user, kind));
@@ -330,9 +333,15 @@ const near4 = (i: number) => [i - 3, i + 3, i % 3 ? i - 1 : -1, i % 3 < 2 ? i + 
 // наступившие события: уголь и комета появляются к своему времени; просроченный иней тает. Возвращает события по грядкам.
 async function plotEvents(uid: number) {
   const t = now(), rows = await q("SELECT idx, kind, at, until FROM f_plotev WHERE user = ?", [uid]), out: Record<number, any> = {};
+  // огненное растение на соседней грядке растапливает иней, даже если его посадили раньше, чем грядка замёрзла (Yehor, 2026-11-16)
+  let fireAt: number[] = [];
+  if (rows.some((r) => String(r[1]) === "frost")) {
+    const pl = await q("SELECT idx, crop FROM f_plots WHERE user = ?", [uid]), ps = await strains(pl.map((p) => String(p[1])));
+    fireAt = pl.filter((p) => ps[String(p[1])]?.color === "ember").map((p) => Number(p[0]));
+  }
   for (const [idx, kind, at, until] of rows) {
     const i = Number(idx), k = String(kind);
-    if (k === "frost") { if (Number(until) <= t) { await q("DELETE FROM f_plotev WHERE user = ? AND idx = ? AND kind = 'frost'", [uid, i]); continue; } out[i] = { kind: k, until: Number(until) }; continue; }
+    if (k === "frost") { if (Number(until) <= t || fireAt.some((f) => near4(f).includes(i))) { await q("DELETE FROM f_plotev WHERE user = ? AND idx = ? AND kind = 'frost'", [uid, i]); continue; } out[i] = { kind: k, until: Number(until) }; continue; }
     if (k === "burning") {                                            // Огненная ночь: догорела — на грядке уголь
       if (Number(until) <= t) { await q("UPDATE f_plotev SET kind = 'coal', until = 0 WHERE user = ? AND idx = ? AND kind = 'burning'", [uid, i]); out[i] = { kind: "coal", until: 0 }; }
       else out[i] = { kind: k, until: Number(until) };
@@ -753,7 +762,11 @@ export async function harvest(u: any, idx: number) {
   }
   const vinyl = await dropVinyl(u.id, s.vinyl * (s.bonus === "lucky" ? 2 : 1) * (weatherOn(t) === "fullmoon" ? 2 : 1));
   // ледяной: может заморозить свою грядку; солнечный: луч с неба — другая растущая грядка сразу созревает
-  let frost = 0, sunbeam = -1;
+  let frost = 0, sunbeam = -1, thawed: number[] = [];
+  if (s.color === "ember") {                                          // собрал огненное — лёд рядом тоже тает
+    const ice = near4(idx);
+    thawed = (await q(`DELETE FROM f_plotev WHERE user = ? AND kind = 'frost' AND idx IN (${ice.map(() => "?").join(",")}) RETURNING idx`, [u.id, ...ice])).map((r) => Number(r[0]));
+  }
   if (s.color === "frost" && Math.random() < EV_FROST) {
     frost = t + FROST_FOR;
     await DB.batch([DB.prepare("INSERT OR REPLACE INTO f_plotev (user, idx, kind, at, until) VALUES (?, ?, 'frost', ?, ?)").bind(u.id, idx, t, frost),
@@ -767,7 +780,7 @@ export async function harvest(u: any, idx: number) {
                       DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'sun', ?)").bind(u.id, t)]);
     }
   }
-  return { crop, dust, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, frost, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
+  return { crop, dust, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
 }
 
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
@@ -794,10 +807,11 @@ export async function sellCrop(u: any, strain: string, n: number) {
 // Строения покупаются за пыль. В каждом одно задание: загрузил — ждёшь (как рост, без полива) — забрал в амбар.
 // Ингредиенты — из амбара: по форме растения (любой сорт и цвет; берутся самые дешёвые) или готовые продукты («p:flour»).
 // Готовое лежит в амбаре как «p:<рецепт>»: превращается в пыль по цене рецепта; дальше — заказы ресторанов.
-export const BUILDS: Record<string, { name: string; price: number; max: number }> = {
+// up — цены прокачки (его решение 2026-11-16): каждая даёт ещё одну ячейку, всего ячеек до трёх
+export const BUILDS: Record<string, { name: string; price: number; max: number; up?: number[] }> = {
   barn: { name: "Амбар",    price: 50,  max: 0 },     // без амбара урожай сразу идёт в пыль; кухня без амбара не работает
-  mill: { name: "Мельница", price: 200, max: 10 },
-  oven: { name: "Печь",     price: 300, max: 5 },
+  mill: { name: "Мельница", price: 200, max: 10, up: [400, 1000] },
+  oven: { name: "Печь",     price: 300, max: 5,  up: [600, 1500] },
   shop: { name: "Магазин",  price: 500, max: 0 },     // заказы жителей станции на блюда (2026-11-15)
 };
 export const RECIPES: Record<string, { kind: string; name: string; needs: Record<string, number>; min: number; dust: number; points: number }> = {
@@ -867,11 +881,46 @@ async function productsFor(ids: string[]) {
   for (const id of productIds(ids)) { const p = productInfo(id, ss); if (p) out[id] = p; }
   return { products: out, sorts: ss };
 }
+// ячейки (2026-11-16): задание первой ячейки — kind «mill»/«oven» (как раньше), второй и третьей — «mill:1», «mill:2».
+// Уровень строения — f_levels (нет строки — одна ячейка). Что списано из амбара — f_jobtake: по нему отмена возвращает сырьё.
+const SLOTS_MAX = 3;
+function slotKinds(kind: string, lvl: number) { return [kind, kind + ":1", kind + ":2"].slice(0, Math.max(1, Math.min(SLOTS_MAX, lvl))); }
+async function levelOf(uid: number, kind: string) { const [r] = await q("SELECT level FROM f_levels WHERE user = ? AND kind = ?", [uid, kind]); return r ? Number(r[0]) : 1; }
 async function kitchenOf(uid: number) {
   const builds = (await q("SELECT kind FROM f_builds WHERE user = ?", [uid])).map((r) => String(r[0]));
-  const jobs = (await q("SELECT kind, recipe, n, started, ready FROM f_jobs WHERE user = ?", [uid]))
-    .map(([kind, recipe, n, started, ready]) => ({ kind, recipe, n: Number(n), started: Number(started), ready: Number(ready) }));
-  return { builds, jobs };
+  const jobs = (await q("SELECT j.kind, j.recipe, j.n, j.started, j.ready, EXISTS(SELECT 1 FROM f_jobtake t WHERE t.user = j.user AND t.slot = j.kind) FROM f_jobs j WHERE j.user = ?", [uid]))
+    .map(([kind, recipe, n, started, ready, took]) => ({ kind, recipe, n: Number(n), started: Number(started), ready: Number(ready), ...(Number(took) ? { undo: true } : {}) }));
+  const levels: Record<string, number> = {};
+  for (const [kind, level] of await q("SELECT kind, level FROM f_levels WHERE user = ?", [uid])) levels[String(kind)] = Number(level);
+  return { builds, jobs, levels };
+}
+// прокачка мельницы или печи: ещё одна ячейка, всего до трёх
+const UPGRADES_ON = false;                 // прокачка готова, но пока выключена (его решение 2026-11-16: сначала только отмена)
+export async function upgrade(u: any, kind: string) {
+  if (!UPGRADES_ON) return { error: "Прокачка пока закрыта" };
+  const b = BUILDS[kind]; if (!b?.up) return { error: "Это строение не прокачивается" };
+  if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, kind])).length) return { error: b.name + " ещё не построена" };
+  const lvl = await levelOf(u.id, kind);
+  if (lvl >= SLOTS_MAX) return { error: "Больше ячеек не бывает" };
+  const price = b.up[lvl - 1];
+  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [price, u.id, price])).length) return { error: "Не хватает звёздной пыли" };
+  await q("INSERT INTO f_levels (user, kind, level) VALUES (?, ?, ?) ON CONFLICT(user, kind) DO UPDATE SET level = excluded.level", [u.id, kind, lvl + 1]);
+  return { farm: await farmState(u) };
+}
+// отменить готовку или помол (его просьба 2026-11-16): сырьё — ровно то, что списали, — возвращается в амбар
+export async function uncook(u: any, slot: string) {
+  const kind = slot.split(":")[0];
+  if (!BUILDS[kind]?.up) return { error: "Нечего отменять" };
+  const [j] = await q("SELECT ready FROM f_jobs WHERE user = ? AND kind = ?", [u.id, slot]);
+  if (!j) return { error: "Нечего отменять" };
+  if (Number(j[0]) <= now()) return { error: "Уже готово — забери в амбар" };
+  const took = await q("SELECT strain, n FROM f_jobtake WHERE user = ? AND slot = ?", [u.id, slot]);
+  if (!took.length) return { error: "Это загружено до обновления — отменить нельзя, дождись" };
+  if (!(await q("DELETE FROM f_jobs WHERE user = ? AND kind = ? AND ready > ? RETURNING 1", [u.id, slot, now()])).length) return { error: "Уже готово — забери в амбар" };
+  await DB.batch([
+    ...took.map(([id, n]) => DB.prepare("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count").bind(u.id, id, Number(n))),
+    DB.prepare("DELETE FROM f_jobtake WHERE user = ? AND slot = ?").bind(u.id, slot)]);
+  return { farm: await farmState(u) };
 }
 export async function build(u: any, kind: string) {
   const b = BUILDS[kind]; if (!b) return { error: "Такого строения нет" };
@@ -890,7 +939,9 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
   const b = BUILDS[r.kind], k = Math.max(1, Math.min(b.max, Math.round(n) || 1));
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, r.kind])).length) return { error: b.name + " ещё не построена" };
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Сначала нужен амбар: блюдам негде лежать" };
-  if ((await q("SELECT 1 FROM f_jobs WHERE user = ? AND kind = ?", [u.id, r.kind])).length) return { error: b.name + " занята" };
+  const busy = new Set((await q("SELECT kind FROM f_jobs WHERE user = ? AND (kind = ? OR kind LIKE ?)", [u.id, r.kind, r.kind + ":%"])).map((x) => String(x[0])));
+  const slot = slotKinds(r.kind, await levelOf(u.id, r.kind)).find((x) => !busy.has(x));
+  if (!slot) return { error: b.name + " занята" };
   const barn = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
   const ss = await strains(barn.map((x) => x[0]).filter((x) => !String(x).startsWith("p:")));
   const plan: [string, number][] = [];
@@ -923,10 +974,12 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
     else { for (const [id2, t2] of done) await q("UPDATE f_barn SET count = count + ? WHERE user = ? AND strain = ?", [t2, u.id, id2]); return { error: "Не хватает продуктов в амбаре" }; }
   }
   const t = now();
-  if (!(await q("INSERT OR IGNORE INTO f_jobs (user, kind, recipe, n, started, ready) VALUES (?, ?, ?, ?, ?, ?) RETURNING 1", [u.id, r.kind, sorted && sort ? recipe + "@" + (recipe === "flour" && ss[sort] ? flourKey(ss[sort]) : sort) : !sorted && plan.some(([id]) => ss[id]?.myth) ? recipe + "@" + plan.find(([id]) => ss[id]?.myth)![0] : recipe, k, t, t + r.min * 60 * k])).length) {
+  if (!(await q("INSERT OR IGNORE INTO f_jobs (user, kind, recipe, n, started, ready) VALUES (?, ?, ?, ?, ?, ?) RETURNING 1", [u.id, slot, sorted && sort ? recipe + "@" + (recipe === "flour" && ss[sort] ? flourKey(ss[sort]) : sort) : !sorted && plan.some(([id]) => ss[id]?.myth) ? recipe + "@" + plan.find(([id]) => ss[id]?.myth)![0] : recipe, k, t, t + r.min * 60 * k])).length) {
     for (const [id2, t2] of done) await q("UPDATE f_barn SET count = count + ? WHERE user = ? AND strain = ?", [t2, u.id, id2]);
     return { error: b.name + " занята" };
   }
+  await DB.batch([DB.prepare("DELETE FROM f_jobtake WHERE user = ? AND slot = ?").bind(u.id, slot),
+                  ...done.map(([id, n]) => DB.prepare("INSERT INTO f_jobtake (user, slot, strain, n) VALUES (?, ?, ?, ?) ON CONFLICT(user, slot, strain) DO UPDATE SET n = n + excluded.n").bind(u.id, slot, id, n))]);
   return { farm: await farmState(u) };
 }
 // ---------- магазин: заказы на блюда (его решения 2026-11-15) ----------
@@ -1084,12 +1137,13 @@ export async function skipOrder(u: any, slot: number) {
   return { farm: await farmState(u) };
 }
 // звёздный уголь в печь (его идея 2026-11-15): один уголь из амбара — всё, что сейчас печётся, готово сразу
-export async function stoke(u: any) {
-  const [j] = await q("SELECT ready FROM f_jobs WHERE user = ? AND kind = 'oven'", [u.id]);
+export async function stoke(u: any, slot = "oven") {
+  if (slot.split(":")[0] !== "oven") return { error: "Уголь — только в печь" };
+  const [j] = await q("SELECT ready FROM f_jobs WHERE user = ? AND kind = ?", [u.id, slot]);
   if (!j) return { error: "В печи ничего не печётся" };
   if (Number(j[0]) <= now()) return { error: "Уже готово — забери в амбар" };
   if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = 'p:coal' AND count >= 1 RETURNING 1", [u.id])).length) return { error: "В амбаре нет звёздного угля" };
-  await q("UPDATE f_jobs SET ready = ? WHERE user = ? AND kind = 'oven'", [now(), u.id]);
+  await q("UPDATE f_jobs SET ready = ? WHERE user = ? AND kind = ?", [now(), u.id, slot]);
   return { farm: await farmState(u) };
 }
 export async function collect(u: any, kind: string) {
@@ -1097,6 +1151,7 @@ export async function collect(u: any, kind: string) {
   if (!j) return { error: "Нечего забирать" };
   if (Number(j[2]) > now()) return { error: "Ещё не готово" };
   if (!(await q("DELETE FROM f_jobs WHERE user = ? AND kind = ? RETURNING 1", [u.id, kind])).length) return { error: "Уже забрано" };
+  await q("DELETE FROM f_jobtake WHERE user = ? AND slot = ?", [u.id, kind]);
   const r = RECIPES[recipeOf(String(j[0]))], n = Number(j[1]), pts = (r?.points || 0) * n;
   const writes = [DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, "p:" + j[0], n)];
   if (pts) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)").bind(u.id, nameOf(u), pts, "Лунная ферма", now()));
@@ -1423,7 +1478,8 @@ export async function monoFeed(after: number) {                 // для бот
 export async function forgetFarm(uid: number) {
   for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM g_items WHERE user = ? AND game = 'farm'",
                      "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?", "DELETE FROM f_stall WHERE user = ?", "DELETE FROM f_plotev WHERE user = ?", "DELETE FROM f_evlog WHERE user = ?", "DELETE FROM f_stars WHERE user = ?", "DELETE FROM f_cratercrop WHERE user = ?", "DELETE FROM f_mono WHERE user = ?", "DELETE FROM f_monomark WHERE user = ?", "DELETE FROM f_clumps WHERE user = ?", "DELETE FROM f_notify WHERE user = ?", "DELETE FROM f_orders WHERE user = ?", "DELETE FROM f_chest WHERE user = ?", "DELETE FROM f_prices WHERE user = ?",
-                     "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?", "DELETE FROM f_builds WHERE user = ?", "DELETE FROM f_jobs WHERE user = ?"]) await q(sql, [uid]);
+                     "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?", "DELETE FROM f_builds WHERE user = ?", "DELETE FROM f_jobs WHERE user = ?",
+                     "DELETE FROM f_levels WHERE user = ?", "DELETE FROM f_jobtake WHERE user = ?"]) await q(sql, [uid]);
   await q("DELETE FROM f_given WHERE from_user = ? OR to_user = ?", [uid, uid]);
   await q("DELETE FROM f_feed WHERE actor = ? OR target = ?", [uid, uid]);              // из ленты новостей — тоже
 }
