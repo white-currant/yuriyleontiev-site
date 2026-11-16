@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611170158";
+    var BUILD = "202611170209";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3697,21 +3697,20 @@
       var mine = s && !opt.foreign ? bagOf(st.id) : null;
       var hv = null, lavDraw = null, dq = null;
       if (mine) { hv = el("div", "sub", "У тебя: " + mine.count); sh.appendChild(hv); }
+      if (mine && !st.base) {                                    // «В лавку» — над пылью, как в окне сортов
+        var sa0 = el("div", "invacts");
+        sa0.appendChild(btn(mine.listed ? "В лавку · на продаже " + mine.listed : "В лавку", "sell", function () {
+          haptic("light"); close(); F.shopCat = "seed"; F.shopSel = "inv:" + st.id; F.shopScroll = true; openShop("sell"); }));
+        sh.appendChild(sa0);
+      }
       if (mine) {                                                // лишние семена — в пыль, сколько выберешь; окно остаётся открытым
+        var dcap0 = el("div", "sub", "Лишние семена — в звёздную пыль:"); dcap0.style.marginTop = "14px"; sh.appendChild(dcap0);
         var sd = seedDustOf(st);
         dq = qtyBox(sh, { key: "dust:" + st.id, max: function () { return freeOf(bagOf(st.id)); }, empty: "Свободных семян больше нет.",
           acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + sd * n; }, cls: "ghost",
                    run: function (n) { seedsDust(st.id, n, "inv"); if (hv) hv.textContent = "У тебя: " + bagOf(st.id).count; if (lavDraw) lavDraw(); } }] });
       }
-      if (mine && !st.base) {                                                       // продажа: сколько семян лежит в твоей лавке
-        var h = el("div", "mono", "Твоя лавка"); h.style.marginTop = "18px"; sh.appendChild(h);
-        sh.appendChild(el("div", "sub", "Соседи, которые зайдут к тебе в гости, смогут купить выставленные семена. Пыль придёт тебе сразу. Выставленные семена не посадить, пока не уберёшь их с продажи."));
-        var lq = saleBox(sh, { key: "sale:s:" + st.id, listed: function () { return mine.listed; }, total: function () { return mine.count; },
-          step: function (d) { haptic("light"); mine.listed += d; renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: d }).catch(function () {}); },
-          priceKey: "s:" + st.id, base: st.price, item: st.id, kind: "seed",
-          after: function () { lq.draw(); if (dq) dq.draw(); } });                  // выставил или убрал — «в пыль» тоже пересчитать (баг 2026-11-16: «все 32» при 3 на прилавке)
-        lavDraw = function () { lq.draw(); };
-      } else if (mine && st.base) sh.appendChild(el("div", "sub", "Семена станции в своей лавке не продаются — только выведенные тобой сорта."));
+      if (mine && st.base) sh.appendChild(el("div", "sub", "Семена станции в своей лавке не продаются — только выведенные тобой сорта."));
       if (opt.buy) sh.appendChild(btn("Купить за ✦ " + st.price, "", function () { close(); opt.buy(); }));
       if (opt.back) sh.appendChild(btn("Назад", "ghost", function () { close(); opt.back(); }));
     });
