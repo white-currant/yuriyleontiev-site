@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611170019";
+    var BUILD = "202611170024";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3741,7 +3741,7 @@
   function gemSheet(onPick) {                                    // какая пыль есть и что каждая делает
     sheet(function (sh, close) {
       sh.appendChild(el("h3", "", "Самоцветная пыль"));
-      sh.appendChild(el("div", "sub", "Выбери пыль, потом нажми на растущую грядку. Передумал — нажми на любую другую ячейку, и выбор снимется."));
+      sh.appendChild(el("div", "sub", "Выбери пыль, потом нажми на растущую грядку."));
       gemDusts().forEach(function (k) {
         var gk = GEMK[k], b = el("button", "gempick" + (F.gemKind === k ? " on" : "")); b.type = "button";
         var cv = el("canvas", "pix"); itemIcon(cv, gk.dust); b.appendChild(cv);
