@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611161048";
+    var BUILD = "202611161121";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -681,6 +681,19 @@
   body[data-screen^="farm"] .nlist li { font-family: var(--pix); background: var(--wood); box-shadow: var(--frame), inset 0 3px 0 var(--wood3); margin: 14px 3px 0; padding: 10px 12px; }
   body[data-screen^="farm"] .nlist .t { color: var(--cream2); }
   body[data-screen^="farm"] .nlist li.me { background: var(--wood3); }
+  /* амбар «не открывай»: меню в плесени, урожай сгнил (только с виду) */
+  body[data-screen^="farm"] .sheet.moldy { position: relative; background-color: #3e3a22; color: #c9c8a0; }
+  .sheet.moldy > * { position: relative; z-index: 1; }
+  .sheet.moldy::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background:
+      radial-gradient(ellipse 60px 44px at 8% 10%, rgba(120,150,70,.55), transparent 70%), radial-gradient(ellipse 40px 30px at 93% 6%, rgba(150,170,90,.45), transparent 70%),
+      radial-gradient(ellipse 90px 60px at 85% 55%, rgba(95,125,55,.45), transparent 70%), radial-gradient(ellipse 110px 70px at 12% 88%, rgba(110,140,60,.55), transparent 70%),
+      radial-gradient(circle 10px at 45% 30%, rgba(190,200,140,.35), transparent 80%), radial-gradient(circle 7px at 62% 78%, rgba(190,200,140,.35), transparent 80%),
+      radial-gradient(circle 5px at 28% 52%, rgba(200,210,150,.4), transparent 80%), radial-gradient(circle 6px at 72% 22%, rgba(200,210,150,.35), transparent 80%); }
+  .sheet.moldy h3 { color: #a3ad6a; }
+  .sheet.moldy .sub { color: #a8a77e; }
+  .invgrid.rot .slot canvas { filter: contrast(1.1); }   /* цвет и порча — в самих точках значка (rotIcon) */
+  .invgrid.rot .slot { background: radial-gradient(circle 9px at 70% 30%, rgba(170,190,110,.45), transparent 80%), radial-gradient(circle 6px at 25% 75%, rgba(150,175,95,.4), transparent 80%), #34331c !important; }
+  .invgrid.rot .slot .n { color: #9aa067; }
   .nlist .place { font-size: 15px; font-weight: 700; color: var(--gold); padding: 0 10px; white-space: nowrap; }
   body[data-screen^="farm"] .nlist button { border-radius: 0; font-family: var(--pix); font-weight: 700; background: var(--pgold); color: var(--ink); padding: 8px 12px;
     box-shadow: 0 -2px 0 var(--ink), 0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink), inset 0 -3px 0 var(--pgold2); }
@@ -2196,12 +2209,70 @@
     }
     if (ready && own && (t / 400 | 0) % 2) { px(c, cx - 1, cy - 26, 3, 1, "#ffffff"); px(c, cx, cy - 27, 1, 3, "#ffffff"); }
   }
+  // ---------- ночные странности (его идея 2026-11-16) ----------
+  // Только в настоящую ночь у игрока — с 00:00 до 04:00 по часам его телефона. Не каждую ночь (примерно через одну) и ненадолго:
+  // из-за дома выглядывает тёмный силуэт; у амбара на миг меняется подпись. Ничего не дают, ничего не объясняют.
+  // Для проверки у себя: ?night=1 в адресе — «ночь» всегда и каждую ночь.
+  var NIGHT_TEST = /[?&]night=[12]/.test(location.search), NIGHT_HOLD = /[?&]night=2/.test(location.search);   // night=2 — странности видны всё время
+  // Каждое событие — у каждого игрока своё: примерно одна ночь из восьми (его правка 2026-11-16: «у каждого само себе и гораздо реже 50%»;
+  // ночью, 00–04 по Минску, играют 5–8 человек — значит, в среднем кто-то один за ночь что-то увидит). Силуэт в такую ночь — раз в ~40 минут.
+  var NIGHT_CHANCE = 12;
+  function nightKey() { return new Date(Date.now() - 4 * 3600e3).toDateString(); }   // одна «ночь» — с вечера до 4 утра
+  function nightWho() { return (F.state && F.state.pub) || ""; }
+  function hstr(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+  // Силуэт — не по часам, а пока человек смотрит на свою ферму (его правка 2026-11-16): в «его» ночь — через 20–60 с после того,
+  // как открыл ферму; если остался, ещё раз через 25–40 минут. Не больше двух раз за ночь (помнит телефон). Ушёл с фермы до
+  // появления — показ не сгорает, при возвращении снова через 20–60 с.
+  var PEEK = { at: 0, drawn: false };
+  function peekSeen(add) { var k = "peeknight:" + nightKey() + nightWho(), n = 0; try { n = +localStorage.getItem(k) || 0; if (add) localStorage.setItem(k, String(n + 1)); } catch (e) { n = PEEK.mem || 0; if (add) PEEK.mem = n + 1; } return n; }
+  function peekPhase() {                                         // вызывается, только пока на экране своя ферма
+    if (NIGHT_TEST && window.__peekP != null) return window.__peekP;            // проверка: кадр с заданной фазой
+    if (NIGHT_HOLD) return .5;
+    if (!nightOn("peek") || peekSeen() >= 2) return -1;
+    var t = Date.now(), away = PEEK.last && t - PEEK.last > 3000; PEEK.last = t;
+    var soon = function () { PEEK.at = t + 20000 + Math.random() * 40000; PEEK.later = false; };
+    if (!PEEK.at) soon();
+    else if (away && (!PEEK.later || t > PEEK.at)) soon();                       // ушёл с фермы — показ не сгорает: снова вскоре после возвращения
+    var p = (t - PEEK.at) / 7000;
+    if (p < 0) return -1;
+    if (p < 1) return p;
+    peekSeen(true); PEEK.at = t + 1500000 + Math.random() * 900000; PEEK.later = true;   // показан; следующий — через 25–40 минут, если остался
+    return -1;
+  }
+  function drawPeek(c) {                                         // чёрный силуэт человека выходит из-за правого угла дома (стена кончается на x = 60)
+    var p = peekPhase(); if (p < 0) return;  // и уходит обратно. Его правки: «столб» и одна голова не читались — нужна фигура целиком
+    var k = p < .3 ? p / .3 : p > .8 ? (1 - p) / .2 : 1, v = Math.round(k * k * (3 - 2 * k) * 5);   // плавно: 0…5 точек из-за угла (фигура шириной 7)
+    if (!v) return;
+    var ink = "#05040a", x0 = 60, hx = x0 + v - 7, y0 = 61;   // x0 = 60: стена (её тёмный край) — до 59, без зазора травы (его правка)
+    // строки сверху вниз: [отступ, ширина]
+    var rows = [[2, 3], [1, 5], [1, 5], [1, 5], [2, 3], [2, 3], [0, 7], [0, 7], [0, 7], [0, 7], [1, 5], [1, 5], [1, 2, 4, 2], [1, 2, 4, 2], [1, 2, 4, 2], [1, 2, 4, 2]];   // стоит прямо, без наклона («кривой» — его правка)
+    rows.forEach(function (r, i) { for (var j = 0; j < r.length; j += 2) { var l = Math.max(x0, hx + r[j]), e = hx + r[j] + r[j + 1]; if (e > l) px(c, l, y0 + i, e - l, 1, ink); } });
+    if (p > .4 && p < .75) { [2, 4].forEach(function (ex) { if (hx + ex >= x0) px(c, hx + ex, y0 + 2, 1, 1, "rgba(214,220,255,.85)"); }); }   // два бледных глаза
+  }
+  // амбар «не открывай» (его сценарий 2026-11-16): в такую ночь надпись висит над амбаром. Открыл — внутри всё сгнило и меню в плесени
+  // (только с виду, урожай цел). Закрыл и открыл снова — всё как обычно, и надписи до конца ночи больше нет.
+  var BARN_DONE = {};
+  function nightOn(kind) { var d = new Date(); if (!NIGHT_TEST && d.getHours() >= 4) return false; return NIGHT_TEST || hstr(nightKey() + kind + nightWho()) % 100 < NIGHT_CHANCE; }
+  function barnDone() { var k = "barnnight:" + nightKey(); if (BARN_DONE[k]) return true; try { return localStorage.getItem(k) === "1"; } catch (e) { return false; } }
+  function barnCursed() { return nightOn("barn") && !barnDone(); }
+  function setBarnDone() { var k = "barnnight:" + nightKey(); BARN_DONE[k] = 1; try { localStorage.setItem(k, "1"); } catch (e) {} }
+  function barnWhisper() {
+    var l = $("barnlbl"); if (!l || !l.dataset.built) return;
+    var txt = barnCursed() ? "не открывай" : l.dataset.text;
+    if (l.textContent !== txt) l.textContent = txt;
+  }
+  if (NIGHT_TEST) window.__peekFrame = function (p, t) {         // проверка: нарисовать свою ферму с силуэтом в фазе p (для рендера анимации)
+    window.__peekP = p; var st = F.state, cv = $("scenecv");
+    drawFarm(cv, 47, st.plots, farmNow(), t, false, st.strains, st.dry_limit, true, st); return cv;
+  };
   function drawFarm(cv, seed, plots, now, t, rain, ss, dryLim, own, kit) {
     if (cv.width !== FW) { cv.width = FW; cv.height = FH; }
     var c = cv.getContext("2d"), i, L = staticLayer(seed, roofKey(kit));
     c.drawImage(L.back, 0, 0); drawStars(c, t);
     if (hasBuild(kit, "barn")) c.drawImage(L.shed, 0, 0); else drawLot(c, LOTS.barn, own, lotPrice(kit, "barn"));
     c.drawImage(L.back2, 0, 0);
+    if (own) drawPeek(c);                                                          // ночью из-за правого угла дома иногда выглядывает силуэт
     drawMill(c, t, kit, own, now);
     var nextLock = -1; (plots || []).forEach(function (pl, k) { if (pl.locked && nextLock < 0) nextLock = k; });
     BORDER.forEach(function (k) { if (plots && plots[k] && BC[k]) drawBed(c, plots[k], k, now, t, ss, dryLim, own, k === nextLock); });   // дальние грядки — раньше
@@ -2601,7 +2672,8 @@
       if (ts - lastFx >= 33) { lastFx = ts; var tf = Date.now();                    // слой эффектов — плавнее, ~30 кадров
         if (scr === "farm" && F.state) drawFxLayer($("scenecv"), F.state, farmNow(), tf);
         if (scr === "farm-visit" && F.visiting) drawFxLayer($("visitcv"), F.visiting, F.visiting.now + (Date.now() - F.visiting.fetched) / 1000, tf); }
-      if (ts - last < 120) return; last = ts; F.frame = (F.frame || 0) + 1;      // счётчик перерисовок — ровный шаг для покадровых анимаций
+      if (ts - last < 120) return; last = ts; F.frame = (F.frame || 0) + 1;
+      if (scr === "farm") barnWhisper();      // счётчик перерисовок — ровный шаг для покадровых анимаций
       var t = Date.now();
       if (scr === "farm" && F.state) drawFarm($("scenecv"), 47, F.state.plots, farmNow(), t, F.state.rain_until > farmNow(), F.state.strains, F.state.dry_limit, true, F.state);
       if (scr === "farm-visit" && F.visiting) { var v = F.visiting, vn = v.now + (Date.now() - v.fetched) / 1000;
@@ -2701,7 +2773,8 @@
       var bn = document.createElement("button"); bn.type = "button"; bn.className = "plot well barn";            // амбар: собранный урожай
       bn.style.left = 76 / FW * 100 + "%"; bn.style.top = 26 / FH * 100 + "%"; bn.style.width = 44 / FW * 100 + "%"; bn.style.height = 36 / FH * 100 + "%";
       var nb = barnItems().reduce(function (a, it) { return a + it.count; }, 0), hb = hasBuild(F.state, "barn");
-      bn.appendChild(el("span", "lbl water", !hb ? "амбар" : nb ? "амбар · " + nb : "амбар"));
+      var blbl = el("span", "lbl water", !hb ? "амбар" : nb ? "амбар · " + nb : "амбар"); blbl.id = "barnlbl"; blbl.dataset.text = blbl.textContent; blbl.dataset.built = hb ? "1" : ""; if (hb && barnCursed()) blbl.textContent = "не открывай";
+      bn.appendChild(blbl);
       bn.onclick = function () { haptic("light"); if (hb) barnSheet(); else kitchenSheet("barn"); }; box.appendChild(bn);
       if (CHEST_ON) { var ch = document.createElement("button"); ch.type = "button"; ch.className = "plot well chest";        // сундук: лишние семена
       ch.style.left = (CHEST[0] - 3) / FW * 100 + "%"; ch.style.top = (CHEST[1] - 14) / FH * 100 + "%"; ch.style.width = 16 / FW * 100 + "%"; ch.style.height = 16 / FH * 100 + "%";
@@ -3565,8 +3638,51 @@
     if (cv.width >= cv.height) { cv.style.width = pct + "%"; cv.style.height = "auto"; }
     else { cv.style.height = pct + "%"; cv.style.width = "auto"; }
   }
+  // гниль: значок оплывает (столбцы сползают вниз и текут каплями), в нём проедены дыры, сверху пятна плесени и пушок;
+  // цвет — бурый и болотный. У каждого предмета своя порча, но всегда одна и та же (зерно — его имя).
+  function rotIcon(cv, key) {
+    var w = cv.width, h = cv.height, c = cv.getContext("2d"), src, out, rnd = rng(hstr("rot" + key)), x, y, i;
+    try { src = c.getImageData(0, 0, w, h); } catch (e) { return; }
+    out = c.createImageData(w, h);
+    var S = src.data, O = out.data, put = function (x2, y2, r, g2, b2, a) { if (x2 < 0 || y2 < 0 || x2 >= w || y2 >= h) return; var k = (y2 * w + x2) * 4; O[k] = r; O[k + 1] = g2; O[k + 2] = b2; O[k + 3] = a; };
+    var sag = 0;
+    for (x = 0; x < w; x++) {
+      sag = Math.max(0, Math.min(3, sag + Math.floor(rnd() * 3) - 1));          // соседние столбцы оплывают похоже — «потёк»
+      var lowest = -1;
+      for (y = 0; y < h; y++) {
+        i = (y * w + x) * 4; if (S[i + 3] < 40) continue;
+        if (rnd() < .10) continue;                                             // проедено
+        var l = (S[i] * .3 + S[i + 1] * .5 + S[i + 2] * .2) / 255, r, g2, b2;
+        if (rnd() < .10) { r = 150 + rnd() * 60; g2 = 170 + rnd() * 50; b2 = 120 + rnd() * 40; }   // плесень: бледно-зелёный пушок
+        else if (rnd() < .12) { r = 20; g2 = 24; b2 = 12; }                                       // чёрная гниль
+        else { r = 38 + l * 70; g2 = 44 + l * 62; b2 = 16 + l * 26; }                             // бурый и болотный
+        var yy = Math.min(h - 1, y + sag); put(x, yy, r, g2, b2, 255); if (yy > lowest) lowest = yy;
+      }
+      if (lowest >= 0 && rnd() < .28) { var n = 1 + Math.floor(rnd() * 3); for (i = 1; i <= n; i++) put(x, lowest + i, 46, 58, 20, i === n ? 150 : 230); }   // капля
+    }
+    for (i = 0; i < 3; i++) { x = Math.floor(rnd() * w); y = Math.floor(rnd() * h); if (S[(y * w + x) * 4 + 3] > 40) { put(x, y, 196, 208, 160, 255); put(x + 1, y, 170, 186, 130, 255); put(x, y - 1, 170, 186, 130, 200); } }   // пятна плесени
+    c.clearRect(0, 0, w, h); c.putImageData(out, 0, 0);
+  }
+  function rotBarnSheet() {                                      // открыл, хотя просили не открывать
+    setBarnDone(); barnWhisper();
+    sheet(function (sh, close) {
+      sh.classList.add("moldy");
+      sh.appendChild(el("h3", "", "Амбар"));
+      sh.appendChild(el("div", "sub", "Пахнет сыростью. Всё, что здесь лежало, сгнило."));
+      var g = el("div", "invgrid rot"), barn = barnItems();
+      barn.forEach(function (it) {
+        var b = el("button", "slot"); b.type = "button"; b.setAttribute("aria-label", "гниль");
+        var cv = el("canvas", "pix"); itemIcon(cv, it.strain); rotIcon(cv, it.strain); fitIcon(cv, it.strain.indexOf("p:") === 0 ? 84 : 70); b.appendChild(cv); b.appendChild(el("span", "n", it.count));
+        b.onclick = function () { haptic("error"); toast("Рассыпается в руках"); }; g.appendChild(b);
+      });
+      for (var k = barn.length; k < 5; k++) g.appendChild(el("div", "slot empty"));
+      sh.appendChild(g);
+      var acts = el("div", "salebtns"); acts.appendChild(btn("Закрыть", "", close)); sh.appendChild(acts);
+    });
+  }
   function barnSheet() {
     var s = F.state; if (!s) return;
+    if (barnCursed()) return rotBarnSheet();
     sheet(function (sh, close) {
       sh.appendChild(el("h3", "", "Амбар"));
       sh.appendChild(el("div", "sub", "Собранный урожай. Семена лежат в инвентаре."));
