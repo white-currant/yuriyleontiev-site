@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611170103";
+    var BUILD = "202611170112";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -488,6 +488,13 @@
   .vrow.head { padding-top: 0; padding-bottom: 0; font-size: 11px; color: var(--cream2); }
   .vrow.on { background: rgba(255, 214, 140, .2); box-shadow: inset 0 0 0 2px var(--gold); }
   .vrow { position: relative; }
+  /* переключатель «одна / несколько ячеек» в амбаре: один кружок / три кружка (его просьба 2026-11-17) */
+  .selmode { display: flex; justify-content: flex-end; gap: 8px; margin: 4px 3px -4px; }
+  .selmode button { display: flex; align-items: center; justify-content: center; gap: 3px; width: 46px; height: 30px; padding: 0; border: 0; cursor: pointer;
+    background: var(--wood3, #8a5a33); box-shadow: 0 0 0 2px var(--ink, #1c120b), inset 0 -3px 0 #6e4425; }
+  .selmode button[aria-pressed="true"] { background: var(--cream, #f6efe3); box-shadow: 0 0 0 2px var(--ink, #1c120b), inset 0 -3px 0 var(--cream2, #d9c9ad); }
+  .selmode i { display: block; width: 7px; height: 7px; border-radius: 50%; background: var(--cream, #f6efe3); }
+  .selmode button[aria-pressed="true"] i { background: var(--ink, #1c120b); }
   /* бирка «в продаже N» на значке варианта (его просьба 2026-11-17) */
   .vrow.sold { padding-bottom: 20px; }
   .vrow .vsale { position: absolute; left: 4px; bottom: 4px; padding: 1px 4px; background: #3f9e7c; color: #f2fff8; font: 700 9.5px/1.15 var(--pix, inherit);
@@ -701,7 +708,7 @@
   body[data-screen^="farm"] .qty .btn:last-child { font-size: 14px; }
   body[data-screen^="farm"] .qval { font-size: 19px; }
   body[data-screen^="farm"] .invacts, body[data-screen^="farm"] .salebtns { margin-top: 10px; }
-  /* «Продать в лавке» — своим цветом, чтобы не терялась среди остальных (его правка 2026-11-17) */
+  /* «В лавку» — везде зелёная, своим цветом, чтобы не терялась среди остальных (его правка 2026-11-17) */
   body[data-screen^="farm"] .btn.sell { background: #3f9e7c; color: #f2fff8; box-shadow: var(--frame), inset 0 -5px 0 #2a7058, inset 0 3px 0 #6fd0a8; text-shadow: 0 1px 0 #1d4d3c; }
   body[data-screen^="farm"] .btn.sell.pressed, body[data-screen^="farm"] .btn.sell:active { box-shadow: var(--frame), inset 0 -2px 0 #2a7058; }
   body[data-screen^="farm"] .invacts .btn:first-child:nth-last-child(odd),
@@ -2851,7 +2858,7 @@
     if (id.indexOf("p:") !== 0) return fruitIcon(cv, itemOf(id));
     if (gk && !gk.dust && GEMS.complete && GEMS.naturalWidth) {                                // самоцвет — его рисунок как есть
       cv.classList.remove("myth"); cv.width = 15; cv.height = 14; var gc0 = cv.getContext("2d"); gc0.clearRect(0, 0, 15, 14);
-      px(gc0, 3, 13, 9, 1, "rgba(40,25,10,.3)"); gemDraw(gc0, gk.g.img, 2, 1); return;
+      gemDraw(gc0, gk.g.img, 2, 1); return;   // без тени-полоски: свечение делало из неё светлую «полочку» (его правка 2026-11-17)
     }
     if (gk && gk.dust) {                                                                       // мешочек пыли — в цвет своего камня
       cv.classList.remove("myth"); var pr = DISH["p:gemdust"], gc1 = cv.getContext("2d"), map = { v: gk.g.pv[0], V: gk.g.pv[1], s: gk.g.pv[2] };
@@ -2862,7 +2869,8 @@
     var it0 = F.state && itemOf(id); cv.classList.toggle("myth", !!(it0 && it0.myth));   // еда с мифическим — светится
     var rows = DISH["p:" + recKey(id)] || DISH["p:bread"], c = cv.getContext("2d"), h = rows.length + 2; cv.width = 16; cv.height = Math.max(12, h); c.clearRect(0, 0, 16, cv.height);
     var it = F.state && itemOf(id), pal = it && it.color && it.color !== "sun" ? PAL[it.color] : null;
-    px(c, 2, cv.height - 1, 12, 1, "rgba(40,25,10,.3)"); dishDraw(c, 1, cv.height - 2, rows, pal);
+    if (!(it0 && it0.myth)) px(c, 2, cv.height - 1, 12, 1, "rgba(40,25,10,.3)");   // у светящейся еды тени нет — свечение превращало её в «полочку»
+    dishDraw(c, 1, cv.height - 2, rows, pal);
     if (it && it.grade != null) {                                                 // сорт муки: высший — золото, первый — серебро, второй — без метки
       var gc = it.grade === 0 ? ["#ffd166", "#b07a1a"] : it.grade === 1 ? ["#e6ecf5", "#8a94a8"] : null, top = cv.height - 2 - rows.length + 1;
       if (gc && recKey(id) === "flour") { px(c, 6, top + 1, 4, 1, gc[1]); px(c, 6, top + 2, 4, 1, gc[0]); px(c, 5, top + 2, 1, 1, gc[1]); px(c, 10, top + 2, 1, 1, gc[1]); }   // лента на горловине мешка
@@ -2874,7 +2882,7 @@
     var rows = FRUIT[s.shape] || FRUIT.moss, c = cv.getContext("2d");
     var h = Math.max(10, rows.length + 2);
     cv.width = 12; cv.height = h; c.clearRect(0, 0, 12, h);
-    px(c, 2, h - 1, 8, 1, "rgba(40,25,10,.35)");                                 // тень под плодом
+    if (!(s && s.myth)) px(c, 2, h - 1, 8, 1, "rgba(40,25,10,.35)");             // тень под плодом; у светящегося — без неё (иначе «полочка»)
     sprS(c, 2, h - 2, rows, { shape: "_fruit", color: s.color, id: s.id, base: s.base });
   }
   // лейка — его рисунок как есть (art/can-full.png; пустая — та же, без воды: art/can-empty.png): полная, пока есть вода, пустая — когда кончилась
@@ -3570,7 +3578,7 @@
   function barnAdd(id, n) { F.state.barn = F.state.barn || []; var it = barnOf(id); if (it) it.count += n; else F.state.barn.push({ strain: id, count: n }); }
   function toDust(strain, n, gain) {                           // урожай из амбара → звёздная пыль (сразу, сервер подтвердит)
     var cur = F.state; haptic("success");
-    if (strain === "*") cur.barn = []; else barnOf(strain).count -= n;
+    if (strain === "*") cur.barn = (cur.barn || []).filter(function (it) { return gemOf(it.strain); }); else barnOf(strain).count -= n;   // самоцветы и их пыль «весь урожай» не трогает
     cur.dust += gain; renderFarm(); toast("+✦ " + gain + " звёздной пыли");
     farmCall("/api/farm/sell", { strain: strain, n: n || 0 }).catch(function () {});
   }
@@ -3599,7 +3607,18 @@
   var RAW_MAIN = { soup: "moss", stew: "mushroom", tea: "flower", jam: "cactus" }, RAW_REF = { moss: 4, mushroom: 8, flower: 8, cactus: 8 };   // как на сервере
   function rawKey(g) { var d = (g.myth ? g.dust / 3 : g.dust) / (RAW_REF[g.shape] || 8); return "r:" + g.color + ":" + (d <= 1.4 ? 2 : d <= 2 ? 1 : 0) + (g.myth ? ":m" : ""); }
   function itemName(id) { var it = itemOf(id); return it ? it.name + (it.sort_name ? " · " + it.sort_name.toLowerCase() : "") : ""; }   // сорт или продукт кухни
-  function barnItems() { return (F.state.barn || []).filter(function (it) { return it.count > 0 && itemOf(it.strain); }); }
+  // амбар разложен по видам (его просьба 2026-11-17, вручную там не переставить): сначала урожай по форме — ягоды к ягодам, колосья к колосьям;
+  // потом мука и блюда по рецептам — булочки к булочкам; самоцветы и их пыль — в конце. Внутри вида — по названию.
+  function barnRank(id) {
+    var gk = gemOf(id); if (gk) return [3, GEM_ORDER.indexOf(gk.k) * 2 + (gk.dust ? 1 : 0)];
+    if (id.indexOf("p:") !== 0) { var st = itemOf(id), si = -1; SHAPES.forEach(function (x, i) { if (st && x[0] === st.shape) si = i; }); return [1, si < 0 ? 99 : si]; }
+    var rk = recKey(id), ri = Object.keys(F.state.recipes || {}).indexOf(rk); return [2, rk === "flour" ? -1 : ri < 0 ? 99 : ri];
+  }
+  function barnItems() {
+    var list = (F.state.barn || []).filter(function (it) { return it.count > 0 && itemOf(it.strain); });
+    var key = {}; list.forEach(function (it) { key[it.strain] = barnRank(it.strain).concat([itemName(it.strain)]); });
+    return list.sort(function (a, b) { var x = key[a.strain], y = key[b.strain]; return x[0] - y[0] || x[1] - y[1] || (x[2] < y[2] ? -1 : x[2] > y[2] ? 1 : 0) || (a.strain < b.strain ? -1 : 1); });
+  }
   function bagOf(id) { var r = null; (F.state.inv || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
   function addToBag(id, n) { var it = bagOf(id); if (it) it.count += n; else F.state.inv.push({ strain: id, count: n, listed: 0 }); }
 
@@ -4199,7 +4218,8 @@
         // продажа — одна, в лавке: там своя цена, номер варианта и все свойства (его правка 2026-11-17: «В лавку» терялась среди кнопок, и цену было не назначить)
         if (!st.base) {
           var sa = el("div", "invacts");
-          sa.appendChild(btn(it.listed ? "В лавке " + it.listed + " · ✦ " + priceFor("s:" + id, st.price) + " — изменить" : "Продать в лавке", "sell", function () {
+          sa.appendChild(btn(it.listed ? "В лавку · на продаже " + it.listed : "В лавку", "sell",   // везде одинаково «В лавку» и зелёным (его правка 2026-11-17)
+            function () {
             haptic("light"); close(); F.shopCat = "seed"; F.shopSel = "inv:" + id; F.shopScroll = true; openShop("sell"); }));
           foot.appendChild(sa);
         }
@@ -4313,18 +4333,36 @@
       var drawBarn = function () {
         var cur = F.state, barn = barnItems(), bgrid = el("div", "invgrid"), total = 0;
         barnBox.innerHTML = "";
-        var BARN_MULTI = true;                                      // выделение нескольких ячеек (выложено по его «пуш» 2026-11-15)
+        // выделять одну ячейку или несколько — переключатель над ячейками (его просьба 2026-11-17: постоянное выделение нескольких не всегда удобно);
+        // выбор запоминается на устройстве, по умолчанию — одна
+        if (F.barnMulti == null) { try { F.barnMulti = localStorage.getItem("farm-barn-multi") === "1"; } catch (e) { F.barnMulti = false; } }
+        var BARN_MULTI = F.barnMulti;
         var selSet = F.barnSet = F.barnSet || {};                 // можно выделить несколько ячеек и разом распылить или выставить в лавку (его просьба 2026-11-15)
         Object.keys(selSet).forEach(function (id) { var bo = barnOf(id); if (!bo || bo.count <= 0) delete selSet[id]; });
         barn.forEach(function (it) {
           var st = itemOf(it.strain), b = el("button", "slot" + (selSet[it.strain] ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
-          total += it.count * st.dust;
+          if (!gemOf(it.strain)) total += it.count * st.dust;                       // самоцветы в «весь урожай в пыль» не входят
           var cv = el("canvas", "pix"); itemIcon(cv, it.strain); fitIcon(cv, it.strain.indexOf("p:") === 0 ? 84 : 70); b.appendChild(cv);   b.appendChild(el("span", "n", it.count));   // в амбаре — крупно
           b.onclick = function () { haptic("light"); var was = selSet[it.strain]; if (!BARN_MULTI) Object.keys(selSet).forEach(function (k9) { delete selSet[k9]; });
             if (was) delete selSet[it.strain]; else selSet[it.strain] = 1; drawBarn(); };
           bgrid.appendChild(b);
         });
         for (var k = barn.length; k < 5; k++) bgrid.appendChild(el("div", "slot empty"));
+        if (barn.length > 1) {
+          var mode = el("div", "selmode");
+          [[false, 1, "Выделять одну ячейку"], [true, 3, "Выделять несколько ячеек"]].forEach(function (m) {
+            var mb = el("button", "", ""); mb.type = "button"; mb.setAttribute("aria-label", m[2]); mb.setAttribute("aria-pressed", String(BARN_MULTI === m[0]));
+            for (var d = 0; d < m[1]; d++) mb.appendChild(el("i"));
+            mb.onclick = function () {
+              if (F.barnMulti === m[0]) return; haptic("light"); F.barnMulti = m[0];
+              try { localStorage.setItem("farm-barn-multi", m[0] ? "1" : "0"); } catch (e) {}
+              if (!m[0]) { var ks = Object.keys(selSet); if (ks.length > 1) F.barnSet = {}; }   // в «одну» — несколько выделенных сбросить
+              drawBarn();
+            };
+            mode.appendChild(mb);
+          });
+          barnBox.appendChild(mode);
+        }
         barnBox.appendChild(bgrid);
         if (!barn.length) { barnBox.appendChild(el("div", "sub", "Пока пусто. Сюда попадает всё, что ты собираешь с грядок.")); return; }
         var picked = Object.keys(selSet).map(barnOf), acts = el("div", "invacts");
@@ -4341,7 +4379,7 @@
           var bsel = sel;
           qtyBox(barnBox, { key: "barn:" + bsel.strain, max: function () { return (barnOf(bsel.strain) || { count: 0 }).count; },
             acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + st.dust * n; }, run: function (n) { toDust(bsel.strain, n, st.dust * n); drawBarn(); } },
-                   { t: function (n) { return "В лавку " + n; }, cls: "ghost", run: function (n) { toStall([{ strain: bsel.strain, count: n }]); } }] });
+                   { t: function (n) { return "В лавку " + n; }, cls: "sell", run: function (n) { toStall([{ strain: bsel.strain, count: n }]); } }] });
         } else if (picked.length > 1) {
           var cnt = 0, sum = 0; picked.forEach(function (x) { cnt += x.count; sum += x.count * itemOf(x.strain).dust; });
           barnBox.appendChild(el("div", "sub", "Выделено ячеек: " + picked.length + " — " + cnt + " " + plural(cnt, "штука", "штуки", "штук") + ", в пыль это ✦ " + sum + "."));
@@ -4350,10 +4388,10 @@
             picked.forEach(function (x) { var k3 = x.count; if (k3 <= 0) return; x.count = 0; farmCall("/api/farm/sell", { strain: x.strain, n: k3 }).catch(function () {}); });
             cur2.dust += sum; F.barnSet = {}; renderFarm(); drawBarn(); toast("+✦ " + sum + " звёздной пыли");
           }));
-          acts.appendChild(btn("В лавку", "ghost", function () { toStall(picked); }));
+          acts.appendChild(btn("В лавку", "sell", function () { toStall(picked); }));
           acts.appendChild(btn("Отменить", "ghost", function () { F.barnSet = {}; drawBarn(); }));
         } else {
-          barnBox.appendChild(el("div", "sub", BARN_MULTI ? "Нажми на ячейку, чтобы превратить урожай в звёздную пыль или выставить в лавку. Можно выделить несколько." : "Нажми на ячейку, чтобы превратить урожай в звёздную пыль."));
+          barnBox.appendChild(el("div", "sub", "Нажми на ячейку, чтобы превратить урожай в звёздную пыль или выставить в лавку." + (BARN_MULTI ? " Можно выделить несколько." : "")));
           acts.appendChild(btn("Весь урожай в пыль · ✦ " + total, "", function () { toDust("*", 0, total); drawBarn(); }));
         }
         barnBox.appendChild(acts);

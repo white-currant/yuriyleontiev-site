@@ -823,7 +823,9 @@ export async function harvest(u: any, idx: number) {
 export async function sellCrop(u: any, strain: string, n: number) {
   await ensureFarm(u);
   const rows = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
-  const pick = strain === "*" ? rows : rows.filter((r) => r[0] === strain);
+  // «весь урожай в пыль» не трогает самоцветы и их пыль — они куплены у странника (2026-11-17); их — только по одному, явно
+  const GEMS = new Set(Object.values(GEM_KINDS).flatMap((g) => [g.gem, g.dust]));
+  const pick = strain === "*" ? rows.filter((r) => !GEMS.has(String(r[0]))) : rows.filter((r) => r[0] === strain);
   if (!pick.length) return { error: "В амбаре этого нет" };
   const ss: Record<string, { dust: number }> = { ...(await strains(pick.map((r) => r[0]).filter((x) => !String(x).startsWith("p:")))), ...(await productsFor(pick.map((r) => String(r[0])))).products };
   let got = 0, sold = 0;
