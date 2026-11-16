@@ -206,13 +206,13 @@ async function strains(ids: string[]): Promise<Record<string, Strain>> {
   return out;
 }
 // гибрид: форма — от собираемого растения, цвет — от соседа; свойства — среднее родителей ± мутация
-async function breed(a: Strain, b: Strain): Promise<Strain> {
+async function breed(a: Strain, b: Strain, mutX = 1): Promise<Strain> {
   const r = Math.random, avg = (k: keyof Strain) => ((a[k] as number) + (b[k] as number)) / 2, mut = () => 0.85 + r() * 0.4;
   const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
   const pick = (list: string[], not: string[]) => { const l = list.filter((x) => !not.includes(x)); return l[Math.floor(r() * l.length)]; };
   let mutation: string | null = null, shape = a.shape, color = b.color;
-  if (r() < MUTATE_SHAPE) { shape = pick(SHAPES, [a.shape, b.shape]); mutation = "shape"; }
-  if (r() < MUTATE_COLOR) { color = pick(COLORS, [a.color, b.color]); mutation = mutation ? "both" : "color"; }
+  if (r() < MUTATE_SHAPE * mutX) { shape = pick(SHAPES, [a.shape, b.shape]); mutation = "shape"; }
+  if (r() < MUTATE_COLOR * mutX) { color = pick(COLORS, [a.color, b.color]); mutation = mutation ? "both" : "color"; }
   const g: any = {
     shape, color,
     minutes: Math.round(clamp(avg("minutes") * mut(), 5, 480)),          // до минуты, а не до 5 (его решение 2026-11-16, вопрос Denis: «почему 20, а не 15»)
@@ -246,7 +246,7 @@ export const WEATHER: Record<string, { name: string; icon: string; effect: strin
   shower:   { name: "Лунный ливень",   icon: "🌧", effect: "поливать не нужно — грядки политы сами", w: 15 },
   drought:  { name: "Засуха",          icon: "☀",  effect: "полива хватает вдвое меньше",           w: 12 },
   wind:     { name: "Солнечный ветер", icon: "🌬", effect: "ветер разносит пыльцу — гибриды вдвое чаще", w: 10 },
-  fullmoon: { name: "Полнолуние",      icon: "🌕", effect: "артефакты выпадают вдвое чаще",          w: 8 },
+  fullmoon: { name: "Полнолуние",      icon: "🌕", effect: "артефакты выпадают вдвое чаще", w: 8 },
 };
 const TZ = 3 * 3600, DAY = 86400;
 const dayStart = (t: number) => Math.floor((t + TZ) / DAY) * DAY - TZ;     // начало суток по Минску
@@ -586,7 +586,7 @@ export async function farmState(u: any) {
     clumps: (await q("SELECT id, x, y, dust FROM f_clumps WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
     ...(await kitchenOf(u.id)), ...(await decorView(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...(await q("SELECT recipe FROM f_jobs WHERE user = ?", [u.id])).map((x) => "p:" + x[0])])).products, build_list: BUILDS,
-    bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await wandererView(u.id), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
+    bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await metWanderer(u.id, await wandererView(u.id)), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
     vinyls, inv, barn, stall, chest, seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })), ...(await monoView(u.id)), feed_top: await feedTop(u.id),
     orders: await ordersOf(u.id, (await kitchenOf(u.id)).builds),
@@ -603,6 +603,7 @@ export async function dig(u: any, idx: number) {
   await q("DELETE FROM f_plotev WHERE user = ? AND idx = ? AND kind != 'frost'", [u.id, idx]);
   // дикий мох (вырос сам, пока мох захватил ферму — семя не тратилось): выкопал — семени нет (дюп, сообщил Askat 2026-11-16)
   const wild = (await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind = 'wild' RETURNING 1", [u.id, idx])).length > 0;
+  await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind IN ('g2', 'gseed', 'gcross')", [u.id, idx]);          // самоцветная пыль пропадает вместе с растением
   if (del.length && (await strains([String(del[0][0])]))[String(del[0][0])]?.myth)            // выкопал мифическое — соседство гаснет, второй раз не зажжётся
     await q("DELETE FROM f_monomark WHERE user = ? AND kind IN ('myth', 'mythripe')", [u.id]);
   if (!del.length) return { error: "Тут ничего не растёт" };
@@ -637,6 +638,7 @@ export async function plant(u: any, idx: number, crop: string) {
     DB.prepare(`INSERT INTO f_plots (user, ${PLOT_COLS}) VALUES (?, ?, ?, ?, 0, ?, ?)`).bind(u.id, idx, crop, t, t, t),
     mossy ? DB.prepare("INSERT OR REPLACE INTO f_monomark (user, idx, kind, at) VALUES (?, ?, 'wild', ?)").bind(u.id, idx, t)
           : DB.prepare("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind = 'wild'").bind(u.id, idx),
+    DB.prepare("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind IN ('g2', 'gseed', 'gcross')").bind(u.id, idx),   // старая самоцветная пыль на новую посадку не переходит
     DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)").bind(u.id, nameOf(u), POINTS_PLANT, "Лунная ферма", t),
   ]);
   const s = (await strains([crop]))[crop];
@@ -724,14 +726,15 @@ export async function harvest(u: any, idx: number) {
   await q("DELETE FROM f_plotev WHERE user = ? AND idx = ? AND kind NOT IN ('frost', 'crater')", [u.id, idx]);   // несостоявшиеся события грядки — прочь
   if (s && s.myth) await q("DELETE FROM f_monomark WHERE user = ? AND kind IN ('myth', 'mythripe')", [u.id]);
   if (st.dead) return { withered: true, farm: await farmState(u) };       // засохшее — просто убрали (звезда созвездия на грядке остаётся)
-  const marks = (await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind IN ('star', 'myth', 'wild') RETURNING kind", [u.id, idx])).map((r) => String(r[0]));
+  const marks = (await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind IN ('star', 'myth', 'wild', 'g2', 'gseed', 'gcross') RETURNING kind", [u.id, idx])).map((r) => String(r[0]));
   const rain = (await rainUntil()) > t;
   const double = s.bonus === "rich" && Math.random() < 0.25;
   // урожай идёт в амбар (решение 2026-11-14): превратить в звёздную пыль (по цене сорта) или пустить на кухню
   // без амбара (его покупают) урожай сразу превращается в пыль, как было до кухни
   const star = marks.includes("star");                                    // грядка созвездия — урожай ×2
   const mossX = s.shape === "moss" && await mossNow(u.id);               // пока мох захватил ферму — урожай мха ×2
-  const crop = (rain ? (s.bonus === "rain" ? 3 : 2) : 1) * (double ? 2 : 1) * (star ? 2 : 1) * (mossX ? 2 : 1);
+  const gem2 = marks.includes("g2");                                     // бирюзовая самоцветная пыль — урожай ×2, складывается с остальным
+  const crop = (rain ? (s.bonus === "rain" ? 3 : 2) : 1) * (double ? 2 : 1) * (star ? 2 : 1) * (mossX ? 2 : 1) * (gem2 ? 2 : 1);
   // сосед мифического растения (оно ещё на грядке): пыль ×3 — сверх урожая сразу +2 его цены
   const mythNear = !s.myth && marks.includes("myth") && all.some((x) => near4(idx).includes(Number(x[0])) && ss[x[1]]?.myth);
   const points = s.points;
@@ -748,7 +751,7 @@ export async function harvest(u: any, idx: number) {
     .bind(u.id, nameOf(u), points, "Лунная ферма", t));
   // с урожаем возвращаются семена той же культуры: не меньше 2 (посадил одно — получил больше), обычно 2, иногда 3;
   // «плодовитый» сорт даёт ещё одно. Так хозяйство растёт, а удачный гибрид можно размножить и продать.
-  const seeds = s.myth ? 0 : SEEDS_MIN + (Math.random() < SEEDS_EXTRA ? 1 : 0) + (s.bonus === "seedy" ? 1 : 0);   // мифическое семян не даёт
+  const seeds = (s.myth ? 0 : SEEDS_MIN + (Math.random() < SEEDS_EXTRA ? 1 : 0) + (s.bonus === "seedy" ? 1 : 0)) * (marks.includes("gseed") ? 3 : 1);   // травяная пыль — семян втрое   // мифическое семян не даёт
   if (seeds) writes.push(DB.prepare(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)
                                      ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.id, seeds));
   await DB.batch(writes);
@@ -759,9 +762,14 @@ export async function harvest(u: any, idx: number) {
     const i = Number(x[0]), r = Math.floor(i / 3), c = i % 3;
     return i !== idx && Math.abs(r - r0) + Math.abs(c - c0) === 1 && x[1] !== p[1] && ss[x[1]] && !ss[x[1]].myth && stateOf(x, ss[x[1]], t, boost).ripe;
   });
-  if (!s.myth && near.length && Math.random() < CROSS_CHANCE * (weatherOn(t) === "wind" ? 2 : 1)) {
-    const other = ss[near[Math.floor(Math.random() * near.length)][1]];
-    const h = await breed(s, other);
+  // розовая самоцветная пыль: гибрид наверняка — с соседом другого сорта (зрелость не нужна), а нет соседа — с базовым растением станции;
+  // новая форма и новый цвет выпадают втрое чаще
+  const gcross = !s.myth && marks.includes("gcross");
+  const nearAny = gcross ? all.filter((x) => near4(idx).includes(Number(x[0])) && x[1] !== p[1] && ss[x[1]] && !ss[x[1]].myth) : [];
+  if (gcross || (!s.myth && near.length && Math.random() < CROSS_CHANCE * (weatherOn(t) === "wind" ? 2 : 1))) {
+    const pool = gcross ? (near.length ? near : nearAny) : near, base = Object.values(CROPS).filter((c) => !c.hidden && c.id !== s.id);
+    const other = pool.length ? ss[pool[Math.floor(Math.random() * pool.length)][1]] : view(base[Math.floor(Math.random() * base.length)]);
+    const h = await breed(s, other, gcross ? 3 : 1);
     const [[had]] = await q("SELECT COUNT(*) FROM f_inv WHERE user = ? AND strain = ?", [u.id, h.id]);
     await q(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1`, [u.id, h.id]);
     hybrid = { ...h, parents: [s.name, other.name], fresh: !Number(had) };
@@ -786,7 +794,7 @@ export async function harvest(u: any, idx: number) {
                       DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'sun', ?)").bind(u.id, t)]);
     }
   }
-  return { crop, dust, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
+  return { crop, dust, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
 }
 
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
@@ -830,11 +838,18 @@ export const RECIPES: Record<string, { kind: string; name: string; needs: Record
   stew:   { kind: "oven", name: "Грибная похлёбка",   needs: { mushroom: 2, moss: 1 },           min: 20, dust: 70,  points: 3 },
   pumpkin:{ kind: "oven", name: "Тыквенный пирог",    needs: { "p:flour": 1, pumpkin: 1 },       min: 30, dust: 80,  points: 3 },
   jam:    { kind: "oven", name: "Кактусовый джем",    needs: { cactus: 2, berry: 1 },            min: 20, dust: 75,  points: 3 },
-  gemdust:{ kind: "mill", name: "Самоцветная пыль",   needs: { "p:gem": 1 },                     min: 5,  dust: 40,  points: 0 },   // из самоцвета странника (2026-11-16)
+  // самоцветы странника (2026-11-16): каждый мелется в пыль своего цвета; что делает пыль — в GEMS ниже
+  gemdust:         { kind: "mill", name: "Лунная самоцветная пыль",    needs: { "p:gem": 1 },       min: 5, dust: 40, points: 0 },
+  "gemdust-crop":  { kind: "mill", name: "Бирюзовая самоцветная пыль", needs: { "p:gem-crop": 1 },  min: 5, dust: 40, points: 0 },
+  "gemdust-seed":  { kind: "mill", name: "Травяная самоцветная пыль",  needs: { "p:gem-seed": 1 },  min: 5, dust: 60, points: 0 },
+  "gemdust-dew":   { kind: "mill", name: "Золотая самоцветная пыль",   needs: { "p:gem-dew": 1 },   min: 5, dust: 40, points: 0 },
+  "gemdust-cross": { kind: "mill", name: "Розовая самоцветная пыль",   needs: { "p:gem-cross": 1 }, min: 5, dust: 40, points: 0 },
 };
 const PRODUCTS: Record<string, { name: string; dust: number }> = Object.fromEntries(Object.entries(RECIPES).map(([k, r]) => ["p:" + k, { name: r.name, dust: r.dust }]));
 PRODUCTS["p:coal"] = { name: "Звёздный уголь", dust: 120 };
-PRODUCTS["p:gem"] = { name: "Лунный самоцвет", dust: 30 };              // продаёт странник в полнолуние; мельница мелет его в самоцветную пыль              // остаётся, когда сгорает огненное растение — редкий и ценный
+PRODUCTS["p:gem"] = { name: "Лунный самоцвет", dust: 30 };
+PRODUCTS["p:gem-crop"] = { name: "Бирюзовый самоцвет", dust: 30 }; PRODUCTS["p:gem-seed"] = { name: "Травяной самоцвет", dust: 50 };
+PRODUCTS["p:gem-dew"] = { name: "Золотой самоцвет", dust: 30 }; PRODUCTS["p:gem-cross"] = { name: "Розовый самоцвет", dust: 30 };              // продаёт странник в полнолуние; мельница мелет его в самоцветную пыль              // остаётся, когда сгорает огненное растение — редкий и ценный
 // Мука помнит сорт колосьев («p:flour@<сорт>»), а выпечка — сорт муки («p:bread@<сорт>», его просьба 2026-11-14):
 // из разной пшеницы — разная мука и разная выпечка. Цена: мука = цена колоса + 2; выпечка = рецепт + разница муки от пшеничной.
 const BASE_FLOUR = 7;
@@ -1048,7 +1063,7 @@ function gradeDust(k: string, grade: number) { return productInfo("p:" + k + "@"
 const GRADE_REQ = ["высшего сорта", "не ниже первого сорта"];
 function genOrder1(slot: number, builds: string[], cook?: Cook) {
   const ok = cook?.ok;
-  const can = Object.keys(RECIPES).filter((k) => k !== "gemdust" && builds.includes(RECIPES[k].kind) && !(k === "flour" && builds.includes("oven")) && (!ok || ok(k)));   // мука — только пока нет печи
+  const can = Object.keys(RECIPES).filter((k) => !k.startsWith("gemdust") && builds.includes(RECIPES[k].kind) && !(k === "flour" && builds.includes("oven")) && (!ok || ok(k)));   // мука — только пока нет печи
   if (!can.length) return null;
   if (slot === 0) {
     const cats = Object.keys(ORDER_CATS).filter((c) => ORDER_CATS[c].r.some((k) => can.includes(k)));   // хоть одно блюдо категории игроку по силам
@@ -1495,37 +1510,93 @@ export async function forgetFarm(uid: number) {
 // ---------- Лунный странник (его идея 2026-11-16) ----------
 // В полнолуние у калитки стоит странник и продаёт лунные самоцветы. Самоцвет мелют на мельнице в самоцветную пыль;
 // щепотка пыли на растущую грядку — растение сразу созревает. Купить можно не больше GEM_MAX за одно полнолуние.
-export const GEM_PRICE = 60, GEM_MAX = 3, WANDERER_ON = false;   // странник пока выключен
-async function gemsBought(uid: number, t: number) {
-  const [[n]] = await q("SELECT COUNT(*) FROM f_evlog WHERE user = ? AND kind = 'gem' AND at >= ?", [uid, dayStart(t)]);
-  return Number(n);
+// Лесенки нет (его решение 2026-11-16, после пробы 60 / 100 / 150): камень всегда стоит ✦60, травяной (семена втрое — самый выгодный) — ✦100.
+// Цена одна для всех (его правка: «должна быть одинаковая у всех»). Поднимается для всех сразу, когда игроки в целом начинают
+// зарабатывать больше — иначе самоцвет станет почти бесплатным: берём лучший сорт (пыль за урожай) у каждого игрока, смотрим третий
+// по величине (один везунчик цену не поднимет) и делим на 90 (кометный хрусталь станции); меньше 1 не бывает.
+// Множитель считается один раз на полнолуние и запоминается — в течение суток цена не прыгает.
+export const GEM_PRICES = [60, 100], GEM_MAX = 3, GEM_REF = 90;          // [обычный камень, травяной]
+async function gemPrices(t: number) {
+  const key = "gemx:" + dayStart(t);
+  let [row] = await q("SELECT at FROM f_evlog WHERE user = 0 AND kind = ?", [key]);
+  if (!row) {
+    const top = await q(`SELECT MAX(json_extract(s.genes, '$.dust')) d FROM f_inv i JOIN f_strains s ON s.id = i.strain
+                         WHERE i.count > 0 AND json_extract(s.genes, '$.myth') IS NULL GROUP BY i.user ORDER BY d DESC LIMIT 3`);
+    const x = Math.max(1, (top.length >= 3 ? Number(top[2][0]) || 0 : 0) / GEM_REF);
+    await q("INSERT INTO f_evlog (user, kind, at) SELECT 0, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = 0 AND kind = ?)", [key, Math.round(x * 100), key]);
+    [row] = await q("SELECT at FROM f_evlog WHERE user = 0 AND kind = ?", [key]);
+  }
+  const x = Math.max(1, Number(row[0]) / 100);
+  return GEM_PRICES.map((p) => Math.round(p * x / 5) * 5);
+}
+// Пять самоцветов (его решения 2026-11-16): в меню странника выбираешь, какой купить; цена у всех одна,
+// кроме травяного (семена втрое — самый выгодный): он дороже.
+//   moon  — сиреневый: растение созревает сразу          crop  — бирюзовый: урожай с грядки ×2 (складывается с другими множителями)
+//   seed  — травяной: семян с грядки втрое больше        dew   — золотой: растение не просит полива до сбора
+//   cross — розовый: при сборе наверняка гибрид, мутации втрое чаще
+// Пыль сыплют на растущую грядку; одна и та же пыль на одно растение — один раз.
+export const GEM_KINDS: Record<string, { gem: string; dust: string; mark?: string; step: number }> = {
+  moon:  { gem: "p:gem",       dust: "p:gemdust",       step: 0 },
+  crop:  { gem: "p:gem-crop",  dust: "p:gemdust-crop",  mark: "g2", step: 0 },
+  seed:  { gem: "p:gem-seed",  dust: "p:gemdust-seed",  mark: "gseed", step: 1 },
+  dew:   { gem: "p:gem-dew",   dust: "p:gemdust-dew",   step: 0 },
+  cross: { gem: "p:gem-cross", dust: "p:gemdust-cross", mark: "gcross", step: 0 },
+};
+const GEM_DEW_FOR = 10 * DAY;                                 // «не просит полива до сбора»: окно полива с запасом (дольше 8 часов растения не растут)
+// В чемодане три случайных камня из пяти (его решение 2026-11-16) — одни и те же для всех игроков, на каждое полнолуние свои.
+// Каждый камень можно купить один раз.
+function gemStock(t: number) {
+  const kinds = Object.keys(GEM_KINDS); let x = (Math.floor((t + TZ) / DAY) * 2654435761) >>> 0;
+  for (let i = kinds.length - 1; i > 0; i--) { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; const k = x % (i + 1); [kinds[i], kinds[k]] = [kinds[k], kinds[i]]; }
+  return kinds.slice(0, GEM_MAX);
+}
+async function gemsBought(uid: number, t: number) {            // какие камни игрок уже купил в это полнолуние
+  return (await q("SELECT kind FROM f_evlog WHERE user = ? AND kind LIKE 'gem:%' AND at >= ?", [uid, dayStart(t)])).map((r) => String(r[0]).slice(4));
 }
 export async function wandererView(uid: number) {
-  const t = now(); if (!WANDERER_ON || weatherOn(t) !== "fullmoon") return null;
-  return { price: GEM_PRICE, left: Math.max(0, GEM_MAX - (await gemsBought(uid, t))), until: dayStart(t) + DAY };
+  const t = now(); if (weatherOn(t) !== "fullmoon") return null;
+  const got = await gemsBought(uid, t), stock = gemStock(t), left = stock.filter((k) => !got.includes(k)).length, prices = await gemPrices(t);
+  return { left, max: GEM_MAX, had: got.length, until: dayStart(t) + DAY,
+           goods: stock.map((kind) => ({ kind, item: GEM_KINDS[kind].gem, step: GEM_KINDS[kind].step, price: prices[GEM_KINDS[kind].step], sold: got.includes(kind) })) };
 }
-export async function buyGem(u: any, n: number) {
+export async function buyGem(u: any, kind: string) {
   await ensureFarm(u);
-  const t = now(); if (!WANDERER_ON || weatherOn(t) !== "fullmoon") return { error: "Странник ушёл — он приходит только в полнолуние" };
+  const g = GEM_KINDS[kind]; if (!g) return { error: "Такого самоцвета у странника нет" };
+  const t = now(); if (weatherOn(t) !== "fullmoon") return { error: "Странник ушёл" };
+  if (!gemStock(t).includes(kind)) return { error: "Такого самоцвета у странника сегодня нет" };
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Самоцветы кладут в амбар — сначала построй его" };
-  const k = Math.max(1, Math.min(GEM_MAX, Math.round(n) || 1));
-  if ((await gemsBought(u.id, t)) + k > GEM_MAX) return { error: "Больше самоцветов странник сегодня не продаст" };
-  const price = GEM_PRICE * k;
+  const got = await gemsBought(u.id, t);
+  if (got.includes(kind)) return { error: "Этот самоцвет ты уже купил" };
+  if (got.length >= GEM_MAX) return { error: "Больше самоцветов странник сегодня не продаст" };
+  const price = (await gemPrices(t))[g.step];
   if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [price, u.id, price])).length) return { error: "Не хватает звёздной пыли" };
-  await DB.batch([DB.prepare("INSERT INTO f_barn (user, strain, count) VALUES (?, 'p:gem', ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count").bind(u.id, k),
-                  ...Array.from({ length: k }, () => DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'gem', ?)").bind(u.id, t))]);
-  return { ok: true, n: k, farm: await farmState(u) };
+  // камень достаётся одному запросу: двойное нажатие не купит его дважды
+  if (!(await q("INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = ? AND kind = ? AND at >= ?) RETURNING 1", [u.id, "gem:" + kind, t, u.id, "gem:" + kind, dayStart(t)])).length) {
+    await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [price, u.id]); return { error: "Этот самоцвет ты уже купил" };
+  }
+  await q("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [u.id, g.gem]);
+  return { ok: true, kind, price, farm: await farmState(u) };
 }
-// щепотка самоцветной пыли: растущее растение сразу созревает (как луч солнца)
-export async function gemDust(u: any, idx: number) {
+// игрок встретил странника — запоминаем (открывает страницу «Самоцветы» в справочнике; его решение 2026-11-16)
+async function metWanderer(uid: number, w: any) {
+  if (w) await q("INSERT INTO f_evlog (user, kind, at) SELECT ?, 'wanderer', ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = ? AND kind = 'wanderer')", [uid, now(), uid]);
+  return w;
+}
+// щепотка самоцветной пыли на растущее растение
+export async function gemDust(u: any, idx: number, kind = "moon") {
+  const g = GEM_KINDS[kind]; if (!g) return { error: "Такой пыли нет" };
   const [p] = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ? AND idx = ?`, [u.id, idx]);
   if (!p) return { error: "Грядка пустая" };
-  const t = now(), s = (await strains([String(p[1])]))[String(p[1])], st = stateOf(p, s, t, await boostOf(u.id));
+  const t = now(), boost = await boostOf(u.id), s = (await strains([String(p[1])]))[String(p[1])], st = stateOf(p, s, t, boost);
   if (st.ripe) return { error: "Уже созрело — собирай" };
   if (st.dead) return { error: "Растение засохло" };
-  if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = 'p:gemdust' AND count >= 1 RETURNING 1", [u.id])).length) return { error: "В амбаре нет самоцветной пыли" };
-  await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ?", [s.minutes * 60, t, t, u.id, idx]);
-  return { ok: true, farm: await farmState(u) };
+  if (g.mark && (await q("SELECT 1 FROM f_monomark WHERE user = ? AND idx = ? AND kind = ?", [u.id, idx, g.mark])).length) return { error: "Эта пыль тут уже посыпана" };
+  if (kind === "dew" && Number(p[5]) - t > DAY) return { error: "Эта пыль тут уже посыпана" };
+  if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = ? AND count >= 1 RETURNING 1", [u.id, g.dust])).length) return { error: "В амбаре нет такой пыли" };
+  if (kind === "moon") await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ?", [s.minutes * 60, t, t, u.id, idx]);
+  else if (kind === "dew") await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ?", [growth(p, t, boost), t, t + GEM_DEW_FOR, u.id, idx]);
+  else await q("INSERT OR REPLACE INTO f_monomark (user, idx, kind, at) VALUES (?, ?, ?, ?)", [u.id, idx, g.mark, t]);
+  return { ok: true, kind, farm: await farmState(u) };
 }
 
 // ---------- личные объявления (разовые): показываются, пока игрок не закроет (его решение 2026-11-16) ----------

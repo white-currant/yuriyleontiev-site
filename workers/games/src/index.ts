@@ -412,8 +412,8 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/crater": return json(await farm.fixCrater(user, Number(body.idx)));
     case "/api/farm/coal": return json(await farm.takeCoal(user, Number(body.idx)));
     case "/api/farm/notice": return json(await farm.noticeSeen(user, String(body.id || "").slice(0, 40)));
-    case "/api/farm/gem": return json(await farm.buyGem(user, Number(body.n) || 1));
-    case "/api/farm/gemdust": return json(await farm.gemDust(user, Number(body.idx)));
+    case "/api/farm/gem": return json(await farm.buyGem(user, String(body.kind || "moon").slice(0, 12)));
+    case "/api/farm/gemdust": return json(await farm.gemDust(user, Number(body.idx), String(body.kind || "moon").slice(0, 12)));
     case "/api/farm/dig": return json(await farm.dig(user, Number(body.idx)));
     case "/api/farm/plant": return json(await farm.plant(user, Number(body.idx), String(body.crop || "")));
     case "/api/farm/harvest": return json(await farm.harvest(user, Number(body.idx)));

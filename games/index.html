@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611161932";
+    var BUILD = "202611162220";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -166,6 +166,10 @@
     background: #17142c; border-top: 1px solid rgba(255, 255, 255, .1); animation: up .22s ease-out; }
   @keyframes up { from { transform: translateY(30px); opacity: 0; } }
   .sheet h3 { font-size: 18px; font-weight: 700; }
+  .sheet { position: relative; }
+  .sheet > .shx { position: absolute; top: 10px; right: 10px; z-index: 3; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%;
+                  background: rgba(255, 255, 255, .1); color: var(--white); font-size: 17px; line-height: 1; cursor: pointer; }
+  .sheet > h3:first-of-type, .sheet > .whead h3 { padding-right: 40px; }
   .sheet .sub { margin-top: 4px; font-size: 13px; color: var(--dim); }
   .seed { width: 100%; margin-top: 10px; display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; text-align: left;
     padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .08); }
@@ -189,9 +193,14 @@
   .fxbox { position: absolute; left: 0; right: 0; bottom: 0; top: calc(var(--top) + 46px); pointer-events: none; overflow: hidden; }
   .fxbox canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
   .fxbox .bloom, .fxbox .wash { display: none; }
+  .fxbox canvas.lit { image-rendering: pixelated; }
+  .fxbox canvas.lit.glow { filter: blur(4px) brightness(2.4) saturate(1.5); mix-blend-mode: screen; animation: litpulse 2.6s ease-in-out infinite; }
+  @keyframes litpulse { 0%, 100% { opacity: .8; } 50% { opacity: 1; } }
   .fxbox.sun .bloom { display: block; image-rendering: auto; mix-blend-mode: screen; opacity: .42; filter: brightness(.9) contrast(3.4) saturate(1.3) blur(6px); }
   .fxbox.sun .wash { display: block; position: absolute; inset: 0; mix-blend-mode: soft-light;
     background: radial-gradient(130% 95% at 95% -8%, rgba(255,222,130,.85), rgba(255,180,90,.45) 45%, rgba(255,150,70,.3) 85%); }
+  .fxbox.moon .wash { display: block; position: absolute; inset: 0; mix-blend-mode: multiply;                 /* полнолуние: прохладный серебристо-синий свет, светлее под луной */
+    background: radial-gradient(120% 85% at 52% -4%, rgba(245,248,255,.95), rgba(205,218,250,.95) 40%, rgba(160,178,232,.95) 100%); }
   .fxbox.moss .wash { display: block; position: absolute; inset: 0; mix-blend-mode: soft-light;
     background: radial-gradient(120% 90% at 50% 60%, rgba(90,200,170,.6), rgba(40,140,120,.5) 60%, rgba(30,100,90,.55)); }
   .fxbox.fire .wash { display: block; position: absolute; inset: 0; mix-blend-mode: soft-light;
@@ -464,6 +473,8 @@
   .bnrow .slot canvas { width: 70%; height: auto; image-rendering: pixelated; }
   .bnrow .brule { margin: 0; }
   .recipes { margin-top: 12px; display: grid; gap: 8px; }
+  .recipes .rrow.gemrow b, .recipes .rrow.gemrow small { display: block; }   /* самоцветы: название, под ним — что делает */
+  .recipes .rrow.gemrow small { margin-top: 2px; line-height: 1.3; }
   .rrow { display: grid; grid-template-columns: 36px 1fr; gap: 10px; align-items: center; }
   .rrow canvas { width: 36px; height: auto; image-rendering: pixelated; }
   .rrow .rneed { font-size: 13px; opacity: .8; margin-top: 2px; }
@@ -703,6 +714,53 @@
     box-shadow: 0 -2px 0 var(--ink), 0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink), inset 0 -3px 0 var(--pgold2); }
   /* окна: деревянная панель с рамкой */
   body[data-screen^="farm"] .sheet-wrap { background: rgba(20, 10, 4, .55); }
+  body[data-screen^="farm"] .sheet.wander { background: linear-gradient(#3a2268, #24143f 70%); color: #f1e8ff; box-shadow: 0 -4px 0 #8a5be0, 0 -8px 0 #140c22; padding-top: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .sheet.wander .wband { height: 33px; margin: 0 -16px 14px; background-repeat: repeat-x; background-size: auto 33px; image-rendering: pixelated; }
+  .sheet.wander .wband.low { margin: 16px -16px 0; }
+  .sheet.wander .whead { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .sheet.wander .whead canvas { width: 102px; height: 90px; flex: none; image-rendering: pixelated; filter: drop-shadow(0 0 10px rgba(160, 120, 255, .45)); }
+  .sheet.wander .whead h3 { margin: 0 0 4px; color: #fff; text-shadow: 0 2px 0 #140c22; }
+  .sheet.wander .whead small { color: #c9b6f5; font-size: 14px; line-height: 1.3; }
+  .sheet.wander .sub { color: #d9ccf7; }
+  .sheet.wander .wgems { display: flex; gap: 14px; justify-content: center; margin: 14px 0 8px; padding: 12px 0; background: rgba(10, 4, 24, .35); box-shadow: inset 0 2px 0 rgba(0, 0, 0, .35), inset 0 -2px 0 rgba(170, 130, 255, .25); }
+  .sheet.wander .wgems canvas { width: 56px; height: auto; image-rendering: pixelated; filter: drop-shadow(0 0 8px rgba(196, 163, 255, .8)); animation: wgem 2.4s ease-in-out infinite; }
+  .sheet.wander .wgems canvas:nth-child(2) { animation-delay: .5s; } .sheet.wander .wgems canvas:nth-child(3) { animation-delay: 1s; }
+  .sheet.wander .wgems canvas.sold { opacity: .22; filter: grayscale(1); animation: none; }
+  .sheet.wander .wleft { text-align: center; }
+  body[data-screen^="farm"] .sheet.wander .btn { background: #8a5be0; color: #fff; box-shadow: 0 0 0 3px #140c22, inset 0 -5px 0 #5a35a8, inset 0 3px 0 #b08cf5; text-shadow: 0 1px 0 #3a2064; }
+  body[data-screen^="farm"] .sheet.wander .btn.ghost { background: #3a2268; color: #e6dcff; box-shadow: 0 0 0 3px #140c22, inset 0 -5px 0 #24143f, inset 0 3px 0 #563796; }
+  @keyframes wgem { 0%, 100% { transform: translateY(0); filter: drop-shadow(0 0 6px rgba(196, 163, 255, .6)); } 50% { transform: translateY(-3px); filter: drop-shadow(0 0 14px rgba(220, 200, 255, 1)); } }
+  canvas.gemfx { --gem: 170, 120, 255; animation: gemshine 2.8s ease-in-out infinite; }
+  @keyframes gemshine {
+    0%, 100% { filter: drop-shadow(0 0 2px rgba(var(--gem), .95)) drop-shadow(0 0 6px rgba(var(--gem), .7)) hue-rotate(-10deg) brightness(1); }
+    40% { filter: drop-shadow(0 0 3px rgba(255, 255, 255, .9)) drop-shadow(0 0 11px rgba(var(--gem), 1)) hue-rotate(8deg) brightness(1.28); }
+    70% { filter: drop-shadow(0 0 2px rgba(var(--gem), 1)) drop-shadow(0 0 8px rgba(var(--gem), .85)) hue-rotate(18deg) brightness(1.1); }
+  }
+  @media (prefers-reduced-motion: reduce) { canvas.gemfx { animation: none; filter: drop-shadow(0 0 4px rgba(var(--gem), .9)); } }
+  .gempick { display: flex; gap: 10px; align-items: center; width: 100%; padding: 10px 8px; margin-top: 8px; border: 0; background: rgba(0, 0, 0, .18); color: inherit; font: inherit; text-align: left; }
+  .gempick.on { background: rgba(255, 214, 120, .22); box-shadow: inset 0 0 0 2px var(--pgold); }
+  .gempick canvas { width: 40px; flex: none; image-rendering: pixelated; }
+  .gempick b { display: block; } .gempick small { display: block; opacity: .85; line-height: 1.3; }
+  .sheet.wander .wgoods { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 10px; padding: 16px 8px 8px; background: rgba(10, 4, 24, .35); box-shadow: inset 0 2px 0 rgba(0, 0, 0, .35), inset 0 -2px 0 rgba(170, 130, 255, .25); }
+  .sheet.wander .wgoods button { display: grid; justify-items: center; gap: 4px; padding: 8px 0 6px; border: 0; background: none; color: #d9ccf7; font: 700 13px var(--pix); }
+  .sheet.wander .wgoods button.on { background: rgba(170, 130, 255, .28); box-shadow: inset 0 0 0 2px #b08cf5; color: #fff; }
+  .sheet.wander .wgoods canvas { width: 60px; height: auto; image-rendering: pixelated; display: block; }
+  .sheet.wander .wgoods .wfloat { display: block; animation: wfloat 2.6s ease-in-out infinite; }
+  .sheet.wander .wgoods button:nth-child(2) .wfloat { animation-delay: -.9s; } .sheet.wander .wgoods button:nth-child(3) .wfloat { animation-delay: -1.7s; }
+  .sheet.wander .wgoods button.sold .wfloat { animation: none; } .sheet.wander .wgoods button.sold canvas { opacity: .22; filter: grayscale(1); animation: none; }
+  .sheet.wander .wgoods button.sold { color: #8f7fb8; }
+  @keyframes wfloat { 0%, 100% { transform: translateY(2px); } 50% { transform: translateY(-5px); } }
+  @media (prefers-reduced-motion: reduce) { .sheet.wander .wgoods .wfloat { animation: none; } }
+  .sheet.wander .wpick b { display: block; color: #fff; font-size: 17px; margin-bottom: 3px; }
+  body[data-screen^="farm"] .sheet > .shx { border-radius: 0; width: 34px; height: 34px; background: var(--wood3); color: var(--cream); font: 700 16px var(--pix);
+    box-shadow: 0 0 0 2px var(--ink), inset 0 -3px 0 #6e4425; }
+  body[data-screen^="farm"] .sheet > .shx:active { transform: translateY(1px); box-shadow: 0 0 0 2px var(--ink), inset 0 -1px 0 #6e4425; }
+  body[data-screen^="farm"] .sheet.wander > .shx { top: 40px; background: #3a2268; color: #e6dcff; box-shadow: 0 0 0 2px #140c22, inset 0 -3px 0 #24143f; }
+  body[data-screen^="farm"] .gempill { padding: 0 8px; gap: 4px; }
+  body[data-screen^="farm"] .gempill canvas { width: 22px; height: auto; image-rendering: pixelated; }
+  body[data-screen^="farm"] .gempill.on { box-shadow: 0 0 0 3px var(--pgold), inset 0 2px 0 var(--wood3); }
+  /* сундук у левого края сцены: подпись не по центру, а от его левой кромки — иначе «сундук» уезжает за край (жалоба игрока 2026-11-16) */
+  body[data-screen^="farm"] .plot.well.chest .lbl { left: 0; right: auto; transform: translate(0, -105%); }
   .thanks-wrap { position: fixed; inset: 0; z-index: 40; background: rgba(20, 10, 4, .7); display: flex; align-items: center; justify-content: center; padding: 16px; animation: nfade .25s ease-out; }
   .thanks { width: 100%; max-width: 300px; padding: 16px 14px 14px; background: var(--wood2); color: var(--cream); font-family: var(--pix); text-align: center;
             box-shadow: 0 0 0 4px var(--wood4), 0 0 0 8px var(--ink), 0 18px 40px rgba(0, 0, 0, .5); animation: npop .35s cubic-bezier(.2, 1.4, .4, 1); }
@@ -739,6 +797,7 @@
   .book .bpage.fwd { transform: translateX(18px); } .book .bpage.back { transform: translateX(-18px); }
   .book .bpage.fwd.in, .book .bpage.back.in { transform: none; }
   body[data-screen^="farm"] .book h3 { color: #3b2614; font-size: 21px; text-align: center; padding-bottom: 8px; border-bottom: 2px solid rgba(90, 56, 32, .35); }
+  body[data-screen^="farm"] .book .bpage > h3:first-child { padding-left: 40px; padding-right: 40px; }   /* заголовок страницы не заходит под крестик */
   .book .bsub { margin-top: 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: #7a5c38; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .book .brule { margin-top: 10px; font-size: 14px; line-height: 1.4; color: #3b2614; }
   .book .brule b { color: #2b1a0e; }
@@ -845,7 +904,7 @@
   <!-- «Лунная ферма»: свой участок, гости, пластинки -->
   <section class="screen" id="farm" hidden>
     <div class="scene">
-      <div class="farm-top"><button class="exit" type="button" data-go="home">← Гильдия</button><div class="pills"><button type="button" class="dust-pill decorbtn" id="decorbtn" aria-label="Вид фермы"><canvas class="pix" id="decoricon"></canvas></button><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill blue" id="waterpill">💧 5</div><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
+      <div class="farm-top"><button class="exit" type="button" data-go="home">← Гильдия</button><div class="pills"><button type="button" class="dust-pill gempill" id="gempill" aria-label="Самоцветная пыль" hidden><canvas class="pix" id="gemicon"></canvas><span id="gemn"></span></button><button type="button" class="dust-pill decorbtn" id="decorbtn" aria-label="Вид фермы"><canvas class="pix" id="decoricon"></canvas></button><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
       <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div><div class="toolbox" id="toolbox"></div>
     </div>
     <div id="farmbanners"></div>
@@ -944,7 +1003,22 @@
   // ---------- играть от имени канала ----------
   var linkPoll = null;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-  function btn(text, cls, fn) { var b = el("button", "btn" + (cls ? " " + cls : ""), text); b.type = "button"; b.onclick = fn; return b; }
+  function btn(text, cls, fn) {
+    var b = el("button", "btn" + (cls ? " " + cls : ""), text); b.type = "button"; b.onclick = fn;
+    if (fn && fn._close) fastTap(b, fn);                         // кнопки закрытия окна — с первого касания, даже если окно ещё катится (его жалоба 2026-11-16)
+    return b;
+  }
+  // На iPhone первое касание по прокручиваемому окну, пока оно катится по инерции, только останавливает прокрутку — click не приходит.
+  // Для кнопок закрытия ловим само касание: палец почти не сдвинулся — закрываем сразу, а следующий click гасим.
+  function fastTap(b, fn) {
+    var p0 = null;
+    b.addEventListener("touchstart", function (e) { var q = e.touches[0]; p0 = [q.clientX, q.clientY, Date.now()]; }, { passive: true });
+    b.addEventListener("touchend", function (e) {
+      if (!p0) return; var q = e.changedTouches[0], ok = Math.abs(q.clientX - p0[0]) < 12 && Math.abs(q.clientY - p0[1]) < 12 && Date.now() - p0[2] < 700; p0 = null;
+      var r = b.getBoundingClientRect(); if (!ok || q.clientX < r.left || q.clientX > r.right || q.clientY < r.top || q.clientY > r.bottom) return;
+      e.preventDefault(); fn();
+    });
+  }
   function renderLink(link, consent) {
     var box = $("linkcard"); clearInterval(linkPoll);
     if (!link) { box.hidden = true; return; }
@@ -2297,42 +2371,185 @@
   }
   // Лунный странник (его идея 2026-11-16): в полнолуние стоит у дорожки за калиткой — капюшон, посох с фонарём, котомка с самоцветом
   var WANDER = [110, 176];                                       // точка у ног
-  function drawWanderer(c, t) {
-    var x = WANDER[0], y = WANDER[1], k = "#1c1430", cl = "#4a3672", cd = "#33244f", fl = Math.sin(t / 380);
-    poly(c, [[x - 6, y + 1], [x + 7, y + 1], [x + 5, y - 1], [x - 4, y - 1]], "rgba(20,30,15,.35)");          // тень
-    disc(c, x + 6, y - 19, 5 + Math.round(fl), "rgba(255,214,120,.16)");                                       // свет фонаря
-    px(c, x + 6, y - 18, 1, 19, "#6e4425"); px(c, x + 6, y - 18, 1, 1, "#a0683a");                             // посох
-    px(c, x + 5, y - 21, 3, 3, "#ffd166"); px(c, x + 6, y - 20, 1, 1, "#fff6df"); px(c, x + 5, y - 22, 3, 1, k);  // фонарь
-    px(c, x - 6, y - 12, 3, 6, "#6e4425"); px(c, x - 6, y - 12, 3, 1, "#a0683a");                              // котомка
-    px(c, x - 5, y - 10, 1, 1, (t / 400 | 0) % 2 ? "#f4f0ff" : "#c4a3ff");                                     // самоцвет мерцает
-    for (var j = 0; j < 11; j++) { var w = 3 + (j >> 1); px(c, x - (w >> 1), y - 11 + j, w, 1, j % 4 ? cl : cd); }   // плащ расширяется книзу
-    px(c, x - 3, y, 7, 1, k);                                                                                  // подол
-    px(c, x - 2, y - 17, 5, 6, cl); px(c, x - 1, y - 18, 3, 1, cl); px(c, x - 3, y - 15, 1, 4, cd); px(c, x + 3, y - 15, 1, 4, cd);   // капюшон
-    px(c, x - 1, y - 15, 3, 3, "#120c1e");                                                                     // тень лица
-    px(c, x - 1, y - 14, 1, 1, "rgba(214,220,255,.9)"); px(c, x + 1, y - 14, 1, 1, "rgba(214,220,255,.9)");   // глаза
-    px(c, x + 4, y - 9, 2, 2, cl);                                                                             // рука на посохе
+  // вид — по его рисункам 2026-11-16 («лунный маг-торговец»): тёмно-фиолетовая фигура без лица с белыми глазами, белая шляпа с пером,
+  // синий плащ со звёздочками, посох-полумесяц с голубым фонарём, раскрытый чемодан с товаром. Нарисован по пикселю, 28×29
+  var WSPR = [
+    ".oo...................oMMo..",
+    "oeeo.................oMo....",
+    "oefFo.....ooo........oMo..o.",
+    ".oefFo...oWWWo.......oMMMMo.",
+    "..oefFo.oWWWWWo.......olo...",
+    "...oeFFoWWWWWWwo.....olLlo..",
+    "....oFFWWWWWWWwwo....oLgLo..",
+    "..oooobBBBBBBBBbooooo.olo...",
+    ".oWWWWWWWWWWWWwwwwvvo.oSo...",
+    "..ovvwwwwwwwwwvvvvoo...S....",
+    "....ooopPPPPPPpoo......S....",
+    "......oqPEPPEPpo.......S....",
+    "......oPPEPPEPpo.......S....",
+    "......oPPPPPPPpo.......S....",
+    ".....otttPPPPtttoo.....S....",
+    "....odCCtpPPptCCco...ooSo...",
+    "...odCyCCcPPcCCsCcoooPPqo...",
+    "...oCCCCCcPPcCCCCCPPPPPo....",
+    "...oCCcCCxyyxCCCcCcooooSo...",
+    "..odCCcCCGPPrCCCcCco...S....",
+    "..oCCycCCGPPrCCscCCo...S....",
+    "..oCCCcCcpPPpcCCcCyCo..S....",
+    ".odCCCcCcpPPpcCCcCCCo..S....",
+    ".oCsCCcCcpPPpcCyCcCCo..S....",
+    ".oCCCCcCccppccCCCcCsCo.S....",
+    "odCCyCCcCccccCcCCcCCCo.z....",
+    "oCCCCCCcCccccCcCCCcCCo.z....",
+    "occcccccccccccccccccco.z....",
+    ".oooooooooooooooooooo..z...."];
+  var WCASE = [
+    ".ooooooooo.",
+    "okKKKKKKKko",
+    "oUUGUUrUUUo",
+    "oUyUUsUUGUo",
+    "oKKKKyKKKKo",
+    "okkkkkkkkko",
+    ".ooooooooo."];
+  var WPAL = { o: "#1a1030", W: "#f4f5fa", w: "#cfd3e0", v: "#9aa0b8", B: "#8a5a32", b: "#5a3618", f: "#b06a34", F: "#7a4420", e: "#d98a4a",
+               P: "#4b2a7c", p: "#3a2064", q: "#5c3794", E: "#ffffff", C: "#2f3a9e", c: "#222a78", d: "#3f52c4", y: "#ffe36e", s: "#9fe8ff", t: "#8fa8e8",
+               x: "#8a5a32", S: "#8a8a9a", z: "#5c5c6c", M: "#e8ecf4", l: "#3a3a4a", L: "#e8feff", g: "#6fe6ff",
+               K: "#7a4a26", k: "#5a3618", U: "#4a2a6a", G: "#4dffa6", r: "#ff5cc0" };
+  var WANDER = [113, 177];                                       // точка у ног
+  // Приход и уход (его просьба 2026-11-16). Приходит по дорожке снизу — раз за полнолуние, когда игрок впервые видит ферму;
+  // уходит тем же путём, когда у него куплены все три камня или полнолуние кончилось. Пока идёт — нажать на него нельзя.
+  var WALK_IN = 3600, WALK_OUT = 4200, WSTART = [92, 222];       // начало пути — на дорожке за нижним краем сцены
+  function wanderPhase(kit) {
+    var w = kit && kit.wanderer, n = Date.now();
+    if (w && w.left > 0 && F.wanderOut && n - F.wanderOut > WALK_OUT && w.until !== F.wanderOutUntil) F.wanderOut = 0;   // снова тут — только в новое полнолуние
+    if (F.wanderOut) { var po = (n - F.wanderOut) / WALK_OUT; return po < 1 ? { ph: "out", p: po } : null; }
+    if (!w || w.left <= 0) return F.wanderBye ? { ph: "stand", p: 1 } : null;                  // всё купили — ушёл (пока прощается в меню — ещё стоит)
+    if (!F.wanderIn) {
+      var key = "wander-in:" + w.until, seen = false; try { seen = localStorage.getItem(key) === "1"; localStorage.setItem(key, "1"); } catch (e) {}
+      F.wanderIn = seen ? 1 : n;                                                               // уже видел его приход — стоит на месте
+      if (!seen) setTimeout(function () { if (F.state) renderFarm(); toast("К калитке пришёл лунный странник"); haptic("success"); }, WALK_IN);
+    }
+    var pi = (n - F.wanderIn) / WALK_IN; return pi < 1 ? { ph: "in", p: pi } : { ph: "stand", p: 1 };
+  }
+  function wanderHere(kit) { var f = wanderPhase(kit); return !!f && f.ph === "stand"; }
+  function wanderLeave() {                                       // собрал чемодан и пошёл
+    if (F.wanderOut) return; F.wanderOut = Date.now(); F.wanderBye = false; F.wanderOutUntil = F.state && F.state.wanderer ? F.state.wanderer.until : 0; if (F.state) renderFarm(); farmAnim();
+    setTimeout(function () { if (F.state) renderFarm(); toast("Странник ушёл"); }, WALK_OUT);
+  }
+  function drawWanderer(c, t, kit) {
+    var f = wanderPhase(kit); if (!f) { F.wanderAt = null; return; }
+    var wx = WANDER[0], wy = WANDER[1], step = 0, alpha = 1, bow = 0;
+    if (f.ph === "in") { var e1 = 1 - Math.pow(1 - f.p, 2); wx = Math.round(WSTART[0] + (WANDER[0] - WSTART[0]) * e1); wy = Math.round(WSTART[1] + (WANDER[1] - WSTART[1]) * e1); step = (t / 150 | 0) % 2; }
+    if (f.ph === "out") {
+      if (f.p < .16) bow = 1;                                                                  // поклон на прощание
+      else { var q = (f.p - .16) / .84, e2 = q * q; wx = Math.round(WANDER[0] + (WSTART[0] - WANDER[0]) * e2); wy = Math.round(WANDER[1] + (WSTART[1] - WANDER[1]) * e2); step = (t / 150 | 0) % 2; alpha = q > .7 ? 1 - (q - .7) / .3 : 1; }
+    }
+    wy -= step;                                                                                // шаг: фигура слегка подпрыгивает
+    c.save(); c.globalAlpha = Math.max(0, alpha);
+    var x0 = wx - 11, y0 = wy - WSPR.length + 1, fl = Math.sin(t / 380), tw = (t / 450 | 0), blink = (t / 120 | 0) % 40 === 0;
+    poly(c, [[x0 - 4, wy + 1 + step], [x0 + 25, wy + 1 + step], [x0 + 22, wy - 2 + step], [x0 - 1, wy - 2 + step]], "rgba(20,30,15,.32)");   // тень
+    disc(c, x0 + 23, y0 + 6, 7 + Math.round(fl), "rgba(170,235,255,.16)"); disc(c, x0 + 23, y0 + 6, 4, "rgba(200,246,255,.22)");           // свет фонаря
+    // живой: дышит (голова со шляпой поднимаются на точку), перо покачивается, изредка косится в сторону (его выбор 2026-11-16)
+    var bob = bow ? 1 : Math.sin(t / 600) > 0 ? -1 : 0, sway = Math.sin(t / (step || f.ph !== "stand" ? 160 : 430)) > .4 ? 1 : 0, glance = f.ph === "stand" && !blink && t % 13000 < 1300;
+    var put = function (rows, ox, oy, live) { rows.forEach(function (row, j) {
+      if (live && glance) row = row.replace("EPPEP", "PEPPE");                                                             // глаза — на точку вправо
+      for (var i = 0; i < row.length; i++) {
+        var ch = row[i]; if (ch === ".") continue;
+        var col = WPAL[ch], head = live && j < 14 && i < 21, dy = head ? bob : 0, dx = live && j < 2 && i < 8 ? sway : 0;  // посох (i ≥ 21) не двигается
+        if (live && ch === "E" && blink) col = WPAL.P;                                                                     // моргнул
+        if ((ch === "y" || ch === "s" || ch === "G" || ch === "r") && (i * 3 + j + tw) % 6 === 0) col = "#ffffff";         // звёздочки и самоцветы мерцают
+        if (live && ch === "g") col = fl > 0 ? "#7fdcff" : "#eafcff";                                                      // огонёк в фонаре
+        px(c, ox + i + dx, oy + j + dy, 1, 1, col);
+        if (head && bob < 0 && j === 13) px(c, ox + i, oy + j, 1, 1, col);                                                     // шея тянется — без щели под головой
+      }
+    }); };
+    put(WSPR, x0, y0, true);
+    var cy0 = y0 + 23 + (f.ph === "stand" || bow ? 0 : -2 - step);
+    put(WCASE, x0 - 5, cy0, false);
+    F.wanderAt = { x: x0, y: y0, cx: x0 - 5, cy: cy0, a: Math.max(0, alpha), t: t };                                        // чемодан у ног; в пути — несёт в руке
+    c.restore();
+  }
+  // меню странника — фиолетовое, инкрустированное кристаллами (его просьба 2026-11-16): кайма из самоцветов, портрет, три гнезда под самоцветы
+  // самоцветы — его рисунки как есть (2026-11-16): art/gems.png, 8 камней 11×12 в ряд; лунный самоцвет — сиреневый (№ 1)
+  var GEMS = new Image(), GEM_W = 11, GEM_H = 12, GEM_N = 8, GEM_MOON = 1;
+  GEMS.onload = function () { if (F.state) renderFarm(); }; GEMS.src = "art/gems.png";
+  // пять самоцветов (его решения 2026-11-16): у каждого своя пыль, своё действие и свой цвет искр
+  var GEMK = {
+    moon:  { img: 1, gem: "p:gem",       dust: "p:gemdust",       name: "Лунный самоцвет",    pyl: "лунную",    does: "растение созреет сразу", done: "созрело!",
+             col: ["#f3e8ff", "#d2b0ff", "#b98aff", "#9a5cff", "#7c3cf0", "#e58cff"], glow: [190, 120, 255], pv: ["#c4a3ff", "#7a52c8", "#f4f0ff"] },
+    crop:  { img: 5, gem: "p:gem-crop",  dust: "p:gemdust-crop",  name: "Бирюзовый самоцвет", pyl: "бирюзовую", does: "урожай с неё будет вдвое больше — и это складывается с дождём, созвездием и другими удвоениями", done: "урожай ×2!", mark: "g2",
+             col: ["#eafff6", "#a8f5d0", "#5fe0b0", "#2fc79a", "#17a085", "#bff7ff"], glow: [60, 210, 170], pv: ["#5fe0b0", "#17a085", "#eafff6"] },
+    seed:  { img: 4, gem: "p:gem-seed",  dust: "p:gemdust-seed",  name: "Травяной самоцвет",  pyl: "травяную",  does: "семян с неё будет втрое больше", done: "семян ×3!", mark: "gseed",
+             col: ["#fbffe0", "#e6f7a0", "#c8ee78", "#a6dd55", "#7fc23a", "#fff3a0"], glow: [170, 220, 90], pv: ["#c8ee78", "#7fc23a", "#fbffe0"] },
+    dew:   { img: 7, gem: "p:gem-dew",   dust: "p:gemdust-dew",   name: "Золотой самоцвет",   pyl: "золотую",   does: "растение больше не попросит полива до самого сбора", done: "полив больше не нужен",
+             col: ["#fff8dc", "#ffe08a", "#ffd166", "#ffb53a", "#e8890c", "#ffe9b0"], glow: [255, 190, 70], pv: ["#ffd166", "#e8890c", "#fff8dc"] },
+    cross: { img: 6, gem: "p:gem-cross", dust: "p:gemdust-cross", name: "Розовый самоцвет",   pyl: "розовую",   does: "при сборе наверняка появится гибрид, а новая форма и новый цвет выпадают втрое чаще", done: "гибрид будет!", mark: "gcross",
+             col: ["#fff0f7", "#ffc2dd", "#ff8fc0", "#ff6aa8", "#e0408a", "#ffd0f0"], glow: [255, 110, 170], pv: ["#ff8fc0", "#e0408a", "#fff0f7"] },
+  }, GEM_ORDER = ["moon", "crop", "seed", "dew", "cross"];
+  function gemOf(id) { for (var i = 0; i < GEM_ORDER.length; i++) { var g = GEMK[GEM_ORDER[i]]; if (g.gem === id || g.dust === id) return { k: GEM_ORDER[i], g: g, dust: g.dust === id }; } return null; }
+  function gemDusts() { return GEM_ORDER.filter(function (k) { var b = barnOf(GEMK[k].dust); return b && b.count > 0; }); }   // какая пыль есть в амбаре
+  function gemDraw(c, k, x, y) { if (GEMS.complete && GEMS.naturalWidth) c.drawImage(GEMS, k * GEM_W, 0, GEM_W, GEM_H, x, y, GEM_W, GEM_H); }
+  var WGEMS = ["#c4a3ff", "#7fdcff", "#ff7ab8", "#ffd166", "#5fd08a"];
+  function wanderBand() {                                        // кайма меню — мои гранёные кристаллы (его решение 2026-11-16: в декоре — они, его камни — сам товар)
+    if (wanderBand.url) return wanderBand.url;
+    var cv = document.createElement("canvas"), n = WGEMS.length, step = 14; cv.width = step * n; cv.height = 11; var c = cv.getContext("2d");
+    px(c, 0, 0, cv.width, 11, "#1a1030"); px(c, 0, 0, cv.width, 1, "#8a5be0"); px(c, 0, 1, cv.width, 1, "#4a2a8c"); px(c, 0, 10, cv.width, 1, "#0e0820");
+    WGEMS.forEach(function (col, k) {
+      var x = k * step + 4, y = 4;                               // по центру тёмной полосы (строки 2–9), а не под самой светлой кромкой
+      px(c, x + 2, y, 1, 1, col); px(c, x + 1, y + 1, 3, 1, col); px(c, x, y + 2, 5, 1, col); px(c, x + 1, y + 3, 3, 1, col); px(c, x + 2, y + 4, 1, 1, col);   // ромб
+      px(c, x + 1, y + 1, 1, 1, "#ffffff"); px(c, x + 2, y + 2, 1, 1, "rgba(255,255,255,.55)");                                                       // блик
+      px(c, x + 3, y + 3, 1, 1, "rgba(0,0,0,.3)"); px(c, x + 2, y + 4, 1, 1, "rgba(0,0,0,.3)");                                                       // тень грани
+      px(c, x + 9, y + 2, 1, 1, "#6a48b8");                                                                                                         // заклёпка между кристаллами
+    });
+    return (wanderBand.url = cv.toDataURL());
   }
   function wandererSheet() {
-    var s = F.state, w = s.wanderer; if (!w) return toast("Странник ушёл — он приходит только в полнолуние");
+    var s = F.state, w = s.wanderer; if (!w) return toast("Странник ушёл");
+    var priceOf = function (g) { return g.price; };              // цена камня не меняется от покупки к покупке (его решение 2026-11-16); травяной дороже
     sheet(function (sh, close) {
-      sh.appendChild(el("h3", "", "Лунный странник"));
-      sh.appendChild(el("div", "sub", "Приходит только в полнолуние и продаёт лунные самоцветы. Смели самоцвет на мельнице — получишь самоцветную пыль. Щепотка пыли на растущую грядку — растение сразу созреет."));
-      var info = el("div", "sub"); sh.appendChild(info);
+      sh.classList.add("wander");
+      var band = el("div", "wband"); band.style.backgroundImage = "url(" + wanderBand() + ")"; sh.appendChild(band);
+      var head = el("div", "whead"), pc = el("canvas", "pix"); pc.width = 34; pc.height = 30; var c = pc.getContext("2d");
+      [[WSPR, 5, 0], [WCASE, 0, 23]].forEach(function (q) { q[0].forEach(function (row, jj) { for (var ii = 0; ii < row.length; ii++) if (row[ii] !== ".") px(c, q[1] + ii, q[2] + jj, 1, 1, WPAL[row[ii]]); }); });
+      head.appendChild(pc);
+      var ht = el("div"); ht.appendChild(el("h3", "", "Лунный странник")); ht.appendChild(el("small", "", "Маг-торговец")); head.appendChild(ht); sh.appendChild(head);
+      var goods = el("div", "wgoods"); sh.appendChild(goods);
+      var pick = el("div", "sub wpick"); sh.appendChild(pick);
       var acts = el("div", "invacts"); sh.appendChild(acts);
+      var free = function () { return (w.goods || []).filter(function (g) { return !g.sold; }); };
+      var sel = (free()[0] || (w.goods || [])[0] || { kind: "moon" }).kind;
       var draw = function () {
-        info.textContent = w.left ? "Сегодня он продаст тебе ещё " + w.left + " " + plural(w.left, "самоцвет", "самоцвета", "самоцветов") + ". У тебя ✦ " + s.dust + "." : "Сегодня он больше ничего не продаст. Приходи в следующее полнолуние.";
-        acts.innerHTML = "";
-        if (!w.left) return;
-        var b = btn("Купить самоцвет · ✦ " + w.price, "", function () {
-          if (!hasBuild(F.state, "barn")) { haptic("error"); return toast("Самоцветы кладут в амбар — сначала построй его"); }
-          if (s.dust < w.price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
-          haptic("success"); s.dust -= w.price; w.left--; barnAdd("p:gem", 1); renderFarm(); draw();
-          toast("Лунный самоцвет — в амбаре. Смели его на мельнице");
-          farmCall("/api/farm/gem", { n: 1 }).catch(function () {});
+        goods.innerHTML = "";
+        (w.goods || []).forEach(function (g) {                                       // пять камней: выбираешь, какой купить
+          var gk = GEMK[g.kind]; if (!gk) return;
+          var b = el("button", (g.kind === sel ? "on" : "") + (g.sold ? " sold" : "")); b.type = "button"; b.setAttribute("aria-label", gk.name);
+          var fl = el("i", "wfloat"), cv = el("canvas", "pix"); itemIcon(cv, gk.gem); fl.appendChild(cv); b.appendChild(fl);          // камни парят над лотком
+          b.appendChild(el("span", "", g.sold ? "куплен" : "✦ " + priceOf(g)));
+          b.onclick = function () { haptic("light"); sel = F.wanderSel = g.kind; draw(); };
+          goods.appendChild(b);
         });
-        if (s.dust < w.price) b.disabled = true; acts.appendChild(b);
+        var cur = (w.goods || []).filter(function (g) { return g.kind === sel; })[0], gk = GEMK[sel], cost = cur ? priceOf(cur) : 0, own = barnOf(gk.gem), ownD = barnOf(gk.dust);
+        pick.innerHTML = ""; pick.appendChild(el("b", "", gk.name));
+        pick.appendChild(document.createTextNode("Если посыпать " + gk.pyl + " самоцветную пыль на растущую грядку, " + gk.does + "."
+          + ((own && own.count) || (ownD && ownD.count) ? " У тебя: камней " + ((own && own.count) || 0) + ", пыли " + ((ownD && ownD.count) || 0) + "." : "")));
+        acts.innerHTML = "";
+        if (!w.left || !cur) return;
+        if (cur.sold) { var bs = btn("Этот уже куплен", "ghost", function () {}); bs.disabled = true; acts.appendChild(bs); return; }
+        var b2 = btn("Купить · ✦ " + cost, "", function () {
+          if (!hasBuild(F.state, "barn")) { haptic("error"); return toast("Самоцветы кладут в амбар — сначала построй его"); }
+          if (s.dust < cost) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
+          var bought = cur.kind;                                                      // запомнить ДО переключения выбора — иначе на сервер уходил следующий камень (баг 2026-11-16)
+          haptic("success"); s.dust -= cost; w.left--; w.had = (w.had || 0) + 1; cur.sold = true; barnAdd(gk.gem, 1); renderFarm();
+          if (free().length) sel = free()[0].kind;                                    // дальше — следующий некупленный
+          draw();
+          toast(gk.name + " — в амбаре. Смели его на мельнице");
+          if (!w.left) { F.wanderBye = true; setTimeout(function () { close(); wanderLeave(); }, 1600); }              // всё продал — закрывает чемодан и уходит
+          farmCall("/api/farm/gem", { kind: bought }).catch(function () {});
+        });
+        if (s.dust < cost) b2.disabled = true; acts.appendChild(b2);
       };
       draw(); sh.appendChild(btn("Закрыть", "ghost", close));
+      var band2 = el("div", "wband low"); band2.style.backgroundImage = "url(" + wanderBand() + ")"; sh.appendChild(band2);
     });
   }
   function drawPeek(c) {                                         // чёрный силуэт человека выходит из-за правого угла дома (стена кончается на x = 60)
@@ -2377,7 +2594,11 @@
     c.drawImage(L.front, 0, 0);
     drawOven(c, t, kit, own, now);
     drawShop(c, t, kit, own, mossOn(kit, now));
-    if (own && kit && kit.wanderer) drawWanderer(c, t);
+    if (own) marksOf(kit).forEach(function (m) {                                        // на грядке лежит самоцветная пыль — над ней мерцает искорка её цвета
+      var kk = m.kind === "g2" ? "crop" : m.kind === "gseed" ? "seed" : m.kind === "gcross" ? "cross" : "", q0 = BC[m.idx]; if (!kk || !q0) return;
+      var off = { crop: -7, seed: 0, cross: 7 }[kk], on = ((t / 320 | 0) + m.idx + off) % 3, x1 = q0[0] + off, y1 = q0[1] - 17 - (on === 0 ? 1 : 0), cc = GEMK[kk].col;
+      px(c, x1, y1 - 1, 1, 3, cc[2]); px(c, x1 - 1, y1, 3, 1, cc[2]); px(c, x1, y1, 1, 1, on ? cc[0] : "#ffffff");
+    });
     drawMossOver(c, kit, now, t, L, seed + roofKey(kit) + ["barn", "mill", "oven", "shop"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
     if (CHEST_ON) drawChest(c, own);
     if (own) drawFx(c, t);
@@ -2385,6 +2606,7 @@
       var ph = (t / 1800 + i / 4) % 1;
       disc(c, L.smoke[0] + Math.round(Math.sin(ph * 5 + i) * 2 + ph * 5), L.smoke[1] - Math.round(ph * 16), Math.round(1 + ph * 2), "rgba(240,235,255," + (.55 * (1 - ph)).toFixed(2) + ")");
     }
+    if (own) F.lightsAt = { glows: L.glows, lamps: L.lamps, oven: hasBuild(kit, "oven") && jobsOf(kit, "oven").some(function (j) { return j.ready > now; }) };   // для ореолов в полнолуние
     L.glows.forEach(function (g, k) {                                              // тёплый свет окон и фонарика дышит
       var pu = .5 + .5 * Math.sin(t / 900 + k * 1.7);
       disc(c, g[0], g[1], g[2], "rgba(255,206,120," + (.08 + .09 * pu).toFixed(2) + ")");
@@ -2400,6 +2622,7 @@
       for (var j = 0; j < rowsH.length; j++) for (var q = 0; q < 6; q++) { var ch = rowsH[j][q]; if (ch !== ".") px(c, hx + q, hy + j + (j < 2 ? peck : 0), 1, 1, HENPAL[ch]); }
       px(c, hx, hy + 5, 5, 1, "rgba(40,60,20,.3)");
     }
+    if (own && kit) drawWanderer(c, t, kit);                                        // странник — после кур: они ходят за ним, а не по нему (его правка 2026-11-16)
     for (i = 0; i < 3; i++) {                                                      // бабочки
       var s = t / 1000 + i * 2.1, bx = Math.round(30 + i * 48 + Math.sin(s * .6 + i) * 22), by = Math.round(56 + i * 40 + Math.sin(s * 1.3 + i * 2) * 9);
       var colr = ["#ffffff", "#ffd166", "#ff8fc0"][i];
@@ -2408,6 +2631,7 @@
       px(c, bx, by, 1, 1, "#3a2a1a");
     }
     var wid = (weatherNow() || {}).id;
+    if (own) F.lit = wid === "fullmoon" ? farmLights(c, L, kit, now) : null;
     if (wid === "shower") {                                                        // лунный ливень: косые голубые струи
       c.fillStyle = "rgba(60,90,160,.10)"; c.fillRect(0, 0, FW, FH);
       for (i = 0; i < 70; i++) { var sy = ((t / 9 + i * 53) % (FH + 16)) - 16, sx = (i * 29 + sy * .25) % FW; seg(c, sx, sy, sx + 1, sy + 4, i % 4 ? "rgba(160,205,255,.75)" : "#ffffff"); }
@@ -2579,7 +2803,20 @@
     }
   }
   function itemIcon(cv, id) {
+    var gk = gemOf(id); cv.classList.toggle("gemfx", !!gk);
+    if (gk) cv.style.animationDelay = -(Date.now() % 2800) + "ms";                            // ячейки пересоздаются — фаза свечения общая, без рывка                                  // самоцветы и их пыль переливаются и светятся (его просьба 2026-11-16)
+    if (gk) cv.style.setProperty("--gem", gk.g.glow.join(",")); else cv.style.removeProperty("--gem");
     if (id.indexOf("p:") !== 0) return fruitIcon(cv, itemOf(id));
+    if (gk && !gk.dust && GEMS.complete && GEMS.naturalWidth) {                                // самоцвет — его рисунок как есть
+      cv.classList.remove("myth"); cv.width = 15; cv.height = 14; var gc0 = cv.getContext("2d"); gc0.clearRect(0, 0, 15, 14);
+      px(gc0, 3, 13, 9, 1, "rgba(40,25,10,.3)"); gemDraw(gc0, gk.g.img, 2, 1); return;
+    }
+    if (gk && gk.dust) {                                                                       // мешочек пыли — в цвет своего камня
+      cv.classList.remove("myth"); var pr = DISH["p:gemdust"], gc1 = cv.getContext("2d"), map = { v: gk.g.pv[0], V: gk.g.pv[1], s: gk.g.pv[2] };
+      cv.width = 16; cv.height = pr.length + 2; gc1.clearRect(0, 0, 16, cv.height); px(gc1, 3, cv.height - 1, 10, 1, "rgba(40,25,10,.3)");
+      pr.forEach(function (row, jj) { for (var ii = 0; ii < row.length; ii++) if (row[ii] !== ".") px(gc1, 1 + ii, 1 + jj, 1, 1, map[row[ii]] || PP[row[ii]]); });
+      return;
+    }
     var it0 = F.state && itemOf(id); cv.classList.toggle("myth", !!(it0 && it0.myth));   // еда с мифическим — светится
     var rows = DISH["p:" + recKey(id)] || DISH["p:bread"], c = cv.getContext("2d"), h = rows.length + 2; cv.width = 16; cv.height = Math.max(12, h); c.clearRect(0, 0, 16, cv.height);
     var it = F.state && itemOf(id), pal = it && it.color && it.color !== "sun" ? PAL[it.color] : null;
@@ -2640,10 +2877,28 @@
   }
   function fxLayer(cv) {
     if (cv._fx) return cv._fx;
-    var box = el("div", "fxbox"), bloom = el("canvas", "bloom"), wash = el("div", "wash"), fx = el("canvas", "fxc");
-    box.appendChild(bloom); box.appendChild(wash); box.appendChild(fx);
+    var box = el("div", "fxbox"), bloom = el("canvas", "bloom"), wash = el("div", "wash"), fx = el("canvas", "fxc"), litg = el("canvas", "lit glow"), lit = el("canvas", "lit");
+    box.appendChild(bloom); box.appendChild(wash); box.appendChild(litg); box.appendChild(lit); box.appendChild(fx);   // искры и лучи — поверх всего
     cv.parentNode.insertBefore(box, cv.nextSibling);
-    return (cv._fx = { box: box, bloom: bloom, wash: wash, fx: fx });
+    return (cv._fx = { box: box, bloom: bloom, wash: wash, fx: fx, lit: lit, litg: litg });
+  }
+  // Огни в полнолуние (его правка 2026-11-16): ночной тон ложится на всю ферму, а огни — окна и фонарик дома, фонари калитки,
+  // огонь в печи, светящиеся детали странника — копируются чёткими пикселями поверх него; ниже — та же копия, размытая: ореол их же цвета.
+  function farmLights(c, L, kit, now) {
+    var src = c.getImageData(0, 0, FW, FH).data, out = document.createElement("canvas"); out.width = FW; out.height = FH;
+    var oc = out.getContext("2d"), od = oc.createImageData(FW, FH), d = od.data;
+    var take = function (x, y, test) { if (x < 0 || y < 0 || x >= FW || y >= FH) return; var k = (y * FW + x) * 4, r = src[k], g = src[k + 1], b = src[k + 2];
+      if (src[k + 3] && test(r, g, b)) { d[k] = r; d[k + 1] = g; d[k + 2] = b; d[k + 3] = 255; } };
+    var area = function (x0, y0, x1, y1, test) { for (var y = y0; y <= y1; y++) for (var x = x0; x <= x1; x++) take(x, y, test); };
+    var warm = function (r, g, b) { return r > 185 && g > 130 && b < 175 && r - b > 55; };
+    (L.glows || []).forEach(function (g) { area(g[0] - g[2] - 1, g[1] - g[2] - 1, g[0] + g[2] + 1, g[1] + g[2] + 1, warm); });   // окна и фонарик
+    (L.lamps || []).forEach(function (l) { area(l[0] - 2, l[1] - 3, l[0] + 2, l[1] + 2, function (r, g, b) { return g > 200 && b > 170; }); });   // фонари калитки
+    if (hasBuild(kit, "oven") && jobsOf(kit, "oven").some(function (j) { return j.ready > now; }))
+      area(OVEN[0] - 14, OVEN[1] - 22, OVEN[0] + 14, OVEN[1] + 2, function (r, g, b) { return r > 240 && b < 40; });   // огонь в печи — только пламя (его цвета 255/·/5), кирпич не трогаем
+    var wa = F.wanderAt;
+    if (wa && wa.a > .5) [[WSPR, wa.x, wa.y], [WCASE, wa.cx, wa.cy]].forEach(function (q) { q[0].forEach(function (row, j) { for (var i = 0; i < row.length; i++)
+      if ("LgysGrE".indexOf(row[i]) >= 0) area(q[1] + i - 1, q[2] + j - 1, q[1] + i + 1, q[2] + j + 1, function (r, g, b) { return r + g + b > 420; }); }); });   // фонарь, звёзды, склянки, камни, глаза
+    oc.putImageData(od, 0, 0); return out;
   }
   function hash01(n) { var x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
   function star4(c, x, y, r, a, col) {                                               // четырёхлучевая искра
@@ -2656,14 +2911,96 @@
     var myth = ((f && f.plots) || []).filter(function (p) { return p && p.crop && ss[p.crop] && ss[p.crop].myth && BC[p.idx]; });
     var near = myth.length ? marksOf(f).filter(function (k) { return k.kind === "myth" && BC[k.idx]; }) : [];
     var mossy = !!(m && m.kind === "moss"), fire = !!(m && m.kind === "fire") && ((f && f.plots) || []).some(function (p) { return p && p.burning; });
-    L.box.classList.toggle("sun", sun); L.box.classList.toggle("moss", mossy); L.box.classList.toggle("fire", fire);
-    if (!sun && !mossy && !fire && !stars.length && !myth.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    var wtd = f && f.weather && f.weather.today, moonlit = !!(wtd && wtd.id === "fullmoon") && !sun && !fire;   // полнолуние — ферма в лунном свете (его просьба 2026-11-16)
+    L.box.classList.toggle("sun", sun); L.box.classList.toggle("moss", mossy); L.box.classList.toggle("fire", fire); L.box.classList.toggle("moon", moonlit);
+    var gfx = cv.id === "scenecv" ? (F.gemFx = (F.gemFx || []).filter(function (g) { return t - g.t0 < 1900; })) : [];   // самоцветная пыль: фиолетовые искры
+    var millGem = [];                                                                   // мельница мелет самоцвет — какой (его просьба 2026-11-16)
+    if (f && hasBuild(f, "mill")) jobsOf(f, "mill").forEach(function (j) { var rk = String(j.recipe).split("@")[0], gk0 = rk.indexOf("gemdust") === 0 && gemOf("p:" + rk);
+      if (gk0 && j.ready > now && millGem.indexOf(gk0.k) < 0) millGem.push(gk0.k); });
+    if (!sun && !mossy && !fire && !moonlit && !stars.length && !myth.length && !gfx.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
     var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
     var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
     if (L.fx.width !== cw || L.fx.height !== ch) { L.fx.width = cw; L.fx.height = ch; }
     var c = L.fx.getContext("2d"), kx = cw / FW, ky = ch / FH; c.clearRect(0, 0, cw, ch);
+    [L.lit, L.litg].forEach(function (lc) {                                              // огни поверх ночного тона
+      var on = moonlit && cv.id === "scenecv" && F.lit; lc.hidden = !on; if (!on) return;
+      if (lc.width !== FW) { lc.width = FW; lc.height = FH; }
+      if (lc._src !== F.lit) { lc._src = F.lit; var lx = lc.getContext("2d"); lx.clearRect(0, 0, FW, FH); lx.drawImage(F.lit, 0, 0); }
+    });
     c.save(); c.globalCompositeOperation = "lighter";
+    // самоцветная пыль (его просьба 2026-11-16): пыль сыплется на грядку, вспышка с кольцом — и искры разлетаются вверх
+    // искра — как снежинка на свету (его правка 2026-11-16: «искриться, переливаться, а не как вырезанные из бумаги»):
+    // мягкий ореол, тонкие лучи крестом и косые лучики короче, белая сердцевина; лучи мерцают и чуть поворачиваются, цвет переливается к белому
+    var spark = function (x, y, r, col, a, seed) {
+      if (a <= 0) return; a = Math.min(1, a); seed = seed || 0;
+      var tw = .55 + .45 * Math.sin(t / 110 + seed * 2.7), rot = Math.sin(t / 900 + seed) * .35, L = r * (2.6 + 1.8 * tw), l2 = L * .55, op = c.globalCompositeOperation;
+      var hal = c.createRadialGradient(x, y, 0, x, y, r * 3.2); hal.addColorStop(0, col); hal.addColorStop(1, "rgba(255,255,255,0)");
+      c.globalCompositeOperation = "lighter"; c.globalAlpha = a * .45; c.fillStyle = hal; c.beginPath(); c.arc(x, y, r * 3.2, 0, 7); c.fill();
+      c.lineCap = "round"; c.strokeStyle = col; c.globalAlpha = a * (.6 + .4 * tw);
+      for (var k = 0; k < 4; k++) { var an = rot + k * Math.PI / 2, ll = k % 2 ? L * .85 : L; c.lineWidth = Math.max(.6, r * .42); c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(an) * ll, y + Math.sin(an) * ll); c.stroke(); }
+      c.globalAlpha = a * .55 * tw; c.lineWidth = Math.max(.5, r * .28);
+      for (k = 0; k < 4; k++) { var an2 = rot + Math.PI / 4 + k * Math.PI / 2; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(an2) * l2, y + Math.sin(an2) * l2); c.stroke(); }
+      c.globalCompositeOperation = op; c.globalAlpha = a; c.fillStyle = tw > .8 ? "#ffffff" : col; c.beginPath(); c.arc(x, y, r * (.55 + .35 * tw), 0, 7); c.fill();
+      c.fillStyle = "#ffffff"; c.globalAlpha = a * (.5 + .5 * tw); c.beginPath(); c.arc(x, y, r * .38, 0, 7); c.fill();
+    };
+    if (gfx.length) c.globalCompositeOperation = "source-over";                        // обычное наложение: на светлой траве сложение цветов выбеливало фиолетовый
+    gfx.forEach(function (g) {
+      var p = BC[g.i]; if (!p) return;
+      var GK = GEMK[g.k] || GEMK.moon, GCOL = GK.col, gr = GK.glow, dk = [Math.round(gr[0] * .65), Math.round(gr[1] * .6), Math.round(gr[2] * .9)];   // цвет искр и свечения — как у пыли
+      var bx = p[0] * kx, by = (p[1] - 3) * ky, e = (t - g.t0) / 1900, n, ga = Math.sin(Math.min(1, e * 1.1) * Math.PI);
+      var gl = c.createRadialGradient(bx, by, 0, bx, by, 26 * kx); gl.addColorStop(0, "rgba(" + gr.join(",") + "," + (.72 * ga) + ")"); gl.addColorStop(.45, "rgba(" + dk.join(",") + "," + (.45 * ga) + ")"); gl.addColorStop(1, "rgba(" + dk.join(",") + ",0)");
+      c.globalAlpha = 1; c.fillStyle = gl; c.beginPath(); c.ellipse(bx, by, 26 * kx, 17 * ky, 0, 0, 7); c.fill();
+      for (n = 0; n < 20; n++) {                                                       // пыль сыплется сверху, закручиваясь
+        var ph = e / .42 - hash01(n + g.i * 7) * .55; if (ph < 0 || ph > 1) continue;
+        spark(bx + (hash01(n * 3 + 1) - .5) * 24 * kx * (1 - ph * .65) + Math.sin(ph * 7 + n) * 2.5 * kx, by - (1 - ph) * (1 - ph) * 42 * ky,
+              (.9 + hash01(n + 5) * 1.2) * dpr, GCOL[n % GCOL.length], Math.sin(ph * Math.PI) * 1.2, n + g.i);
+      }
+      var rp = (e - .36) / .4;
+      if (rp > 0 && rp < 1) { c.globalAlpha = 1 - rp; c.strokeStyle = GCOL[1]; c.lineWidth = (2.8 * (1 - rp) + .4) * dpr; c.beginPath(); c.ellipse(bx, by, (4 + rp * 24) * kx, (2.5 + rp * 14) * ky, 0, 0, 7); c.stroke(); }   // кольцо вспышки
+      for (n = 0; n < 26; n++) {                                                       // искры разлетаются и поднимаются
+        var sp = (e - .36 - hash01(n + 11) * .18) / .6; if (sp < 0 || sp > 1) continue;
+        var ang = hash01(n * 5 + 2) * 6.283, rad = (5 + hash01(n + 3) * 19) * (1 - Math.pow(1 - sp, 2));
+        spark(bx + Math.cos(ang) * rad * kx, by + Math.sin(ang) * rad * ky * .5 - sp * sp * 28 * ky, (1 + hash01(n + 8) * 1.6) * dpr * (1 - sp * .5),
+              GCOL[(n + 1) % GCOL.length], (1 - sp) * 1.3, n * 3 + g.i);
+      }
+    });
+    c.globalAlpha = 1; c.globalCompositeOperation = "lighter";
+    if (millGem.length) c.globalCompositeOperation = "source-over";                    // как у пыли: сложение цветов выбеливает
+    if (moonlit) {                                                                       // лунные лучи и серебристые пылинки
+      var mx = 96 * kx, my = 14 * ky, ml = Math.hypot(cw, ch) * 1.1;
+      for (var rb = 0; rb < 6; rb++) {
+        var ang2 = Math.PI * (.3 + rb * .085) + Math.sin(t / 5200 + rb * 1.7) * .025, wd2 = .03 + .02 * hash01(rb + 40), a3 = .022 + .018 * (.5 + .5 * Math.sin(t / 2300 + rb * 2.3));
+        var g3 = c.createLinearGradient(mx, my, mx + Math.cos(ang2) * ml, my + Math.sin(ang2) * ml);
+        g3.addColorStop(0, "rgba(225,235,255," + (a3 * 2) + ")"); g3.addColorStop(.6, "rgba(180,200,255," + a3 + ")"); g3.addColorStop(1, "rgba(170,190,255,0)");
+        c.fillStyle = g3;
+        for (var bl = 0; bl < 3; bl++) {                                                 // три слоя разной ширины — край луча размыт, без резких граней
+          var wk = wd2 * (1 + bl * .7); c.globalAlpha = bl ? .55 : 1; c.beginPath(); c.moveTo(mx, my);
+          c.lineTo(mx + Math.cos(ang2 - wk) * ml, my + Math.sin(ang2 - wk) * ml); c.lineTo(mx + Math.cos(ang2 + wk) * ml, my + Math.sin(ang2 + wk) * ml); c.closePath(); c.fill();
+        }
+        c.globalAlpha = 1;
+      }
+      var mg = c.createRadialGradient(mx, my, 0, mx, my, 34 * kx); mg.addColorStop(0, "rgba(235,240,255,.55)"); mg.addColorStop(1, "rgba(200,215,255,0)");
+      c.fillStyle = mg; c.beginPath(); c.arc(mx, my, 34 * kx, 0, 7); c.fill();                   // ореол вокруг луны
+      for (var mq = 0; mq < 22; mq++) {                                                  // пылинки медленно опускаются в лунном свете
+        var mph = (t / 14000 + hash01(mq + 60)) % 1, px0 = hash01(mq + 61) * cw + Math.sin(t / 2600 + mq) * 5 * dpr, py0 = (hash01(mq + 62) * .25 + mph * .8) * ch;
+        c.globalAlpha = .55 * Math.sin(mph * Math.PI) * (.6 + .4 * Math.sin(t / 300 + mq * 3)); c.fillStyle = "#eef3ff"; c.beginPath(); c.arc(px0, py0, (.8 + hash01(mq + 63)) * dpr, 0, 7); c.fill();
+      }
+      c.globalAlpha = 1;
+    }
+    millGem.forEach(function (k, mi) {                                                  // свечение вокруг мельницы и искры из-под крыльев — в цвет камня
+      var GK2 = GEMK[k], gr2 = GK2.glow, cx = (MILL[0] + 2) * kx, cy = (MILL[1] - 14) * ky, pulse = .75 + .25 * Math.sin(t / 500 + mi * 2);
+      var gl2 = c.createRadialGradient(cx, cy, 0, cx, cy, 32 * kx); gl2.addColorStop(0, "rgba(" + gr2.join(",") + "," + (.7 * pulse) + ")"); gl2.addColorStop(.5, "rgba(" + gr2.join(",") + "," + (.32 * pulse) + ")"); gl2.addColorStop(1, "rgba(" + gr2.join(",") + ",0)");
+      c.globalAlpha = 1; c.fillStyle = gl2; c.beginPath(); c.ellipse(cx, cy, 32 * kx, 32 * ky, 0, 0, 7); c.fill();
+      c.globalCompositeOperation = "lighter";                                           // искры — ярко, поверх ночного тона
+      for (var n2 = 0; n2 < 14; n2++) {
+        var ph2 = (t / 2200 + hash01(n2 * 7 + mi * 3)) % 1, a2 = hash01(n2 + 31) * 6.283, r2 = (4 + ph2 * 16) * kx;
+        spark(cx + Math.cos(a2 + t / 1800) * r2, cy + 6 * ky + Math.sin(a2 + t / 1800) * r2 * .5 - ph2 * 22 * ky, (1 + hash01(n2 + 4) * 1.3) * dpr,
+              GK2.col[n2 % GK2.col.length], Math.sin(ph2 * Math.PI) * 1.4, n2 * 5 + mi);
+      }
+      c.globalCompositeOperation = "source-over";
+    });
+    c.globalAlpha = 1; c.globalCompositeOperation = "lighter";
     if (sun) {
       if (L.bloom.width !== FW) { L.bloom.width = FW; L.bloom.height = FH; }
       var bc = L.bloom.getContext("2d"); bc.clearRect(0, 0, FW, FH); bc.drawImage(cv, 0, 0);   // свечение ярких мест: копия фермы, размытая CSS-фильтром
@@ -2787,7 +3124,11 @@
   function sheet(build) {
     var w = document.createElement("div"); w.className = "sheet-wrap"; var sh = document.createElement("div"); sh.className = "sheet";
     var shut = function () { w.remove(); if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked"); };
+    shut._close = true;                                          // кнопки «Готово» / «Закрыть» с этой функцией срабатывают с первого касания
     w.appendChild(sh); w.onclick = function (e) { if (e.target === w) shut(); }; build(sh, shut);
+    var x = document.createElement("button"); x.type = "button"; x.className = "shx"; x.setAttribute("aria-label", "Закрыть"); x.textContent = "✕";   // крестик — ещё один способ закрыть (его просьба 2026-11-16)
+    x.onclick = function (e) { e.stopPropagation(); haptic("light"); w.click(); }; fastTap(x, function () { haptic("light"); w.click(); });   // как нажатие мимо окна — срабатывают и его обработчики закрытия
+    if (!sh.classList.contains("book")) sh.insertBefore(x, sh.firstChild);             // справочнику крестик не нужен (его правка): у него свои «Закрыть» и листание sh.insertBefore(x, sh.firstChild);
     // палец по окну не должен прокручивать страницу под ним: гасим жест, кроме прокрутки самого окна, если оно длинное
     // (прокручиваемые блоки внутри окна — страница справочника — тоже листаются: их жест не гасим)
     w.addEventListener("touchmove", function (e) {
@@ -2879,9 +3220,9 @@
       ch.style.left = (CHEST[0] - 3) / FW * 100 + "%"; ch.style.top = (CHEST[1] - 14) / FH * 100 + "%"; ch.style.width = 16 / FW * 100 + "%"; ch.style.height = 16 / FH * 100 + "%";
       var nch = (F.state.chest || []).reduce(function (a, it) { return a + it.count; }, 0);
       ch.appendChild(el("span", "lbl water", nch ? "сундук · " + nch : "сундук")); ch.onclick = function () { haptic("light"); chestSheet(); }; box.appendChild(ch); }
-      if (F.state.wanderer) { var wb = document.createElement("button"); wb.type = "button"; wb.className = "plot well kitchen";   // странник в полнолуние
-        wb.style.left = (WANDER[0] - 8) / FW * 100 + "%"; wb.style.top = (WANDER[1] - 24) / FH * 100 + "%"; wb.style.width = 18 / FW * 100 + "%"; wb.style.height = 26 / FH * 100 + "%";
-        wb.appendChild(el("span", "lbl water", "странник")); wb.onclick = function () { haptic("light"); wandererSheet(); }; box.appendChild(wb); }
+      if (wanderHere(F.state)) { var wb = document.createElement("button"); wb.type = "button"; wb.className = "plot well kitchen";   // странник в полнолуние
+        wb.style.left = (WANDER[0] - 16) / FW * 100 + "%"; wb.style.top = (WANDER[1] - 30) / FH * 100 + "%"; wb.style.width = 34 / FW * 100 + "%"; wb.style.height = 32 / FH * 100 + "%";
+        wb.setAttribute("aria-label", "Лунный странник"); wb.onclick = function () { haptic("light"); wandererSheet(); }; box.appendChild(wb); }
       var sb = document.createElement("button"); sb.type = "button"; sb.className = "plot well kitchen";       // магазин: заказы на блюда
       var shopUp = hasBuild(F.state, "shop") ? 42 : 30;                                                     // подпись — над навесом, у пустого участка — над ним
       sb.style.left = (SHOP[0] - 24) / FW * 100 + "%"; sb.style.top = (SHOP[1] - shopUp) / FH * 100 + "%"; sb.style.width = 48 / FW * 100 + "%"; sb.style.height = (shopUp + 4) / FH * 100 + "%";
@@ -2915,7 +3256,7 @@
     var now = farmNow();
     setText($("dustpill"), "✦ " + s.dust);
     var rkNow = roofKey(s); if (F.decorIconKey !== rkNow) { F.decorIconKey = rkNow; decorIcon($("decoricon"), ROOF_PAL[rkNow]); }
-    setText($("waterpill"), "💧 " + s.water + "/" + s.can_max);
+    gemPill();
     var ban = $("farmbanners"), mo = monoOf(s, now);
     var sig = JSON.stringify([mo && mo.kind, s.gifts, s.sales]);               // строки пересобираются, только когда меняется их суть — иначе нажатие «теряется»
     var monoLine = function () { var mi = MONO_INFO[mo.kind]; return (mi.icon ? mi.icon + " " : "") + mi.name + (mo.kind === "fire" || mo.kind === "comet" ? "" : " · ещё " + fmtShort(mo.until - now)); };
@@ -2988,7 +3329,8 @@
   function setText(node, t) { if (!node || node._t === t) return; node._t = t; node.textContent = t; }   // тот же текст — не трогаем (значки не мигают)
   function setFarm(st) {
     siblings(st);
-    F.state = st; F.fetched = Date.now(); renderFarm(); if (F.invRedraw) F.invRedraw();
+    var wasW = F.state && F.state.wanderer && F.state.wanderer.left > 0 && F.wanderIn;       // стоял странник, а полнолуние кончилось — уходит
+    F.state = st; F.fetched = Date.now(); if (wasW && !st.wanderer) { F.wanderIn = 0; wanderLeave(); } renderFarm(); if (F.invRedraw) F.invRedraw();
     if (!$("farm-shop").hidden) { setText($("shopdust"), "✦ " + st.dust); if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
   }
   function farmLoop() {
@@ -3079,12 +3421,14 @@
       var gain = s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1, hasB = hasBuild(s, "barn");   // есть амбар — урожай туда, нет — сразу в пыль
       var mk = marksAt(pl.idx), starX = mk.indexOf("star") >= 0, mythX = !inf.s.myth && mk.indexOf("myth") >= 0 && mythNear(pl.idx);
       if (starX) gain *= 2;                                                         // грядка созвездия — урожай ×2
+      var gemX = mk.indexOf("g2") >= 0; if (gemX) gain *= 2;                        // бирюзовая самоцветная пыль — ещё ×2
       var mo2 = monoOf(s, now), mossX = !!(mo2 && mo2.kind === "moss" && inf.s.shape === "moss"); if (mossX) gain *= 2;   // мох захватил ферму — мох ×2
-      s.marks = marksOf(s).filter(function (m) { return !(m.idx === pl.idx && (m.kind === "star" || m.kind === "myth")) && !(inf.s.myth && (m.kind === "myth" || m.kind === "mythripe")); });
+      s.marks = marksOf(s).filter(function (m) { return !(m.idx === pl.idx && (m.kind === "star" || m.kind === "myth" || m.kind === "g2" || m.kind === "gseed" || m.kind === "gcross")) && !(inf.s.myth && (m.kind === "myth" || m.kind === "mythripe")); });
       var pts = " · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков");
       haptic("success"); addFx("harvest", pl.idx, inf.s);
       if (hasB) { floatText(pl.idx, "+" + gain + " в амбар" + pts); barnAdd(inf.s.id, gain); flyFruit(pl.idx, inf.s, gain); }
       else { floatText(pl.idx, "+" + gain * inf.s.dust + " ✦" + pts); s.dust += gain * inf.s.dust; flyDust(pl.idx); }
+      if (gemX) setTimeout(function () { floatText(pl.idx, "самоцвет: урожай ×2!", "big"); }, starX ? 700 : 250);
       if (starX) setTimeout(function () { floatText(pl.idx, "созвездие: урожай ×2!", "big"); }, 250);
       else if (mossX) setTimeout(function () { floatText(pl.idx, "мох разросся: ×2!", "big"); }, 250);
       if (mythX) { var md = gain * inf.s.dust * 2; s.dust += md; setTimeout(function () { floatText(pl.idx, "мифическая пыль +" + md + " ✦", "big"); flyDust(pl.idx); }, 300); }
@@ -3102,12 +3446,21 @@
         if (r.hybrid) setTimeout(function () { showHybrid(r.hybrid, next); }, 500); else if (r.vinyl) setTimeout(next, 500);
       }).catch(function () {});
     }
-    if (F.sel === "gem") {                                                          // самоцветная пыль — созреть сразу
-      var gd2 = barnOf("p:gemdust"); if (!gd2 || gd2.count < 1) { F.sel = "can"; renderHotbar(); return toast("Самоцветная пыль кончилась"); }
-      haptic("success"); addFx("water", pl.idx, inf.s); gd2.count--;
-      pl.grown = inf.s.minutes * 60; pl.wet_from = now; pl.water_until = now; renderFarm();
-      floatText(pl.idx, "самоцветная пыль — созрело!", "big");
-      return farmCall("/api/farm/gemdust", { idx: pl.idx }).catch(function () {});
+    if (F.sel === "gem") {                                                          // самоцветная пыль: что делает — зависит от цвета
+      var kind = F.gemKind, gk = GEMK[kind], gd2 = gk && barnOf(gk.dust);
+      if (!gd2 || gd2.count < 1) { F.sel = "can"; renderHotbar(); return toast("Самоцветная пыль кончилась"); }
+      if ((gk.mark && marksAt(pl.idx).indexOf(gk.mark) >= 0) || (kind === "dew" && pl.water_until - now > 86400)) { haptic("error"); return toast("Эта пыль тут уже посыпана"); }
+      haptic("light"); gd2.count--; (F.gemFx = F.gemFx || []).push({ i: pl.idx, t0: Date.now(), k: kind }); farmAnim(); renderHotbar();
+      var crop0 = pl.crop, mins = inf.s.minutes, g0 = inf.g;
+      setTimeout(function () {                                                       // на вспышке пыль срабатывает
+        var q2 = F.state && F.state.plots[pl.idx]; if (!q2 || q2.crop !== crop0) return;
+        var tn = farmNow();
+        if (kind === "moon") { q2.grown = mins * 60; q2.wet_from = tn; q2.water_until = tn; }
+        else if (kind === "dew") { q2.grown = g0; q2.wet_from = tn; q2.water_until = tn + 10 * 86400; }
+        else F.state.marks = marksOf(F.state).concat([{ idx: pl.idx, kind: gk.mark, n: 0, until: 0 }]);
+        haptic("success"); renderFarm(); floatText(pl.idx, gk.done, "big");
+      }, 700);
+      return farmCall("/api/farm/gemdust", { idx: pl.idx, kind: kind }).catch(function () {});
     }
     if (F.sel === "shovel") {                                                       // лопата — выкопать: семя обратно в инвентарь
       var wild = marksAt(pl.idx).indexOf("wild") >= 0;                          // дикий мох (вырос сам во время мха) — семени не даёт
@@ -3341,17 +3694,33 @@
       haptic("light"); F.sel = "shovel"; renderHotbar(); if (onPick) onPick();
     };
     col.appendChild(b);
-    var gd = barnOf("p:gemdust");                                // самоцветная пыль — третья ячейка, пока она есть в амбаре
-    if (gd && gd.count > 0) {
-      var g = el("button", "slot" + (F.sel === "gem" ? " on" : "")); g.type = "button"; g.dataset.key = "gem"; g.setAttribute("aria-label", "Самоцветная пыль");
-      var gcv = el("canvas", "pix"); itemIcon(gcv, "p:gemdust"); g.appendChild(gcv); g.appendChild(el("span", "n", String(gd.count)));
-      g.onclick = function () {
-        if (F.sel === "gem") return toast("Самоцветная пыль: нажми на растущую грядку — растение сразу созреет");
-        haptic("light"); F.sel = "gem"; renderHotbar(); if (onPick) onPick();
-      };
-      col.appendChild(g);
-    } else if (F.sel === "gem") F.sel = "can";
     return col;
+  }
+  // кнопка пыли — наверху вместо капель (его решение 2026-11-16), видна, пока в амбаре есть пыль; нажатие — меню выбора
+  function gemPill() {
+    var b = $("gempill"); if (!b || !F.state) return;
+    var have = gemDusts();
+    if (!have.length) { b.hidden = true; if (F.sel === "gem") F.sel = "can"; return; }
+    if (have.indexOf(F.gemKind) < 0) F.gemKind = have[0];
+    var gk = GEMK[F.gemKind], key = F.gemKind + ":" + barnOf(gk.dust).count;
+    b.hidden = false; b.classList.toggle("on", F.sel === "gem");
+    if (b.dataset.k !== key) { b.dataset.k = key; itemIcon($("gemicon"), gk.dust); setText($("gemn"), String(barnOf(gk.dust).count)); }
+  }
+  document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("#gempill")) { haptic("light"); gemSheet(renderFarm); } });
+  // выбрал пыль — меню закрылось, пыль выбрана; дальше нажать на грядку. Снять выбор — нажать на любую другую ячейку
+  function gemSheet(onPick) {                                    // какая пыль есть и что каждая делает
+    sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", "Самоцветная пыль"));
+      sh.appendChild(el("div", "sub", "Выбери пыль, потом нажми на растущую грядку. Передумал — нажми на любую другую ячейку, и выбор снимется."));
+      gemDusts().forEach(function (k) {
+        var gk = GEMK[k], b = el("button", "gempick" + (F.gemKind === k ? " on" : "")); b.type = "button";
+        var cv = el("canvas", "pix"); itemIcon(cv, gk.dust); b.appendChild(cv);
+        var tx = el("div"); tx.appendChild(el("b", "", itemName(gk.dust) + " · " + barnOf(gk.dust).count)); tx.appendChild(el("small", "", "Если посыпать на растущую грядку, " + gk.does + ".")); b.appendChild(tx);
+        b.onclick = function () { haptic("light"); F.gemKind = k; F.sel = "gem"; close(); renderHotbar(); if (onPick) onPick(); };
+        sh.appendChild(b);
+      });
+      sh.appendChild(btn("Закрыть", "ghost", close));
+    });
   }
   function makeSlot(key, onPick) {
     var s = F.state, b = el("button", "slot" + (F.sel === key ? " on" : "")); b.type = "button"; b.dataset.key = key;
@@ -3372,7 +3741,8 @@
   }
   function selText() {
     var s = F.state;
-    if (F.sel === "gem") return "Самоцветная пыль: нажми на растущую грядку — растение сразу созреет. Щепоток в амбаре: " + ((barnOf("p:gemdust") || {}).count || 0) + ".";
+    if (F.sel === "gem") { var gkk = GEMK[F.gemKind] || GEMK.moon;
+      return itemName(gkk.dust) + ": нажми на растущую грядку — " + gkk.does + ". Чтобы снять выбор, нажми на любую другую ячейку."; }
     if (F.sel === "shovel") return "Лопата: нажми на посаженную грядку, чтобы выкопать растение — семя вернётся в инвентарь (очки за посадку и полив спишутся). Созревшее лопата просто соберёт.";
     if (F.sel === "can") return "Лейка: воды на " + s.water + " " + plural(s.water, "полив", "полива", "поливов") + ". Сухие грядки поливаются тапом, набрать воду — колодец." + (seedItems().length ? " Выбери семена, чтобы сажать." : "");
     var sx = s.strains[F.sel];
@@ -3381,6 +3751,7 @@
   }
   function renderHotbar() {
     var s = F.state, bar = $("hotbar"); if (!s || !bar) return;
+    gemPill();
     var groups = groupItems();
     if (!isTool(F.sel) && !groups.some(function (g) { return g.ids.indexOf(F.sel) >= 0; })) F.sel = groups.length ? groups[0].key : "can";   // кончились — берём следующие
     if (!isTool(F.sel)) { var gs = groupOf(F.sel); if (gs) { F.pick[gs.name] = F.sel; gs.key = F.sel; } }
@@ -3428,12 +3799,13 @@
         return m;
       };
       // страницы: как играть, гибриды, формы растений, погода, особые свойства, кухня, лавка и пыль, благодарности
-      var N = SHAPES.length + 9;
+      var metGem = ((s.events_seen || []).indexOf("wanderer") >= 0) || !!s.wanderer;   // страница «Самоцветы» — после встречи со странником
+      var N = SHAPES.length + 9 + (metGem ? 1 : 0);
       var rules = function (list) { list.forEach(function (x) { if (!x) return; var d = el("p", "brule"); d.appendChild(el("b", "", x[0] + ". ")); d.append(x[1]); page.appendChild(d); }); };
       var draw = function (dir) {
         var kn = known(), p = F.bookPage = Math.max(0, Math.min(N - 1, F.bookPage)), SH = SHAPES.length;
         // порядок страниц (его решение 2026-11-15): сначала текстовые, потом виды растений, в конце благодарности
-        var ORDER = [0, 1, SH + 2, SH + 3, SH + 7, SH + 4, SH + 8, SH + 5], q;   // SH + 8 — магазин, сразу после кухни
+        var ORDER = [0, 1, SH + 2, SH + 3, SH + 7, SH + 4, SH + 8].concat(metGem ? [SH + 9] : []).concat([SH + 5]), q;   // SH + 8 — магазин, сразу после кухни; SH + 9 — самоцветы
         for (var oi = 2; oi <= SH + 1; oi++) ORDER.push(oi);
         ORDER.push(SH + 6); q = ORDER[p];
         page.innerHTML = ""; page.scrollTop = 0; page.className = "bpage" + (dir ? (dir > 0 ? " fwd" : " back") : "");
@@ -3530,6 +3902,16 @@
             d.appendChild(el("b", "", x[1] + ". " + (ok ? mi.name + ". " : "")));
             d.append(ok ? mi.text : "??? — случится, узнаешь."); page.appendChild(d);
           });
+        } else if (q === SH + 9) {                                                    // самоцветы (его текст 2026-11-16); что странник приходит в полнолуние — не пишем
+          page.appendChild(el("h3", "", "Самоцветы"));
+          page.appendChild(el("p", "brule", "Иногда к калитке приходит лунный странник и продаёт самоцветы. Из них можно получить самоцветную пыль, которую можно посыпать на растущую грядку, и получить её эффект."));
+          var gl = el("div", "recipes");
+          GEM_ORDER.forEach(function (k) {
+            var gk = GEMK[k], row = el("div", "rrow gemrow"), cv = el("canvas", "pix"); itemIcon(cv, gk.dust); row.appendChild(cv);
+            var tx = el("div"); tx.appendChild(el("b", "", itemName(gk.dust) || gk.name)); tx.appendChild(el("small", "", gk.does.charAt(0).toUpperCase() + gk.does.slice(1) + ".")); row.appendChild(tx);
+            gl.appendChild(row);
+          });
+          page.appendChild(gl);
         } else if (q === SH + 8) {                                                    // магазин: заказы на блюда
           page.appendChild(el("h3", "", "Магазин"));
           page.appendChild(el("div", "bsub", "Жители станции заказывают блюда"));
@@ -3552,10 +3934,10 @@
             ["Отменить", "Пока блюдо или мука не готовы, их можно отменить — всё сырьё вернётся в амбар. Готовое не отменить, только забрать."],
             ["Готовое", "Мука и блюда ложатся в амбар. Их можно превратить в пыль — блюдо стоит дороже, чем урожай, из которого оно приготовлено, — продать другим игрокам в лавке или сдать по заказу в магазин. За выпечку дают очки."],
           ]);
-          var rs = (F.state && F.state.recipes) || {}, NEEDW = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:gem": "лунный самоцвет" };
+          var rs = (F.state && F.state.recipes) || {}, NEEDW = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:gem": "лунный самоцвет", "p:gem-crop": "бирюзовый самоцвет", "p:gem-seed": "травяной самоцвет", "p:gem-dew": "золотой самоцвет", "p:gem-cross": "розовый самоцвет" };
           var rl = el("div", "recipes");
           Object.keys(rs).forEach(function (k) {
-            if (k === "gemdust") return;
+            if (k.indexOf("gemdust") === 0) return;                // помол самоцветов — на странице «Самоцветы», не среди рецептов кухни
             var r = rs[k], row = el("div", "rrow"), cv = el("canvas", "pix"); itemIcon(cv, "p:" + k); row.appendChild(cv);
             var tx = el("div"); tx.appendChild(el("b", "", r.name + (r.kind === "mill" ? " · мельница" : "")));
             tx.appendChild(el("div", "rneed", Object.keys(r.needs).map(function (n) { return (NEEDW[n] || n) + " ×" + r.needs[n]; }).join(" + ") + " · ⏱ " + fmtLeft(r.min * 60) + " · ✦ " + r.dust));
@@ -3893,7 +4275,7 @@
     });
   }
   // мельница и печь: построить → выбрать рецепт → ждать → забрать в амбар
-  var NEED = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:gem": "лунный самоцвет" };
+  var NEED = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:gem": "лунный самоцвет", "p:gem-crop": "бирюзовый самоцвет", "p:gem-seed": "травяной самоцвет", "p:gem-dew": "золотой самоцвет", "p:gem-cross": "розовый самоцвет" };
   function fitsNeed(id, need, recipe, sort) {
     var s = F.state;
     if (need === "p:flour") return id === (sort ? "p:flour@" + sort : "p:flour");
@@ -4028,7 +4410,7 @@
   // ниже категории — в каждой маленькие ячейки того, что можно сделать из своего сырья; выбрал → «Испечь» → готовится в свободной ячейке.
   // Пока не готово — можно отменить: сырьё вернётся в амбар.
   var OVEN_CATS = [["Хлеб", ["bread"]], ["Булочки", ["bun"]], ["Похлёбка", ["soup", "stew"]], ["Пироги", ["pie", "pumpkin"]], ["Чай", ["tea"]], ["Джем", ["jam"]]];
-  var MILL_CATS = [["Мука", ["flour"]], ["Самоцветы", ["gemdust"]]];   // самоцветы странника → самоцветная пыль (2026-11-16)
+  var MILL_CATS = [["Мука", ["flour"]], ["Самоцветы", ["gemdust", "gemdust-crop", "gemdust-seed", "gemdust-dew", "gemdust-cross"]]];   // самоцветы странника → самоцветная пыль (2026-11-16)
   function kitchenBody(sh, close, b, kind) {
     var s = F.state, mill = kind === "mill", top = el("div"), body = el("div");
     sh.appendChild(top);
@@ -4095,7 +4477,7 @@
       body.innerHTML = "";
       var rows = kitchenRows(kind, b.max), slot = freeSlot(s, kind), sel = F.ovenSel;
       (mill ? MILL_CATS : OVEN_CATS).forEach(function (c) {
-        if (c[1][0] === "gemdust" && !haveFor("p:gem", "gemdust", "")) return;          // самоцветов нет — категорию не показываем
+        if (c[1][0] === "gemdust" && !GEM_ORDER.some(function (k) { var b0 = barnOf(GEMK[k].gem); return b0 && b0.count > 0; })) return;          // самоцветов нет — категорию не показываем
         var pl = el("div", "order ovcat"); pl.appendChild(el("b", "", c[0]));
         var vs = rows.filter(function (v) { return c[1].indexOf(v.k) >= 0 && v.can >= 1; })
           .sort(function (a, z) { return (a.info.dust || 0) - (z.info.dust || 0); });
