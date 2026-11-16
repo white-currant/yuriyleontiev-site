@@ -34,7 +34,7 @@ export const CROPS: Record<string, Strain> = {
 export const BONUSES: Record<string, string> = {
   rain: "в звёздный дождь урожай ×3, а не ×2",
   lucky: "артефакты выпадают вдвое чаще",
-  hardy: "не засыхает без воды",
+  hardy: "полива хватает вдвое дольше, а без воды не погибнет — просто ждёт",   // его правка 2026-11-16: было «не засыхает без воды» — читалось как «поливать не нужно»
   rich: "иногда урожай двойной — в среднем каждый четвёртый",
   seedy: "при сборе даёт больше семян",
 };
@@ -705,7 +705,7 @@ export async function water(u: any, idx: number) {
   // накопленный рост фиксируем и открываем новое окно полива
   // окно полива открывает ровно один запрос (условие water_until <= сейчас) — двойное нажатие не даст очки дважды
   const done = await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ? AND water_until <= ? RETURNING 1",
-                       [growth(p, t, boost), t, t + s.thirst * 60 * (weatherOn(t) === "drought" ? 0.5 : 1), u.id, idx, t]);
+                       [growth(p, t, boost), t, t + s.thirst * 60 * (weatherOn(t) === "drought" ? 0.5 : 1) * (s.bonus === "hardy" ? 2 : 1), u.id, idx, t]);   // стойкому — вдвое дольше
   if (!done.length) { await q("UPDATE f_farms SET water = water + 1 WHERE user = ?", [u.id]); return { error: "Грядка ещё влажная" }; }
   await q("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)", [u.id, nameOf(u), POINTS_WATER, "Лунная ферма", t]);
   return { points: POINTS_WATER, farm: await farmState(u) };

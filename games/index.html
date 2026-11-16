@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611162220";
+    var BUILD = "202611162239";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1865,6 +1865,7 @@
       px(c, x + i, yb - h + 1 + j, 1, 1, roles[ch] != null ? pal[roles[ch]] : SPR[ch]);
     }
   }
+  function thirstOf(s) { return s.thirst * (s.bonus === "hardy" ? 2 : 1); }      // минут на один полив; стойкому — вдвое дольше (его решение 2026-11-16)
   // рост: растёт только пока полито; сухое дольше dry_limit — засыхает (кроме «стойких»)
   // погода общая для всех: дни лунного ливня поливают грядки сами (интервалы присылает сервер)
   function showers() { return (F.state && F.state.showers) || (F.visiting && F.visiting.showers) || []; }
@@ -1891,11 +1892,11 @@
   }
   function strainCode(s) { return s.base ? "" : "сорт " + s.id.slice(1, 5).toUpperCase(); }
   function describe(s) {                                    // коротко, значками: рост · пыль · полив · шанс артефакта (коллекционного предмета; сейчас это пластинки)
-    return "⏱ " + fmtLeft(s.minutes * 60) + "  ✦ " + s.dust + "  💧 " + fmtLeft(s.thirst * 60) + "  🏺 " + Math.round(s.vinyl * 100) + "%";
+    return "⏱ " + fmtLeft(s.minutes * 60) + "  ✦ " + s.dust + "  💧 " + fmtLeft(thirstOf(s) * 60) + "  🏺 " + Math.round(s.vinyl * 100) + "%";
   }
   function factGrid(s) {                                    // то же, но с подписями — для справочника
     var g = el("div", "facts");
-    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "в пыль: " + s.dust], ["💧", "полив раз в " + fmtLeft(s.thirst * 60)], ["🏺", "артефакт " + Math.round(s.vinyl * 100) + "%"]]
+    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "в пыль: " + s.dust], ["💧", "полив раз в " + fmtLeft(thirstOf(s) * 60)], ["🏺", "артефакт " + Math.round(s.vinyl * 100) + "%"]]
       .forEach(function (x) { var d = el("div"); d.appendChild(el("i", "", x[0])); d.append(x[1]); g.appendChild(d); });
     return g;
   }
@@ -2885,8 +2886,10 @@
   // Огни в полнолуние (его правка 2026-11-16): ночной тон ложится на всю ферму, а огни — окна и фонарик дома, фонари калитки,
   // огонь в печи, светящиеся детали странника — копируются чёткими пикселями поверх него; ниже — та же копия, размытая: ореол их же цвета.
   function farmLights(c, L, kit, now) {
-    var src = c.getImageData(0, 0, FW, FH).data, out = document.createElement("canvas"); out.width = FW; out.height = FH;
-    var oc = out.getContext("2d"), od = oc.createImageData(FW, FH), d = od.data;
+    // один холст на всё время: новый холст на каждом кадре (8 раз в секунду) Safari со временем не выдерживает —
+    // кончается память под холсты, и ферма рисуется кусками (его скрин 2026-11-16)
+    var src = c.getImageData(0, 0, FW, FH).data, out = F.litCv || (F.litCv = document.createElement("canvas")); if (out.width !== FW) { out.width = FW; out.height = FH; }
+    var oc = out.getContext("2d"), od = F.litData || (F.litData = oc.createImageData(FW, FH)), d = od.data; d.fill(0);
     var take = function (x, y, test) { if (x < 0 || y < 0 || x >= FW || y >= FH) return; var k = (y * FW + x) * 4, r = src[k], g = src[k + 1], b = src[k + 2];
       if (src[k + 3] && test(r, g, b)) { d[k] = r; d[k + 1] = g; d[k + 2] = b; d[k + 3] = 255; } };
     var area = function (x0, y0, x1, y1, test) { for (var y = y0; y <= y1; y++) for (var x = x0; x <= x1; x++) take(x, y, test); };
@@ -2898,7 +2901,7 @@
     var wa = F.wanderAt;
     if (wa && wa.a > .5) [[WSPR, wa.x, wa.y], [WCASE, wa.cx, wa.cy]].forEach(function (q) { q[0].forEach(function (row, j) { for (var i = 0; i < row.length; i++)
       if ("LgysGrE".indexOf(row[i]) >= 0) area(q[1] + i - 1, q[2] + j - 1, q[1] + i + 1, q[2] + j + 1, function (r, g, b) { return r + g + b > 420; }); }); });   // фонарь, звёзды, склянки, камни, глаза
-    oc.putImageData(od, 0, 0); return out;
+    oc.putImageData(od, 0, 0); F.litVer = (F.litVer || 0) + 1; return out;
   }
   function hash01(n) { var x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
   function star4(c, x, y, r, a, col) {                                               // четырёхлучевая искра
@@ -2926,7 +2929,7 @@
     [L.lit, L.litg].forEach(function (lc) {                                              // огни поверх ночного тона
       var on = moonlit && cv.id === "scenecv" && F.lit; lc.hidden = !on; if (!on) return;
       if (lc.width !== FW) { lc.width = FW; lc.height = FH; }
-      if (lc._src !== F.lit) { lc._src = F.lit; var lx = lc.getContext("2d"); lx.clearRect(0, 0, FW, FH); lx.drawImage(F.lit, 0, 0); }
+      if (lc._ver !== F.litVer) { lc._ver = F.litVer; var lx = lc.getContext("2d"); lx.clearRect(0, 0, FW, FH); lx.drawImage(F.lit, 0, 0); }
     });
     c.save(); c.globalCompositeOperation = "lighter";
     // самоцветная пыль (его просьба 2026-11-16): пыль сыплется на грядку, вспышка с кольцом — и искры разлетаются вверх
@@ -3474,7 +3477,7 @@
     if (!inf.wet) {                                                                 // сухо — полить
       if (s.water <= 0) { haptic("error"); return toast("Лейка пуста — нажми на колодец, чтобы набрать воды"); }
       haptic("light"); addFx("water", pl.idx, inf.s);
-      pl.grown = inf.g; pl.wet_from = now; pl.water_until = now + inf.s.thirst * 60 * ((weatherNow() || {}).id === "drought" ? .5 : 1); s.water--; renderFarm();
+      pl.grown = inf.g; pl.wet_from = now; pl.water_until = now + thirstOf(inf.s) * 60 * ((weatherNow() || {}).id === "drought" ? .5 : 1); s.water--; renderFarm();
       floatText(pl.idx, "+1 очко", "pts");
       return farmCall("/api/farm/water", { idx: pl.idx }).catch(function () {});
     }
@@ -3568,7 +3571,7 @@
       line("Растёт", fmtLeft(st.minutes * 60) + " под поливом");
       line("Урожай", "✦ " + st.dust + " пыли за штуку");
       line("Очки за сбор", st.points + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
-      line("Полив", "одного хватает на " + fmtLeft(st.thirst * 60));
+      line("Полив", "одного хватает на " + fmtLeft(thirstOf(st) * 60));
       line("Шанс артефакта", Math.round(st.vinyl * 100) + "% с урожая");
       line("Семена с урожая", (st.bonus === "seedy" ? "3–4 (плодовитый)" : "2–3") + " за грядку");
       if (st.bonus) line("Особое свойство", bonuses[st.bonus] || "");
@@ -3779,7 +3782,7 @@
   var CREDITS = [
     { name: "Evilin", what: "за помощь с графикой", url: "https://t.me/EVILINSTUDIO" },
   ];
-  var BONUS_SHORT = { rain: "в звёздный дождь урожай ×3", lucky: "артефакты вдвое чаще", hardy: "не засыхает без воды", rich: "иногда двойной урожай", seedy: "даёт больше семян" };
+  var BONUS_SHORT = { rain: "в звёздный дождь урожай ×3", lucky: "артефакты вдвое чаще", hardy: "полива хватает вдвое дольше, без воды не погибнет", rich: "иногда двойной урожай", seedy: "даёт больше семян" };
   var BN_FRAMES = true;   // рамки сортов с особыми свойствами: готовы, ждут его «пуш»
   var BONUS_NAME = { rain: "Дождевой", lucky: "Счастливый", hardy: "Стойкий", rich: "Щедрый", seedy: "Плодовитый" };
   F.bookPage = 0;
@@ -4091,7 +4094,7 @@
           var st = s.strains[id], r = el("button", "vrow" + (F.vsel === id ? " on" : "")); r.type = "button";
           var cv = el("canvas", "pix"); cropIcon(cv, st, true); r.appendChild(cv); r.appendChild(el("span", "vn", g.ids.length > 1 ? ROMAN[i] || String(i + 1) : ""));
           cols.forEach(function (c) {
-            var vals = g.ids.map(function (x) { return s.strains[x][c[0]]; }), v = st[c[0]], best = c[2] > 0 ? Math.max.apply(null, vals) : Math.min.apply(null, vals),
+            var val = function (z) { return c[0] === "thirst" ? thirstOf(z) : z[c[0]]; }, vals = g.ids.map(function (x) { return val(s.strains[x]); }), v = val(st), best = c[2] > 0 ? Math.max.apply(null, vals) : Math.min.apply(null, vals),
                 worst = c[2] > 0 ? Math.min.apply(null, vals) : Math.max.apply(null, vals), cls = g.ids.length > 1 && best !== worst ? (v === best ? " best" : v === worst ? " worst" : "") : "";
             r.appendChild(el("span", "vc" + cls, c[3](v)));
           });
