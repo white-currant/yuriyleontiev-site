@@ -934,7 +934,9 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
 // по рецептам (сорт муки неважен); платит пылью в 1,5 / 1,7 / 2 раза больше, чем стоят эти блюда. Срок — от суток до трёх
 // (простой — сутки, сложный — двое, особый — трое; его правка 2026-11-15);
 // выполнил — новый заказ через полчаса, срок вышел — сразу новый. Раз в сутки можно заменить неудобный заказ.
-const ORDER_FOR = [DAY, 2 * DAY, 3 * DAY], ORDER_NEXT = 30 * 60, ORDER_X = [1.5, 1.5, 2], ORDER_TIER = ["Простой", "Сложный", "Особый"];   // названия вернул по его просьбе
+// после сдачи новый заказ — не сразу (его правка 2026-11-16: «слишком часто»): простой — через 12 ч (пара в день),
+// сложный — через сутки, особый — через двое суток
+const ORDER_FOR = [DAY, 2 * DAY, 3 * DAY], ORDER_NEXT = [DAY / 2, DAY, 2 * DAY], ORDER_X = [1.5, 1.5, 2], ORDER_TIER = ["Простой", "Сложный", "Особый"];   // названия вернул по его просьбе
 // сложный — ×1,5 цены блюд, особый (дорогие блюда) — ×2
 // простой заказ (его правка 2026-11-15): категория — «Хлеб», «Пироги», «Похлёбка»… («~pie»); подходит любое блюдо категории любого сорта,
 // какие именно отдать — выбирает игрок. Награда — ×1,5 от самого дешёвого блюда категории: дешёвое отдать выгодно, дорогое — в убыток.
@@ -1035,19 +1037,24 @@ export async function fulfil(u: any, slot: number, pick?: Record<string, number>
   const barn = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0 AND strain LIKE 'p:%'", [u.id]);
   const prices = (await productsFor(barn.map((x) => String(x[0])))).products;
   const plan: [string, number][] = [];
-  if (items.length === 1 && String(items[0].r).startsWith("~")) {            // простой заказ: игрок сам выбрал, какие именно блюда (его решение 2026-11-15)
-    if (!pick || typeof pick !== "object") return { error: "Выбери, какие блюда отдать" };
-    const have = new Map(barn.map((x) => [String(x[0]), Number(x[1])])); let sum = 0;
+  const fits = (it: any, id: string) => orderFits(it.r, recipeOf(id)) && (it.g == null || dishGrade(id) <= it.g);
+  // игрок сам выбирает, какие блюда отдать — в простом (его решение 2026-11-15), а с 2026-11-16 и в сложном и особом
+  if (pick && typeof pick === "object") {
+    const have = new Map(barn.map((x) => [String(x[0]), Number(x[1])])), sum = items.map(() => 0);
     for (const [id, k0] of Object.entries(pick)) {
       const k = Math.max(0, Math.floor(Number(k0) || 0)); if (!k) continue;
-      if (!orderFits(items[0].r, recipeOf(id)) || (have.get(id) || 0) < k) return { error: "Таких блюд в амбаре нет" };
-      plan.push([id, k]); sum += k;
+      const i = items.findIndex((it: any) => fits(it, id));
+      if (i < 0) return { error: items.some((it: any) => orderFits(it.r, recipeOf(id))) ? "Это блюдо не подходит по сорту" : "Это блюдо в заказе не нужно" };
+      if ((have.get(id) || 0) < k) return { error: "Таких блюд в амбаре нет" };
+      plan.push([id, k]); sum[i] += k;
     }
-    if (sum !== Number(items[0].n)) return { error: "Нужно выбрать ровно " + items[0].n };
-  } else
+    const bad = items.findIndex((it: any, i: number) => sum[i] !== Number(it.n));
+    if (bad >= 0) return { error: "Нужно выбрать ровно " + items[bad].n + (items.length > 1 ? ": " + (RECIPES[items[bad].r]?.name || "").toLowerCase() : "") };
+  } else if (items.length === 1 && String(items[0].r).startsWith("~")) return { error: "Выбери, какие блюда отдать" };
+  else
   for (const it of items) {                                  // берём сначала самые дешёвые блюда этого рецепта
     let left = Number(it.n);
-    for (const [id, c] of barn.filter((x) => orderFits(it.r, recipeOf(String(x[0]))) && (it.g == null || dishGrade(String(x[0])) <= it.g) && !plan.some((p) => p[0] === String(x[0]) && p[1] >= Number(x[1]))).sort((a, b) => (prices[String(a[0])]?.dust || 0) - (prices[String(b[0])]?.dust || 0))) {
+    for (const [id, c] of barn.filter((x) => fits(it, String(x[0])) && !plan.some((p) => p[0] === String(x[0]) && p[1] >= Number(x[1]))).sort((a, b) => (prices[String(a[0])]?.dust || 0) - (prices[String(b[0])]?.dust || 0))) {
       const take = Math.min(left, Number(c)); if (take > 0) { plan.push([String(id), take]); left -= take; }
     }
     if (left > 0) return { error: "Не хватает блюд: " + (RECIPES[it.r]?.name || it.r).toLowerCase() + (it.g != null ? ", " + GRADE_REQ[it.g] : "") };
@@ -1061,7 +1068,7 @@ export async function fulfil(u: any, slot: number, pick?: Record<string, number>
     return { error: "Не хватает блюд в амбаре" };
   }
   await DB.batch([DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(Number(row[1]), u.id),
-                  DB.prepare("INSERT INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, '[]', 0, 0, ?)").bind(u.id, slot, t + ORDER_NEXT)]);
+                  DB.prepare("INSERT INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, '[]', 0, 0, ?)").bind(u.id, slot, t + ORDER_NEXT[slot])]);
   await logFeed("order", u.id, null, null, Number(row[1]));
   return { dust: Number(row[1]), farm: await farmState(u) };
 }

@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611160206";
+    var BUILD = "202611160416";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3314,11 +3314,11 @@
           page.appendChild(el("div", "bsub", "Жители станции заказывают блюда"));
           rules([
             ["Постройка", "Магазин стоит ✦ 500 и строится в правом нижнем углу луга. Построить его можно, когда уже есть мельница или печь: магазину нужны блюда."],
-            ["Заказы", "На доске всегда три заказа. Простой — на категорию: «Хлеб», «Пироги», «Похлёбка»… Подойдёт любое блюдо этой категории любого сорта, какие именно отдать — выбираешь сам. Сложный и особый — несколько конкретных блюд, у каждого видно, сколько нужно и сколько уже есть в амбаре; из амбара уйдут самые дешёвые подходящие."],
+            ["Заказы", "На доске три заказа, и просят они только блюда из растений, которые у тебя уже открыты. Простой — на категорию: «Хлеб», «Пироги», «Похлёбка»… Подойдёт любое блюдо этой категории любого сорта, какие именно отдать — выбираешь сам. Сложный — несколько конкретных блюд любого сорта, из амбара уйдут самые дешёвые. Особый — блюда нужного сорта: «высшего сорта» или «не ниже первого сорта». У каждого блюда видно, сколько нужно и сколько подходящих уже есть в амбаре."],
             ["Награда", "Все заказы платят больше цены блюд: простой и сложный — в полтора раза, особый — вдвое. Простой считается по самому дешёвому блюду категории: дешёвое сдать выгодно, дорогое — себе в убыток. Например, в «Пироги» тыквенный пирог выгоден, а звёздный — нет."],
             ["Сроки", "На простой заказ — сутки, на сложный — двое, на особый — трое. Не успел — заказ уходит, и на его месте сразу появляется новый."],
-            ["Сдать", "Когда всех блюд хватает, над магазином мигает искорка. В простом заказе сам выбери, какие именно блюда отдать: кнопки «−» и «+» под каждым. В остальных блюда уйдут из амбара — сначала самые дешёвые. Пыль придёт сразу. Новый заказ появится через полчаса."],
-            ["Другой заказ", "Если заказ неудобный — например, нужен джем, а кактусов нет, — его можно заменить на другой. Один раз в сутки, бесплатно."],
+            ["Сдать", "Когда всех блюд хватает, над магазином мигает искорка. В простом заказе сам выбери, какие именно блюда отдать: кнопки «−» и «+» под каждым. В сложном блюда уйдут из амбара — сначала самые дешёвые, в особом — только нужного сорта. Пыль придёт сразу. Новый простой заказ появится через 12 часов, сложный — через сутки, особый — через двое суток."],
+            ["Другой заказ", "Если заказ неудобный, его можно заменить на другой — новый всегда отличается от прежнего. Один раз в сутки, бесплатно."],
           ]);
         } else if (q === SH + 4) {
           page.appendChild(el("h3", "", "Кухня"));
@@ -3650,11 +3650,7 @@
   }
   function haveRecipe(recipe, g) { var n = 0; (F.state.barn || []).forEach(function (it) { if (it.count > 0 && it.strain.indexOf("p:") === 0 && fitsOrder(recipe, it.strain, g)) n += it.count; }); return n; }
   function orderReady(o) { return o.items.every(function (it) { return haveRecipe(it.recipe, it.grade) >= it.n; }); }
-  function takeRecipe(recipe, n, g) {                           // сразу убрать сданные блюда из амбара (сначала дешёвые, как на сервере)
-    var list = (F.state.barn || []).filter(function (it) { return it.count > 0 && it.strain.indexOf("p:") === 0 && fitsOrder(recipe, it.strain, g); })
-      .sort(function (a, b) { return (itemOf(a.strain) || {}).dust - (itemOf(b.strain) || {}).dust; });
-    list.forEach(function (it) { var k = Math.min(n, it.count); it.count -= k; n -= k; });
-  }
+
   function ordersSheet() {
     var s = F.state; if (!s || !s.orders) return;
     sheet(function (sh, close) {
@@ -3674,38 +3670,48 @@
             row.appendChild(el("span", "", it.name + " ×" + it.n + (it.recipe.charAt(0) === "~" ? " · любые" : ""))); row.appendChild(el("b", "", Math.min(have, it.n) + " из " + it.n)); ul.appendChild(row);
           });
           card.appendChild(ul);
-          var anyOrder = o.items.length === 1 && o.items[0].recipe.charAt(0) === "~", pick = null, picked = 0;
-          if (anyOrder) {                                                   // простой заказ: игрок сам выбирает, какие блюда отдать (его решение 2026-11-15)
-            var need = o.items[0].n; pick = F.orderPick = (F.orderPick && F.orderPick.slot === o.slot && F.orderPick.n === need) ? F.orderPick : { slot: o.slot, n: need, ids: {} };
-            Object.keys(pick.ids).forEach(function (id) { var b0 = barnOf(id); if (!b0 || b0.count < pick.ids[id]) pick.ids[id] = b0 ? b0.count : 0; if (!pick.ids[id]) delete pick.ids[id]; });
-            Object.keys(pick.ids).forEach(function (id) { picked += pick.ids[id]; });
-            card.appendChild(el("div", "sub", "Выбери, что отдать: «+» и «−» под блюдом. Выбрано " + picked + " из " + need + "."));
-            var pg = el("div", "invgrid");
-            (F.state.barn || []).filter(function (it) { return it.count > 0 && it.strain.indexOf("p:") === 0 && fitsOrder(o.items[0].recipe, it.strain); })
-              .sort(function (a2, b2) { return (itemOf(a2.strain) || {}).dust - (itemOf(b2.strain) || {}).dust; })
-              .forEach(function (it) {                                   // под ячейкой — «−» и «+», сколько выбрано — на самой ячейке «1/2» (его просьба)
-                var on = pick.ids[it.strain] || 0, wrap = el("div", "pcell"), cell = el("div", "slot" + (on ? " on" : "")); cell.setAttribute("aria-label", itemName(it.strain));
-                var cv2 = el("canvas", "pix"); itemIcon(cv2, it.strain); cell.appendChild(cv2);
-                cell.appendChild(el("span", "n", on ? on + "/" + it.count : String(it.count)));
-                cell.appendChild(el("span", "vars", "✦ " + (itemOf(it.strain) || {}).dust));
-                var set = function (v) { haptic("light"); if (v > 0) pick.ids[it.strain] = v; else delete pick.ids[it.strain]; draw(); };
-                var pm = el("div", "pm"), mn = el("button", "", "−"), pl = el("button", "", "+"); mn.type = pl.type = "button";
-                mn.onclick = function () { if (on > 0) set(on - 1); };
-                pl.onclick = function () { if (on < it.count && picked < need) set(on + 1); else if (picked >= need) { haptic("error"); toast("Уже выбрано " + need); } };
-                mn.disabled = on <= 0; pl.disabled = on >= it.count || picked >= need;
-                pm.appendChild(mn); pm.appendChild(pl); wrap.appendChild(cell); wrap.appendChild(pm); pg.appendChild(wrap);
-              });
-            card.appendChild(pg);
-            if (picked) card.appendChild(btn("Сбросить выбор", "ghost", function () { haptic("light"); pick.ids = {}; draw(); }));
+          // выбор блюд — во всех заказах (его правка 2026-11-16): в простом с нуля, в сложном и особом сразу подставлены самые дешёвые
+          // подходящие — их можно поменять «−» и «+». Каждое блюдо подходит только к одной строке заказа (рецепты в заказе разные).
+          var fitList = function (it) { return (F.state.barn || []).filter(function (b) { return b.count > 0 && b.strain.indexOf("p:") === 0 && fitsOrder(it.recipe, b.strain, it.grade); })
+                                          .sort(function (a2, b2) { return (itemOf(a2.strain) || {}).dust - (itemOf(b2.strain) || {}).dust; }); };
+          var sig = o.items.map(function (it) { return it.recipe + ":" + it.n + ":" + (it.grade == null ? "" : it.grade); }).join("|");
+          F.orderPicks = F.orderPicks || {};
+          var pk = F.orderPicks[o.slot];
+          if (!pk || pk.sig !== sig) {
+            pk = F.orderPicks[o.slot] = { sig: sig, ids: {} };
+            if (o.slot > 0) o.items.forEach(function (it) { var left = it.n; fitList(it).forEach(function (b) { var k = Math.min(left, b.count); if (k > 0) { pk.ids[b.strain] = k; left -= k; } }); });
           }
-          var a = el("div", "invacts"), ready = anyOrder ? picked === o.items[0].n : orderReady(o);
+          Object.keys(pk.ids).forEach(function (id) { var b0 = barnOf(id); if (!b0 || b0.count < pk.ids[id]) pk.ids[id] = b0 ? b0.count : 0; if (!pk.ids[id]) delete pk.ids[id]; });
+          var ready = true, anyPicked = false;
+          card.appendChild(el("div", "sub", "Выбери, что отдать: «+» и «−» под блюдом."));
+          o.items.forEach(function (it) {
+            var list = fitList(it), picked = 0; list.forEach(function (b) { picked += pk.ids[b.strain] || 0; });
+            if (picked !== it.n) ready = false; if (picked) anyPicked = true;
+            card.appendChild(el("div", "sub", (o.items.length > 1 ? it.name + ": в" : "В") + "ыбрано " + picked + " из " + it.n + (list.length ? "." : " — подходящих блюд в амбаре нет.")));
+            if (!list.length) return;
+            var pg = el("div", "invgrid");
+            list.forEach(function (b) {                                  // под ячейкой — «−» и «+», сколько выбрано — на самой ячейке «1/2» (его просьба)
+              var on = pk.ids[b.strain] || 0, wrap = el("div", "pcell"), cell = el("div", "slot" + (on ? " on" : "")); cell.setAttribute("aria-label", itemName(b.strain));
+              var cv2 = el("canvas", "pix"); itemIcon(cv2, b.strain); cell.appendChild(cv2);
+              cell.appendChild(el("span", "n", on ? on + "/" + b.count : String(b.count)));
+              cell.appendChild(el("span", "vars", "✦ " + (itemOf(b.strain) || {}).dust));
+              var set = function (v) { haptic("light"); if (v > 0) pk.ids[b.strain] = v; else delete pk.ids[b.strain]; draw(); };
+              var pm = el("div", "pm"), mn = el("button", "", "−"), pl = el("button", "", "+"); mn.type = pl.type = "button";
+              mn.onclick = function () { if (on > 0) set(on - 1); };
+              pl.onclick = function () { if (on < b.count && picked < it.n) set(on + 1); else if (picked >= it.n) { haptic("error"); toast("Уже выбрано " + it.n); } };
+              mn.disabled = on <= 0; pl.disabled = on >= b.count || picked >= it.n;
+              pm.appendChild(mn); pm.appendChild(pl); wrap.appendChild(cell); wrap.appendChild(pm); pg.appendChild(wrap);
+            });
+            card.appendChild(pg);
+          });
+          if (anyPicked) card.appendChild(btn("Сбросить выбор", "ghost", function () { haptic("light"); pk.ids = {}; draw(); }));
+          var a = el("div", "invacts");
           var give = btn("Сдать · ✦ " + o.reward, "", function () {
-            if (anyOrder ? picked !== o.items[0].n : !orderReady(o)) return;
+            if (!ready) return;
             haptic("success");
-            var body = { slot: o.slot };
-            if (anyOrder) { body.pick = {}; Object.keys(pick.ids).forEach(function (id) { body.pick[id] = pick.ids[id]; var b0 = barnOf(id); if (b0) b0.count -= pick.ids[id]; }); F.orderPick = null; }
-            else o.items.forEach(function (it) { takeRecipe(it.recipe, it.n, it.grade); });
-            F.state.dust += o.reward; var rw = o.reward; o.items = []; o.ready = farmNow() + 1800; renderFarm(); draw(); toast("Заказ сдан: +✦ " + rw);
+            var body = { slot: o.slot, pick: {} };
+            Object.keys(pk.ids).forEach(function (id) { body.pick[id] = pk.ids[id]; var b0 = barnOf(id); if (b0) b0.count -= pk.ids[id]; }); delete F.orderPicks[o.slot];
+            F.state.dust += o.reward; var rw = o.reward; o.items = []; o.ready = farmNow() + [43200, 86400, 172800][o.slot]; renderFarm(); draw(); toast("Заказ сдан: +✦ " + rw);   // как ORDER_NEXT на сервере
             farmCall("/api/farm/order", body).catch(function () {});
           });
           give.disabled = !ready; a.appendChild(give);
