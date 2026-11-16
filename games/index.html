@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611170152";
+    var BUILD = "202611170158";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -829,6 +829,17 @@
   body[data-screen^="farm"] #shopview .wareinfo { position: sticky; bottom: 0; z-index: 5; margin: 24px -16px 0; padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
     background: var(--wood2); box-shadow: 0 -4px 0 var(--ink); }
   body[data-screen^="farm"] #farm-shop .farm-top { background: var(--wood2); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 4px 0 var(--ink); padding-bottom: 12px; }
+  /* лавка — в зелёных акцентах, в цвет кнопки «В лавку» (его просьба 2026-11-17: сразу понятно, что ты в лавке) */
+  body[data-screen="farm-shop"] { --shop: #3f9e7c; --shop2: #2a7058; --shop3: #6fd0a8; --shopbg: #2c5243; }
+  body[data-screen^="farm"] #farm-shop .farm-top { background: var(--shopbg); box-shadow: inset 0 -4px 0 var(--shop), 0 4px 0 var(--ink); }
+  body[data-screen^="farm"] #shopview .wareinfo { box-shadow: inset 0 4px 0 var(--shop), 0 -4px 0 var(--ink); }   /* окно товара — прежний фон, только зелёная полоса сверху (его правка) */
+  body[data-screen^="farm"] #farm-shop .tabs button[aria-pressed="true"] { background: var(--shop); color: #f2fff8; box-shadow: var(--frame), inset 0 -4px 0 var(--shop2), inset 0 3px 0 var(--shop3); }
+  body[data-screen^="farm"] #farm-shop .seg button[aria-pressed="true"] { border-bottom-color: var(--shop3); }
+  body[data-screen^="farm"] #farm-shop .btn:not(.ghost) { background: var(--shop); color: #f2fff8; box-shadow: var(--frame), inset 0 -5px 0 var(--shop2), inset 0 3px 0 var(--shop3); text-shadow: 0 1px 0 #1d4d3c; }
+  body[data-screen^="farm"] #farm-shop .btn:not(.ghost):active, body[data-screen^="farm"] #farm-shop .btn:not(.ghost).pressed { box-shadow: var(--frame), inset 0 -2px 0 var(--shop2); }
+  body[data-screen^="farm"] #farm-shop .vrow.on { background: rgba(111, 208, 168, .16); box-shadow: inset 0 0 0 2px var(--shop3); }
+  body[data-screen^="farm"] #farm-shop .ware.on canvas { filter: drop-shadow(0 0 8px rgba(111, 208, 168, .85)); }
+  body[data-screen^="farm"] #farm-shop .ware.on .tag { background: var(--shop3); color: #12372b; }
   body[data-screen^="farm"] .empty { color: var(--cream2); font-family: var(--pix); }
   body[data-screen^="farm"] .nlist .av { border-radius: 0 !important; box-shadow: 0 -2px 0 var(--ink), 0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink); }
 
