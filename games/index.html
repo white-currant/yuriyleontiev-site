@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611162239";
+    var BUILD = "202611162302";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2360,7 +2360,10 @@
     if (NIGHT_TEST && window.__peekP != null) return window.__peekP;            // проверка: кадр с заданной фазой
     if (NIGHT_HOLD) return .5;
     if (!nightOn("peek") || peekSeen() >= 2) return -1;
-    var t = Date.now(), away = PEEK.last && t - PEEK.last > 3000; PEEK.last = t;
+    var t = Date.now();
+    if (document.querySelector(".sheet-wrap,.thanks-wrap")) { PEEK.blocked = true; return -1; }   // открыто окно — не выходит: силуэт не должен сгореть за окном (его правка)
+    if (PEEK.blocked) { PEEK.blocked = false; if (!PEEK.later && PEEK.at && PEEK.at < t + 4000) PEEK.at = t + 4000 + Math.random() * 8000; }   // окно закрыли — выйдет через 4–12 с
+    var away = PEEK.last && t - PEEK.last > 3000; PEEK.last = t;
     var soon = function () { PEEK.at = t + 20000 + Math.random() * 40000; PEEK.later = false; };
     if (!PEEK.at) soon();
     else if (away && (!PEEK.later || t > PEEK.at)) soon();                       // ушёл с фермы — показ не сгорает: снова вскоре после возвращения
@@ -2566,7 +2569,13 @@
   // амбар «не открывай» (его сценарий 2026-11-16): в такую ночь надпись висит над амбаром. Открыл — внутри всё сгнило и меню в плесени
   // (только с виду, урожай цел). Закрыл и открыл снова — всё как обычно, и надписи до конца ночи больше нет.
   var BARN_DONE = {};
-  function nightOn(kind) { var d = new Date(); if (!NIGHT_TEST && d.getHours() >= 4) return false; return NIGHT_TEST || hstr(nightKey() + kind + nightWho()) % 100 < NIGHT_CHANCE; }
+  // ручные правки отдельных ночей (его просьба 2026-11-16): ночь 16→17.11 силуэт вместо Лололовки — у него самого
+  var NIGHT_SET = { "Mon Nov 16 2026": { peek: { "5b86753093eb8241ea": true, "38f3bae848bfd83135": false } } };
+  function nightOn(kind) {
+    var d = new Date(); if (!NIGHT_TEST && d.getHours() >= 4) return false; if (NIGHT_TEST) return true;
+    var set = ((NIGHT_SET[nightKey()] || {})[kind] || {})[nightWho()]; if (set != null) return set;
+    return hstr(nightKey() + kind + nightWho()) % 100 < NIGHT_CHANCE;
+  }
   function barnDone() { var k = "barnnight:" + nightKey(); if (BARN_DONE[k]) return true; try { return localStorage.getItem(k) === "1"; } catch (e) { return false; } }
   function barnCursed() { return nightOn("barn") && !barnDone(); }
   function setBarnDone() { var k = "barnnight:" + nightKey(); BARN_DONE[k] = 1; try { localStorage.setItem(k, "1"); } catch (e) {} }
