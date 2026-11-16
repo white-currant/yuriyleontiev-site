@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611160416";
+    var BUILD = "202611161048";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -257,7 +257,7 @@
   .links .btn { margin-top: 0; min-height: 42px; font-size: 14px; }
   .nlist { margin-top: 14px; list-style: none; }
   .nlist li { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--card-line); }
-  .nlist .av { width: 36px; height: 36px; }
+  .nlist .av { width: 36px; height: 36px; background-size: cover !important; background-position: center !important; }   /* фото целиком, а не левый верхний угол (жалоба Evilin 2026-11-16) */
   .nlist .t { display: block; font-size: 12px; color: var(--dim); }
   .nlist .nn { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .nlist .nd { font-weight: 700; color: var(--gold); white-space: nowrap; }
