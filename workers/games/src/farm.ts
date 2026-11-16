@@ -215,7 +215,7 @@ async function breed(a: Strain, b: Strain): Promise<Strain> {
   if (r() < MUTATE_COLOR) { color = pick(COLORS, [a.color, b.color]); mutation = mutation ? "both" : "color"; }
   const g: any = {
     shape, color,
-    minutes: Math.round(clamp(avg("minutes") * mut(), 5, 480) / 5) * 5,
+    minutes: Math.round(clamp(avg("minutes") * mut(), 5, 480)),          // до минуты, а не до 5 (его решение 2026-11-16, вопрос Denis: «почему 20, а не 15»)
     dust: Math.round(clamp(avg("dust") * mut(), 1, 400)),
     vinyl: Math.round(clamp(avg("vinyl") * mut(), 0.01, 0.5) * 100) / 100,
     thirst: Math.round(clamp(avg("thirst") * mut(), 10, 240) / 5) * 5,
@@ -224,7 +224,7 @@ async function breed(a: Strain, b: Strain): Promise<Strain> {
   if (r() < 0.1) {                                       // скачок: одно свойство заметно лучше
     const k = ["dust", "minutes", "vinyl", "thirst"][Math.floor(r() * 4)];
     if (k === "dust") g.dust = Math.min(400, Math.round(g.dust * 1.5));
-    if (k === "minutes") g.minutes = Math.max(5, Math.round(g.minutes * 0.7 / 5) * 5);
+    if (k === "minutes") g.minutes = Math.max(5, Math.round(g.minutes * 0.7));
     if (k === "vinyl") g.vinyl = Math.min(0.5, Math.round(g.vinyl * 150) / 100);
     if (k === "thirst") g.thirst = Math.min(240, Math.round(g.thirst * 1.5 / 5) * 5);
   }
