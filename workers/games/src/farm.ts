@@ -134,6 +134,7 @@ async function sortByName(name: string): Promise<Strain | null> {
 // (инвентарь, сундук, грядки, амбар, прилавок, задания кухни, история продаж) переходят на один сорт; количество суммируется.
 // Свои цены на старые варианты сбрасываются к цене игры. Повторно не запускается (g_meta farm_merge_v1).
 export async function mergeSortsOnce() {
+  STRAIN_MEM.clear();                                           // объединение меняет записи сортов — память сбрасываем
   if (!(await q("INSERT OR IGNORE INTO g_meta (key, value) VALUES ('farm_merge_v1', ?) RETURNING 1", [String(now())])).length) return null;
   const rows = await q("SELECT id, name, genes FROM f_strains ORDER BY created, id");
   const by: Record<string, { id: string; g: any }[]> = {};
@@ -194,15 +195,28 @@ async function hashId(g: any) {
   const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(g))));
   return "h" + [...d.slice(0, 5)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+// Экономия чтений базы (2026-11-16, бесплатный лимит D1 — 5 млн строк в сутки): запись о сорте после создания не меняется
+// (id — хэш его свойств), поэтому прочитанные сорта живут в памяти сервера. Раньше каждый запрос фермы перечитывал их заново —
+// это была пятая часть всех чтений. Память у каждого экземпляра сервера своя и короткая; не нашёл в ней — читаем из базы.
+const STRAIN_MEM = new Map<string, { name: string; genes: any }>(), STRAIN_NONE = new Map<string, number>();   // NONE — чего в базе нет (на 10 минут)
 async function strains(ids: string[]): Promise<Record<string, Strain>> {
   const out: Record<string, Strain> = {};
   for (const k in CROPS) if (!CROPS[k].hidden) out[k] = view(CROPS[k]);
   for (const i of ids) if (CROPS[i]?.hidden) out[i] = view(CROPS[i]);
-  const need = [...new Set(ids.filter((i) => i && !CROPS[i]))];
-  if (need.length) {
-    const rows = await q(`SELECT id, name, genes FROM f_strains WHERE id IN (${need.map(() => "?").join(",")})`, need);
-    for (const [id, name, genes] of rows) out[id] = view({ id, name, ...JSON.parse(genes) });
+  // ключи сорта муки и сырья («g:sun:2», «r:moss:2») — не растения, в таблице сортов их не бывает: не ищем
+  const need = [...new Set(ids.filter((i) => i && !CROPS[i] && !/^[gr]:/.test(i)))], t = now();
+  const miss = need.filter((i) => !STRAIN_MEM.has(i) && !((STRAIN_NONE.get(i) || 0) > t - 600));
+  if (miss.length) {
+    if (STRAIN_MEM.size > 5000) STRAIN_MEM.clear();
+    if (STRAIN_NONE.size > 5000) STRAIN_NONE.clear();
+    for (let k = 0; k < miss.length; k += 90) {                  // D1 принимает не больше 100 параметров на запрос
+      const part = miss.slice(k, k + 90);
+      const rows = await q(`SELECT id, name, genes FROM f_strains WHERE id IN (${part.map(() => "?").join(",")})`, part);
+      for (const [id, name, genes] of rows) STRAIN_MEM.set(String(id), { name: String(name), genes: JSON.parse(genes) });
+      for (const id of part) if (!STRAIN_MEM.has(id)) STRAIN_NONE.set(id, t);
+    }
   }
+  for (const id of need) { const m = STRAIN_MEM.get(id); if (m) out[id] = view({ id, name: m.name, ...m.genes }); }
   return out;
 }
 // гибрид: форма — от собираемого растения, цвет — от соседа; свойства — среднее родителей ± мутация
@@ -234,6 +248,7 @@ async function breed(a: Strain, b: Strain, mutX = 1): Promise<Strain> {
   g.points = Math.max(POINTS_HARVEST_MIN, Math.round(g.minutes / 30));
   const id = await hashId(g), name = nameFor(g);
   await q("INSERT OR IGNORE INTO f_strains (id, name, genes, created) VALUES (?, ?, ?, ?)", [id, name, JSON.stringify(g), now()]);
+  STRAIN_NONE.delete(id);
   return { ...view({ id, name, ...g }), mutation };
 }
 
@@ -466,6 +481,7 @@ async function mythSeed(uid: number) {                         // мифичес
                    nonce: [...crypto.getRandomValues(new Uint8Array(4))].map((x) => x.toString(16).padStart(2, "0")).join("") };
   const id = await hashId(g), name = nameFor(g);
   await q("INSERT OR IGNORE INTO f_strains (id, name, genes, created) VALUES (?, ?, ?, ?)", [id, name, JSON.stringify(g), now()]);
+  STRAIN_NONE.delete(id);
   await q("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [uid, id]);
   return view({ id, name, ...g });
 }
@@ -529,7 +545,12 @@ async function mythTick(uid: number) {
   }
 }
 // мука и выпечка, смолотые до сортов, — разложить по новым ключам (раз для каждого игрока; ничего не теряется, одинаковое складывается)
+const NORM_MEM = new Map<number, number>(), NORM_EVERY = 1800;   // когда у игрока последний раз искали товары старого формата
 async function normFlour(uid: number) {
+  // Раньше пять запросов шли при каждой загрузке фермы и почти всегда ничего не находили (14% всех чтений). Старый формат новым
+  // товарам не выдаётся; попасть к игроку он может разве что покупкой у того, кто давно не заходил, — подхватим через полчаса.
+  const last = NORM_MEM.get(uid) || 0; if (now() - last < NORM_EVERY) return;
+  if (NORM_MEM.size > 5000) NORM_MEM.clear(); NORM_MEM.set(uid, now());
   const old = "({c} LIKE '%@%' AND {c} NOT LIKE '%@g:%' AND {c} NOT LIKE '%@r:%' OR {c} IN ('p:soup', 'soup'))";   // простой суп — из обычного мха
   const rows = [...(await q(`SELECT 'barn', strain, count FROM f_barn WHERE user = ? AND ${old.replaceAll("{c}", "strain")}`, [uid])),
                 ...(await q(`SELECT 'stall', item, listed FROM f_stall WHERE user = ? AND ${old.replaceAll("{c}", "item")}`, [uid])),
@@ -579,17 +600,18 @@ export async function farmState(u: any) {
     if (g?.shape === "grain") bs.push("p:flour@" + flourKey(g));
     if (g) for (const rk in RAW_MAIN) if (RAW_MAIN[rk] === g.shape) bs.push("p:" + rk + "@" + rawKey(g));
     if (recipeOf(id) === "flour" && sortOf(id)) for (const rk in RECIPES) if (RECIPES[rk].needs["p:flour"]) bs.push("p:" + rk + "@" + sortOf(id)); }
+  const kit = await kitchenOf(u.id);                           // один раз на запрос: раньше постройки, работы и уровни читались дважды, а работы — трижды
   return {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked), EVS[i])), events_seen: await seenEvents(u.id),
     stars: (await q("SELECT id, x, y, dust FROM f_stars WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     clumps: (await q("SELECT id, x, y, dust FROM f_clumps WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
-    ...(await kitchenOf(u.id)), ...(await decorView(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...(await q("SELECT recipe FROM f_jobs WHERE user = ?", [u.id])).map((x) => "p:" + x[0])])).products, build_list: BUILDS,
+    ...kit, ...(await decorView(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...kit.jobs.map((j: any) => "p:" + j.recipe)])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await metWanderer(u.id, await wandererView(u.id)), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
     vinyls, inv, barn, stall, chest, seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })), ...(await monoView(u.id)), feed_top: await feedTop(u.id),
-    orders: await ordersOf(u.id, (await kitchenOf(u.id)).builds),
+    orders: await ordersOf(u.id, kit.builds),
   };
 }
 
@@ -1372,6 +1394,7 @@ async function buyItem(u: any, seller: number, pub: string, item: string, myName
     DB.prepare("INSERT INTO f_sales (seller, buyer_name, strain, price, at) VALUES (?, ?, ?, ?, ?)").bind(seller, myName, item, price, now()),
   ]);
   await logFeed("buy", u.id, seller, item);
+  if (item.includes("@") && !/@[gr]:/.test(item)) NORM_MEM.delete(u.id);   // купил товар старого формата — разложить сразу, не ждать полчаса
   return { ok: true, price, ...(await visit(u, pub)), farm: await farmState(u) };
 }
 

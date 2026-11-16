@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS f_jobtake (user INTEGER NOT NULL, slot TEXT NOT NULL,
 -- амбар стал покупным (2026-11-14): у кого в амбаре уже был урожай — амбар даётся бесплатно (повтор безвреден)
 INSERT OR IGNORE INTO f_builds (user, kind, at) SELECT DISTINCT user, 'barn', 0 FROM f_barn;
 CREATE INDEX IF NOT EXISTS f_inv_listed ON f_inv (user, listed);
+-- рынок читает только выставленные семена, а не инвентари всех игроков (экономия чтений, 2026-11-16)
+CREATE INDEX IF NOT EXISTS f_inv_sale ON f_inv (listed) WHERE listed > 0;
 -- прилавок (2026-11-14): урожай и продукты из амбара, выставленные игрокам. Выставленное лежит тут, а не в амбаре
 -- (его нельзя ни смолоть, ни распылить); сняли с продажи — вернулось в амбар.
 CREATE TABLE IF NOT EXISTS f_stall (user INTEGER NOT NULL, item TEXT NOT NULL, listed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, item));
@@ -90,12 +92,9 @@ CREATE TABLE IF NOT EXISTS f_style (user INTEGER PRIMARY KEY, roof TEXT);
 -- очки за сутки по Минску (2026-11-15: рейтинг «Сегодня» читал все сегодняшние события — тысячи строк на открытие).
 -- Каждое начисление само прибавляется сюда триггером; рейтинг читает по строке на игрока.
 CREATE TABLE IF NOT EXISTS g_daypts (day INTEGER NOT NULL, user INTEGER NOT NULL, pts INTEGER NOT NULL DEFAULT 0, name TEXT, PRIMARY KEY (day, user));
-CREATE INDEX IF NOT EXISTS g_daypts_top ON g_daypts (day, pts);
-CREATE TRIGGER IF NOT EXISTS g_events_daypts AFTER INSERT ON g_events WHEN NEW.delta > 0 BEGIN
-  INSERT INTO g_daypts (day, user, pts, name) VALUES ((NEW.at + 10800) / 86400, NEW.user, NEW.delta, NEW.name)
-  ON CONFLICT(day, user) DO UPDATE SET pts = pts + excluded.pts, name = COALESCE(NULLIF(excluded.name, ''), name);
-END;
--- заполнить сегодняшний день из уже начисленного (повторный запуск безопасен: пересчитывает заново)
-INSERT OR REPLACE INTO g_daypts (day, user, pts, name)
-  SELECT (at + 10800) / 86400, user, SUM(delta), MAX(name) FROM g_events
-  WHERE at >= ((CAST(strftime('%s', 'now') AS INTEGER) + 10800) / 86400) * 86400 - 10800 AND delta > 0 GROUP BY 1, 2;
+-- индекс g_daypts_top убран (2026-11-16): за день в таблице десятки строк, а индекс переписывался на каждое начисление очков —
+-- лишняя запись из пяти. Данные не трогает.
+DROP INDEX IF EXISTS g_daypts_top;
+-- суммы за день больше не копятся: вкладка «Сегодня» убрана (2026-11-16). Триггер снимаем — это минус строка записи с каждого начисления.
+-- Таблица g_daypts остаётся пустой, на случай возврата вкладки.
+DROP TRIGGER IF EXISTS g_events_daypts;

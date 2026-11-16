@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611162302";
+    var BUILD = "202611162353";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -516,7 +516,7 @@
   .ware.on .tag { background: var(--gold); }
   .ware .qty { display: block; margin: 0; position: absolute; right: 6px; top: 4px;   /* не наследовать сетку счётчика .qty — иначе «×N» уезжал на соседний товар (2026-11-16) */ font-size: 11px; font-weight: 750; color: rgba(255, 255, 255, .9); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
   .ware .have { position: absolute; left: 6px; top: 4px; font-size: 11px; font-weight: 750; color: #8ff0c4; text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
-  .ware .qty.sale { color: #8ff0c4; left: 0; right: 0; text-align: center; white-space: nowrap; font-size: 10.5px; }
+  .ware .qty.sale { color: #8ff0c4; left: 0; right: 0; top: -6px; text-align: center; white-space: pre-line; line-height: 1.15; font-size: 10.5px; }   /* в две строки: в одну не помещалось в ячейку и наезжало на соседей */
   /* имя продавца под ценником; длинное — медленно прокручивается туда-обратно */
   .ware.who { height: 122px; padding-bottom: 49px; }
   .ware.who::after { bottom: 40px; }
@@ -872,7 +872,6 @@
     </div>
 
     <div class="tab hall" id="tab-hall" hidden>
-      <div class="seg"><button aria-pressed="true" data-k="all">За всё время</button><button aria-pressed="false" data-k="today">Сегодня</button></div>
       <div class="small-note">Имена, звания и очки в зале видны всем участникам.</div>
       <ol class="list" id="list"></ol>
     </div>
@@ -4787,7 +4786,7 @@
       s.inv.filter(function (it) { return it.count > 0 && s.strains[it.strain] && !s.strains[it.strain].base; }).forEach(function (it) {
         var st = s.strains[it.strain], key = "inv:" + it.strain;
         var sp = priceFor("s:" + st.id, st.price);
-        mine.push({ key: key, icon: seedIconOf(st), tag: "✦ " + sp, qty: it.listed ? "в продаже " + it.listed + " из " + it.count : "×" + it.count, sale: !!it.listed });
+        mine.push({ key: key, icon: seedIconOf(st), tag: "✦ " + sp, qty: it.listed ? "в продаже\n" + it.listed + " из " + it.count : "×" + it.count, sale: !!it.listed });
         acts2[key] = function () {
           var d = infoBox(box, st.name + " · " + strainCode(st), ["Цену семени игра считает по свойствам сорта — ✦ " + st.price + ".",
             "Выставленные семена не посадить, пока не уберёшь их с продажи."]);
@@ -4802,7 +4801,7 @@
       (s.stall || []).forEach(function (x) { if (x.listed > 0 && ids.indexOf(x.item) < 0) ids.push(x.item); });
       ids.filter(function (id) { return catOf(id) === cat && itemOf(id); }).forEach(function (id) {
         var it = itemOf(id), inb = (barnOf(id) || { count: 0 }).count, ons = (stallOf(id) || { listed: 0 }).listed, base = stallPrice(it.dust), price = priceFor(id, base), key = "b:" + id;
-        mine.push({ key: key, icon: itemIconOf(id), tag: "✦ " + price, qty: ons ? "в продаже " + ons + " из " + (inb + ons) : "×" + inb, sale: !!ons });
+        mine.push({ key: key, icon: itemIconOf(id), tag: "✦ " + price, qty: ons ? "в продаже\n" + ons + " из " + (inb + ons) : "×" + inb, sale: !!ons });
         acts2[key] = function () {
           var d = infoBox(box, itemName(id), ["Игрокам — ✦ " + price + " за штуку, в пыль — ✦ " + it.dust + ".",
             "Выставленное лежит на прилавке: его не смолоть, не испечь и не распылить, пока не уберёшь."]);

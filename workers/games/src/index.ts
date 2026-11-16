@@ -84,12 +84,15 @@ const nameOf = (u: any) => [u.first_name, u.last_name].filter(Boolean).join(" ")
 
 // Игрок: завести/обновить имя и сбросить дневные счётчики в новый день — одним запросом (быстрее ответа в игре).
 async function player(u: any) {
-  const [row] = await q(`INSERT INTO g_users (user, name, day) VALUES (?1, ?2, ?3)
+  // экономия записей (2026-11-16): если имя и день те же, обновлять нечего — тогда строку просто читаем
+  let [row] = await q(`INSERT INTO g_users (user, name, day) VALUES (?1, ?2, ?3)
       ON CONFLICT(user) DO UPDATE SET name = excluded.name,
         scored = CASE WHEN g_users.day = excluded.day THEN g_users.scored ELSE 0 END,
         earned_today = CASE WHEN g_users.day = excluded.day THEN g_users.earned_today ELSE 0 END,
         day = excluded.day
+      WHERE g_users.name IS NOT excluded.name OR g_users.day IS NOT excluded.day
       RETURNING scored, earned_today, streak, best_streak, played, correct, recent`, [u.id, nameOf(u), today()]);
+  if (!row) [row] = await q("SELECT scored, earned_today, streak, best_streak, played, correct, recent FROM g_users WHERE user = ?", [u.id]);
   const [scored, earned, streak, best, played, correct, recent] = row;
   return { scored: Number(scored), earned: Number(earned), streak: Number(streak), best: Number(best),
            played: Number(played), correct: Number(correct), recent: JSON.parse(recent || "[]") as string[] };
@@ -229,17 +232,13 @@ async function topFresh() {
   const not = h.length ? ` AND user NOT IN (${h.map(() => "?").join(",")})` : "";
   const all = await q(`SELECT name, points, title, avatar, user FROM g_profiles WHERE points > 0${not} ORDER BY points DESC LIMIT 500`, h);   // все игроки (потолок — от случайной лавины)
   // имя — как его прислал бот (хозяин — названием канала), а не из Телеграма при входе в игру
-  // «Сегодня» — все очки за сутки (по Минску) из всех игр: начисления g_events, а не только раунды «Угадай трек»
-  const from = Math.floor((now() + TZ_SHIFT) / 86400) * 86400 - TZ_SHIFT;
-  const notD = h.length ? ` AND d.user NOT IN (${h.map(() => "?").join(",")})` : "";
-  const day = await q(`SELECT COALESCE(p.name, d.name), d.pts, p.avatar, p.title, d.user FROM g_daypts d LEFT JOIN g_profiles p ON p.user = d.user
-                       WHERE d.day = ? AND d.pts > 0${notD} ORDER BY d.pts DESC LIMIT 500`, [Math.floor((from + TZ_SHIFT) / 86400), ...h]);   // суммы за день копит триггер
+  // вкладка «Сегодня» убрана (его решение 2026-11-16): ради неё каждое начисление очков писало в базу лишнюю строку
   const av = (k: any) => (k ? `/avatar/${k}` : null);
-  const ids = [...new Set([...all.map((r) => Number(r[4])), ...day.map((r) => Number(r[4]))])], refs = new Map<number, string>();
+  const ids = [...new Set(all.map((r) => Number(r[4])))], refs = new Map<number, string>();
   for (const id of ids) refs.set(id, await refOf(id));
   if (ids.length) await DB.batch(ids.map((id) => DB.prepare("INSERT OR IGNORE INTO g_refs (ref, user) VALUES (?, ?)").bind(refs.get(id), id)));
   return { all: all.map(([name, points, title, a, id]) => ({ name, points: Number(points), title, avatar: av(a), ref: refs.get(Number(id)) })),
-           today: day.map(([name, points, a, title, id]) => ({ name, points: Number(points), avatar: av(a), title: title || "Ученик звёзд", ref: refs.get(Number(id)) })) };
+           today: [] };
 }
 
 // метка игрока: хеш номера с секретом сервера — по ней профиль открывается, а номер аккаунта наружу не уходит
@@ -348,14 +347,14 @@ async function handle(req: Request): Promise<Response> {
                 [p.user, p.name, p.points, p.karma, p.title, p.next, p.place, now(), /^[0-9a-f]{16,40}$/.test(p.avatar || "") ? p.avatar : null]);
       }
       if (body.owner) {
-        await q("INSERT INTO g_meta (key, value) VALUES ('owner', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(body.owner)]);
+        await q("INSERT INTO g_meta (key, value) VALUES ('owner', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE g_meta.value IS NOT excluded.value", [String(body.owner)]);
       }
       if (Array.isArray(body.hidden)) {
-        await q("INSERT INTO g_meta (key, value) VALUES ('hidden', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        await q("INSERT INTO g_meta (key, value) VALUES ('hidden', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE g_meta.value IS NOT excluded.value",
                 [JSON.stringify(body.hidden.map(Number).filter(Number.isFinite))]);
       }
       if (body.consumed != null) {
-        await q("INSERT INTO g_meta (key, value) VALUES ('consumed', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(body.consumed)]);
+        await q("INSERT INTO g_meta (key, value) VALUES ('consumed', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE g_meta.value IS NOT excluded.value", [String(body.consumed)]);
         await q("DELETE FROM g_events WHERE +id <= ? AND at < ?", [Number(body.consumed), now() - 30 * 86400]);
         await q("DELETE FROM g_daypts WHERE day < ?", [Math.floor((now() + TZ_SHIFT) / 86400) - 2]);   // «+id» — искать по индексу времени, а не перебирать номера
       }
