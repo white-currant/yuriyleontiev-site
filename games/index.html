@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611162353";
+    var BUILD = "202611170010";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2366,7 +2366,7 @@
     var soon = function () { PEEK.at = t + 20000 + Math.random() * 40000; PEEK.later = false; };
     if (!PEEK.at) soon();
     else if (away && (!PEEK.later || t > PEEK.at)) soon();                       // ушёл с фермы — показ не сгорает: снова вскоре после возвращения
-    var p = (t - PEEK.at) / 7000;
+    var p = (t - PEEK.at) / 12000;                                              // весь показ — 12 с (было 7; его просьба 2026-11-17: «постоял подольше»)
     if (p < 0) return -1;
     if (p < 1) return p;
     peekSeen(true); PEEK.at = t + 1500000 + Math.random() * 900000; PEEK.later = true;   // показан; следующий — через 25–40 минут, если остался
@@ -2495,7 +2495,9 @@
   var WGEMS = ["#c4a3ff", "#7fdcff", "#ff7ab8", "#ffd166", "#5fd08a"];
   function wanderBand() {                                        // кайма меню — мои гранёные кристаллы (его решение 2026-11-16: в декоре — они, его камни — сам товар)
     if (wanderBand.url) return wanderBand.url;
-    var cv = document.createElement("canvas"), n = WGEMS.length, step = 14; cv.width = step * n; cv.height = 11; var c = cv.getContext("2d");
+    var Z = 6, cv = document.createElement("canvas"), n = WGEMS.length, step = 14; cv.width = step * n * Z; cv.height = 11 * Z; var c = cv.getContext("2d");
+    c.scale(Z, Z);                                               // каждая точка — квадрат 6×6: браузеру не нужно растягивать картинку, она не мылится
+    cv = { width: step * n, height: 11, el: cv };
     px(c, 0, 0, cv.width, 11, "#1a1030"); px(c, 0, 0, cv.width, 1, "#8a5be0"); px(c, 0, 1, cv.width, 1, "#4a2a8c"); px(c, 0, 10, cv.width, 1, "#0e0820");
     WGEMS.forEach(function (col, k) {
       var x = k * step + 4, y = 4;                               // по центру тёмной полосы (строки 2–9), а не под самой светлой кромкой
@@ -2504,7 +2506,7 @@
       px(c, x + 3, y + 3, 1, 1, "rgba(0,0,0,.3)"); px(c, x + 2, y + 4, 1, 1, "rgba(0,0,0,.3)");                                                       // тень грани
       px(c, x + 9, y + 2, 1, 1, "#6a48b8");                                                                                                         // заклёпка между кристаллами
     });
-    return (wanderBand.url = cv.toDataURL());
+    return (wanderBand.url = cv.el.toDataURL());
   }
   function wandererSheet() {
     var s = F.state, w = s.wanderer; if (!w) return toast("Странник ушёл");
@@ -2520,6 +2522,18 @@
       var pick = el("div", "sub wpick"); sh.appendChild(pick);
       var acts = el("div", "invacts"); sh.appendChild(acts);
       var free = function () { return (w.goods || []).filter(function (g) { return !g.sold; }); };
+      var fillPick = function (k) {
+        var gk = GEMK[k], own = barnOf(gk.gem), ownD = barnOf(gk.dust);
+        pick.innerHTML = ""; pick.appendChild(el("b", "", gk.name));
+        pick.appendChild(document.createTextNode("Если посыпать " + gk.pyl + " самоцветную пыль на растущую грядку, " + gk.does + "."
+          + ((own && own.count) || (ownD && ownD.count) ? " У тебя: камней " + ((own && own.count) || 0) + ", пыли " + ((ownD && ownD.count) || 0) + "." : "")));
+      };
+      // высота блока описания — по самому длинному из трёх камней, чтобы окно не прыгало при выборе (его просьба 2026-11-17)
+      requestAnimationFrame(function () {
+        if (!pick.isConnected) return; var mx = 0;
+        (w.goods || []).forEach(function (g) { if (GEMK[g.kind]) { fillPick(g.kind); mx = Math.max(mx, pick.offsetHeight); } });
+        pick.style.minHeight = mx + "px"; fillPick(sel);
+      });
       var sel = (free()[0] || (w.goods || [])[0] || { kind: "moon" }).kind;
       var draw = function () {
         goods.innerHTML = "";
@@ -2532,9 +2546,7 @@
           goods.appendChild(b);
         });
         var cur = (w.goods || []).filter(function (g) { return g.kind === sel; })[0], gk = GEMK[sel], cost = cur ? priceOf(cur) : 0, own = barnOf(gk.gem), ownD = barnOf(gk.dust);
-        pick.innerHTML = ""; pick.appendChild(el("b", "", gk.name));
-        pick.appendChild(document.createTextNode("Если посыпать " + gk.pyl + " самоцветную пыль на растущую грядку, " + gk.does + "."
-          + ((own && own.count) || (ownD && ownD.count) ? " У тебя: камней " + ((own && own.count) || 0) + ", пыли " + ((ownD && ownD.count) || 0) + "." : "")));
+        fillPick(sel);
         acts.innerHTML = "";
         if (!w.left || !cur) return;
         if (cur.sold) { var bs = btn("Этот уже куплен", "ghost", function () {}); bs.disabled = true; acts.appendChild(bs); return; }
@@ -2557,13 +2569,13 @@
   }
   function drawPeek(c) {                                         // чёрный силуэт человека выходит из-за правого угла дома (стена кончается на x = 60)
     var p = peekPhase(); if (p < 0) return;  // и уходит обратно. Его правки: «столб» и одна голова не читались — нужна фигура целиком
-    var k = p < .3 ? p / .3 : p > .8 ? (1 - p) / .2 : 1, v = Math.round(k * k * (3 - 2 * k) * 5);   // плавно: 0…5 точек из-за угла (фигура шириной 7)
-    if (!v) return;
+    var k = p < .18 ? p / .18 : p > .85 ? (1 - p) / .15 : 1, v = Math.round(k * k * (3 - 2 * k) * 5);   // плавно: 0…5 точек из-за угла (фигура шириной 7)
+    if (!v) return;                                                   // выходит ~2 с, стоит ~8 с, уходит ~2 с (было 2 / 3,5 / 1,5)
     var ink = "#05040a", x0 = 60, hx = x0 + v - 7, y0 = 61;   // x0 = 60: стена (её тёмный край) — до 59, без зазора травы (его правка)
     // строки сверху вниз: [отступ, ширина]
     var rows = [[2, 3], [1, 5], [1, 5], [1, 5], [2, 3], [2, 3], [0, 7], [0, 7], [0, 7], [0, 7], [1, 5], [1, 5], [1, 2, 4, 2], [1, 2, 4, 2], [1, 2, 4, 2], [1, 2, 4, 2]];   // стоит прямо, без наклона («кривой» — его правка)
     rows.forEach(function (r, i) { for (var j = 0; j < r.length; j += 2) { var l = Math.max(x0, hx + r[j]), e = hx + r[j] + r[j + 1]; if (e > l) px(c, l, y0 + i, e - l, 1, ink); } });
-    if (p > .4 && p < .75) { [2, 4].forEach(function (ex) { if (hx + ex >= x0) px(c, hx + ex, y0 + 2, 1, 1, "rgba(214,220,255,.85)"); }); }   // два бледных глаза
+    if (p > .25 && p < .8) { [2, 4].forEach(function (ex) { if (hx + ex >= x0) px(c, hx + ex, y0 + 2, 1, 1, "rgba(214,220,255,.85)"); }); }   // два бледных глаза
   }
   // амбар «не открывай» (его сценарий 2026-11-16): в такую ночь надпись висит над амбаром. Открыл — внутри всё сгнило и меню в плесени
   // (только с виду, урожай цел). Закрыл и открыл снова — всё как обычно, и надписи до конца ночи больше нет.
@@ -2906,6 +2918,10 @@
     (L.lamps || []).forEach(function (l) { area(l[0] - 2, l[1] - 3, l[0] + 2, l[1] + 2, function (r, g, b) { return g > 200 && b > 170; }); });   // фонари калитки
     if (hasBuild(kit, "oven") && jobsOf(kit, "oven").some(function (j) { return j.ready > now; }))
       area(OVEN[0] - 14, OVEN[1] - 22, OVEN[0] + 14, OVEN[1] + 2, function (r, g, b) { return r > 240 && b < 40; });   // огонь в печи — только пламя (его цвета 255/·/5), кирпич не трогаем
+    if (hasBuild(kit, "shop")) {                                  // магазин: гирлянда на крыше, фонари у входа, окошко над дверью (его правка 2026-11-17)
+      var SHOPLIT = ["255,209,102", "242,179,61", "255,246,223", "255,210,122", "255,195,90", "159,240,214", "88,194,166"];
+      area(SHOP[0] - 32, SHOP[1] - 60, SHOP[0] + 32, SHOP[1] + 2, function (r, g, b) { return SHOPLIT.indexOf(r + "," + g + "," + b) >= 0; });
+    }
     var wa = F.wanderAt;
     if (wa && wa.a > .5) [[WSPR, wa.x, wa.y], [WCASE, wa.cx, wa.cy]].forEach(function (q) { q[0].forEach(function (row, j) { for (var i = 0; i < row.length; i++)
       if ("LgysGrE".indexOf(row[i]) >= 0) area(q[1] + i - 1, q[2] + j - 1, q[1] + i + 1, q[2] + j + 1, function (r, g, b) { return r + g + b > 420; }); }); });   // фонарь, звёзды, склянки, камни, глаза
