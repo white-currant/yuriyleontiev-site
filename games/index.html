@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611170024";
+    var BUILD = "202611170032";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -757,6 +757,7 @@
   body[data-screen^="farm"] .sheet > .shx:active { transform: translateY(1px); box-shadow: 0 0 0 2px var(--ink), inset 0 -1px 0 #6e4425; }
   body[data-screen^="farm"] .sheet.wander > .shx { top: 40px; background: #3a2268; color: #e6dcff; box-shadow: 0 0 0 2px #140c22, inset 0 -3px 0 #24143f; }
   body[data-screen^="farm"] .gempill { padding: 0 8px; gap: 4px; }
+  .farm-actions .gemcancel { grid-column: 1 / -1; }                                     /* «Отменить» — во всю ширину вместо двух кнопок */
   body[data-screen^="farm"] .gempill canvas { width: 22px; height: auto; image-rendering: pixelated; }
   body[data-screen^="farm"] .gempill.on { box-shadow: 0 0 0 3px var(--pgold), inset 0 2px 0 var(--wood3); }
   /* сундук у левого края сцены: подпись не по центру, а от его левой кромки — иначе «сундук» уезжает за край (жалоба игрока 2026-11-16) */
@@ -915,6 +916,7 @@
     <div class="farm-actions">
       <button class="btn" id="toshop">Лавка</button>
       <button class="btn ghost" id="toneighbors">Соседи</button>
+      <button class="btn ghost gemcancel" id="gemcancel" hidden>Отменить</button>
     </div>
     <div class="farm-note" id="farmnote"></div>
   </section>
@@ -2947,7 +2949,8 @@
     var millGem = [];                                                                   // мельница мелет самоцвет — какой (его просьба 2026-11-16)
     if (f && hasBuild(f, "mill")) jobsOf(f, "mill").forEach(function (j) { var rk = String(j.recipe).split("@")[0], gk0 = rk.indexOf("gemdust") === 0 && gemOf("p:" + rk);
       if (gk0 && j.ready > now && millGem.indexOf(gk0.k) < 0) millGem.push(gk0.k); });
-    if (!sun && !mossy && !fire && !moonlit && !stars.length && !myth.length && !gfx.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    var gemSel = cv.id === "scenecv" && F.sel === "gem" && GEMK[F.gemKind] ? GEMK[F.gemKind] : null;   // пыль выбрана — по краям бегут её искры (его просьба 2026-11-17)
+    if (!sun && !mossy && !fire && !moonlit && !gemSel && !stars.length && !myth.length && !gfx.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
     var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
     var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
@@ -3015,6 +3018,20 @@
       for (var mq = 0; mq < 22; mq++) {                                                  // пылинки медленно опускаются в лунном свете
         var mph = (t / 14000 + hash01(mq + 60)) % 1, px0 = hash01(mq + 61) * cw + Math.sin(t / 2600 + mq) * 5 * dpr, py0 = (hash01(mq + 62) * .25 + mph * .8) * ch;
         c.globalAlpha = .55 * Math.sin(mph * Math.PI) * (.6 + .4 * Math.sin(t / 300 + mq * 3)); c.fillStyle = "#eef3ff"; c.beginPath(); c.arc(px0, py0, (.8 + hash01(mq + 63)) * dpr, 0, 7); c.fill();
+      }
+      c.globalAlpha = 1;
+    }
+    if (gemSel) {                                                                       // рамка из искр цвета выбранной пыли: «сейчас ты сыплешь пыль»
+      var PW = cw, PH = ch, ins = 7 * dpr, per = 2 * (PW + PH - 4 * ins), gc = gemSel.col, gr0 = gemSel.glow.join(",");
+      var edge = function (d) { d = ((d % per) + per) % per; var w0 = PW - 2 * ins, h0 = PH - 2 * ins;
+        if (d < w0) return [ins + d, ins]; d -= w0; if (d < h0) return [PW - ins, ins + d]; d -= h0; if (d < w0) return [PW - ins - d, PH - ins]; d -= w0; return [ins, PH - ins - d]; };
+      // виньетка цвета пыли: середина чистая, к краям свечение гуще (его просьба 2026-11-17 — «больше»)
+      var pulse = .85 + .15 * Math.sin(t / 450), vg = c.createRadialGradient(PW / 2, PH / 2, Math.min(PW, PH) * .3, PW / 2, PH / 2, Math.hypot(PW, PH) / 2);
+      vg.addColorStop(0, "rgba(" + gr0 + ",0)"); vg.addColorStop(.55, "rgba(" + gr0 + "," + (.16 * pulse) + ")"); vg.addColorStop(1, "rgba(" + gr0 + "," + (.62 * pulse) + ")");
+      c.globalAlpha = 1; c.fillStyle = vg; c.fillRect(0, 0, PW, PH);
+      for (var gi = 0; gi < 26; gi++) {                                                   // искры бегут по кругу вдоль краёв, мерцая
+        var pp = edge(per * (gi / 26) + t * .09 * dpr * (gi % 2 ? 1 : -.7)), jit = Math.sin(t / 300 + gi * 1.9) * 2.5 * dpr;
+        c.globalCompositeOperation = "lighter"; spark(pp[0] + jit, pp[1] - jit, (1.4 + hash01(gi + 90) * 1.6) * dpr, gc[gi % gc.length], 1, gi * 7); c.globalCompositeOperation = "source-over";
       }
       c.globalAlpha = 1;
     }
@@ -3729,6 +3746,7 @@
   // кнопка пыли — наверху вместо капель (его решение 2026-11-16), видна, пока в амбаре есть пыль; нажатие — меню выбора
   function gemPill() {
     var b = $("gempill"); if (!b || !F.state) return;
+    var on = F.sel === "gem"; $("toshop").hidden = on; $("toneighbors").hidden = on; $("gemcancel").hidden = !on;   // пыль выбрана — внизу «Отменить» (его просьба 2026-11-17)
     var have = gemDusts();
     if (!have.length) { b.hidden = true; if (F.sel === "gem") F.sel = "can"; return; }
     if (have.indexOf(F.gemKind) < 0) F.gemKind = have[0];
@@ -3737,6 +3755,7 @@
     if (b.dataset.k !== key) { b.dataset.k = key; itemIcon($("gemicon"), gk.dust); setText($("gemn"), String(barnOf(gk.dust).count)); }
   }
   document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("#gempill")) { haptic("light"); gemSheet(renderFarm); } });
+  document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("#gemcancel")) { haptic("light"); F.sel = "can"; renderHotbar(); renderFarm(); } });
   // выбрал пыль — меню закрылось, пыль выбрана; дальше нажать на грядку. Снять выбор — нажать на любую другую ячейку
   function gemSheet(onPick) {                                    // какая пыль есть и что каждая делает
     sheet(function (sh, close) {
@@ -3772,7 +3791,7 @@
   function selText() {
     var s = F.state;
     if (F.sel === "gem") { var gkk = GEMK[F.gemKind] || GEMK.moon;
-      return itemName(gkk.dust) + ": нажми на растущую грядку — " + gkk.does + ". Чтобы снять выбор, нажми на любую другую ячейку."; }
+      return itemName(gkk.dust) + ": нажми на растущую грядку — " + gkk.does + "."; }
     if (F.sel === "shovel") return "Лопата: нажми на посаженную грядку, чтобы выкопать растение — семя вернётся в инвентарь (очки за посадку и полив спишутся). Созревшее лопата просто соберёт.";
     if (F.sel === "can") return "Лейка: воды на " + s.water + " " + plural(s.water, "полив", "полива", "поливов") + ". Сухие грядки поливаются тапом, набрать воду — колодец." + (seedItems().length ? " Выбери семена, чтобы сажать." : "");
     var sx = s.strains[F.sel];
