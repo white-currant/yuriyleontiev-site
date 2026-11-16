@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611170112";
+    var BUILD = "202611170133";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -488,6 +488,10 @@
   .vrow.head { padding-top: 0; padding-bottom: 0; font-size: 11px; color: var(--cream2); }
   .vrow.on { background: rgba(255, 214, 140, .2); box-shadow: inset 0 0 0 2px var(--gold); }
   .vrow { position: relative; }
+  /* заголовок инвентаря с кнопкой «Сортировать» слева от крестика */
+  .invhead { display: flex; align-items: center; gap: 10px; padding-right: 48px; }
+  .invhead h3 { flex: 1; }
+  body[data-screen^="farm"] .invhead .btn.sortbtn { width: auto; min-height: 32px; margin: 0; padding: 0 12px; font-size: 13.5px; }
   /* переключатель «одна / несколько ячеек» в амбаре: один кружок / три кружка (его просьба 2026-11-17) */
   .selmode { display: flex; justify-content: flex-end; gap: 8px; margin: 4px 3px -4px; }
   .selmode button { display: flex; align-items: center; justify-content: center; gap: 3px; width: 46px; height: 30px; padding: 0; border: 0; cursor: pointer;
@@ -575,7 +579,8 @@
     background: inherit; box-shadow: 0 -10px 14px -6px rgba(20, 10, 4, .55); z-index: 2; }
   .sheetfoot .sub:first-child { margin-top: 0; }
   html.locked, html.locked body { overflow: hidden; }
-  .invgrid.drag .slot { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .invgrid.drag .slot { touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }   /* листать можно; поднять — задержать палец */
+  .invgrid.drag .slot.holding { transform: scale(.92); transition: transform .33s ease-in; }
   .slot.ghost { position: fixed; z-index: 60; transform: translate(-50%, -60%) scale(1.12); pointer-events: none; opacity: .95; margin: 0; }
   .slot.lifted { opacity: .35; }
   body[data-screen^="farm"] .invgrid .slot.drop { background: #8a6a3a; box-shadow: 0 -3px 0 var(--pgold), 0 3px 0 var(--pgold), -3px 0 0 var(--pgold), 3px 0 0 var(--pgold); opacity: 1; }
@@ -988,7 +993,7 @@
     tg.ready(); tg.expand();
     try { tg.setHeaderColor("#120a05"); tg.setBackgroundColor("#120a05"); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
   }
-  var haptic = function (kind) { try { tg && tg.HapticFeedback && (kind === "light" ? tg.HapticFeedback.impactOccurred("light") : tg.HapticFeedback.notificationOccurred(kind)); } catch (e) {} };
+  var haptic = function (kind) { try { tg && tg.HapticFeedback && (kind === "light" || kind === "medium" ? tg.HapticFeedback.impactOccurred(kind) : tg.HapticFeedback.notificationOccurred(kind)); } catch (e) {} };
   var $ = function (id) { return document.getElementById(id); };
 
   // ---------- сервер ----------
@@ -3764,33 +3769,54 @@
     var keys = []; gs.forEach(function (g) { keys = keys.concat(g.ids); });          // варианты сорта едут вместе со своей ячейкой
     try { localStorage.setItem("farm-order", JSON.stringify(keys)); } catch (e) {}
   }
+  // «Сортировать» в инвентаре (его просьба 2026-11-17): первые четыре — те, что в полоске под фермой (жёлтая рамка) — не трогаем;
+  // остальные — по форме (мох, ягоды, хрусталь, колосья…), внутри формы — по цвету, станционные раньше гибридов, потом по названию
+  function sortSeeds() {
+    var s = F.state, gs = groupItems(), keep = gs.slice(0, 4), rest = gs.slice(4);
+    var shapeAt = function (sh) { for (var i = 0; i < SHAPES.length; i++) if (SHAPES[i][0] === sh) return i; return 99; };
+    var key = function (g) { var st = s.strains[g.key] || {}; return [shapeAt(st.shape), String(st.color || ""), st.base ? 0 : 1, g.name]; };
+    rest.sort(function (a, b) { var x = key(a), y = key(b); for (var i = 0; i < x.length; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; } return 0; });
+    var keys = []; keep.concat(rest).forEach(function (g) { keys = keys.concat(g.ids); });
+    try { localStorage.setItem("farm-order", JSON.stringify(keys)); } catch (e) {}
+  }
   // перетаскивание ячеек в большом инвентаре: потянул семя — оно едет за пальцем, отпустил над другой ячейкой — они поменялись местами; туда
+  // перетаскивание ячеек в большом инвентаре (его правка 2026-11-17): по ячейкам можно листать пальцем; чтобы поднять ячейку —
+  // задержать на ней палец на треть секунды (ячейка чуть сжимается, потом «поднимается» с отдачей), дальше она едет за пальцем;
+  // отпустил над другой ячейкой — они поменялись местами, на пустое место — в конец
   function dragSetup(grid, redraw) {
-    var d = null;
+    var d = null, HOLD = 330;
     var slotAt = function (x, y) { var n = document.elementFromPoint(x, y); n = n && n.closest ? n.closest(".slot") : null; return n && grid.contains(n) ? n : null; };
+    var lift = function () {
+      if (!d || d.on) return;
+      d.on = true; haptic("medium"); d.node.classList.remove("holding"); try { grid.setPointerCapture(d.id); } catch (er) {}
+      var r = d.node.getBoundingClientRect(); d.ghost = d.node.cloneNode(true);
+      var src = d.node.querySelector("canvas"), dst = d.ghost.querySelector("canvas");
+      if (src && dst) { dst.width = src.width; dst.height = src.height; dst.getContext("2d").drawImage(src, 0, 0); }
+      d.ghost.className = "slot ghost"; d.ghost.style.width = r.width + "px"; d.ghost.style.height = r.height + "px";
+      d.ghost.style.left = d.x + "px"; d.ghost.style.top = d.y + "px";
+      document.body.appendChild(d.ghost); d.node.classList.add("lifted");
+    };
+    var drop = function () { if (!d) return; clearTimeout(d.t); d.node.classList.remove("holding"); d = null; };
     grid.onpointerdown = function (e) {
       var sl = e.target.closest(".slot"); if (!sl || !sl.dataset.key || sl.dataset.key === "can") return;
+      drop();
       d = { key: sl.dataset.key, x: e.clientX, y: e.clientY, on: false, node: sl, ghost: null, id: e.pointerId, over: null };
+      sl.classList.add("holding"); d.t = setTimeout(lift, HOLD);
     };
     grid.onpointermove = function (e) {
       if (!d || e.pointerId !== d.id) return;
-      if (!d.on) {
-        if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 8) return;
-        d.on = true; haptic("light"); try { grid.setPointerCapture(d.id); } catch (er) {}
-        var r = d.node.getBoundingClientRect(); d.ghost = d.node.cloneNode(true);
-        var src = d.node.querySelector("canvas"), dst = d.ghost.querySelector("canvas");
-        if (src && dst) { dst.width = src.width; dst.height = src.height; dst.getContext("2d").drawImage(src, 0, 0); }
-        d.ghost.className = "slot ghost"; d.ghost.style.width = r.width + "px"; d.ghost.style.height = r.height + "px";
-        document.body.appendChild(d.ghost); d.node.classList.add("lifted");
-      }
+      if (!d.on) { if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) drop(); else { d.x = e.clientX; d.y = e.clientY; } return; }   // повёл раньше — это прокрутка
       d.ghost.style.left = e.clientX + "px"; d.ghost.style.top = e.clientY + "px";
       var over = slotAt(e.clientX, e.clientY);
       if (over !== d.over) { if (d.over) d.over.classList.remove("drop"); d.over = over && over !== d.node ? over : null; if (d.over) d.over.classList.add("drop"); }
       e.preventDefault();
     };
+    // поднятая ячейка — страница не прокручивается, пока её тащат
+    grid.addEventListener("touchmove", function (e) { if (d && d.on && e.cancelable) e.preventDefault(); }, { passive: false });
+    grid.oncontextmenu = function (e) { if (d) e.preventDefault(); };
     grid.onpointerup = grid.onpointercancel = function (e) {
       if (!d || e.pointerId !== d.id) return;
-      var was = d; d = null;
+      var was = d; clearTimeout(was.t); was.node.classList.remove("holding"); d = null;
       if (!was.on) return;
       if (was.ghost) was.ghost.remove();
       F.dragged = Date.now();                                 // чтобы отпускание не сочлось нажатием
@@ -4248,7 +4274,7 @@
   function invSheet() {
     var s = F.state; if (!s) return;
     sheet(function (sh, close) {
-      sh.appendChild(el("h3", "", "Инвентарь"));
+      var ihead = el("div", "invhead"); ihead.appendChild(el("h3", "", "Инвентарь")); sh.appendChild(ihead);
       var note = el("div", "selnote"), grid = el("div", "invgrid");
       var draw = function () {
         grid.innerHTML = "";
@@ -4266,6 +4292,7 @@
           f.style.width = (z.right - a.left + 14) + "px"; f.style.height = (a.height + 14) + "px"; grid.appendChild(f);
         });
       };
+      if (groupItems().length > 5) ihead.appendChild(btn("Сортировать", "ghost sortbtn", function () { haptic("success"); sortSeeds(); draw(); renderFarm(); toast("Отсортировано — первые четыре на месте"); }));
       grid.classList.add("drag"); draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
       F.invRedraw = function () { if (document.body.contains(grid)) draw(); else F.invRedraw = null; };   // открытый инвентарь — перерисовать после распыления и ответа сервера
       var acts = el("div", "salebtns sheetfoot");
