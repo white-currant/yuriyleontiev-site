@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611170032";
+    var BUILD = "202611170037";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2839,7 +2839,7 @@
     }
     if (gk && gk.dust) {                                                                       // мешочек пыли — в цвет своего камня
       cv.classList.remove("myth"); var pr = DISH["p:gemdust"], gc1 = cv.getContext("2d"), map = { v: gk.g.pv[0], V: gk.g.pv[1], s: gk.g.pv[2] };
-      cv.width = 16; cv.height = pr.length + 2; gc1.clearRect(0, 0, 16, cv.height); px(gc1, 3, cv.height - 1, 10, 1, "rgba(40,25,10,.3)");
+      cv.width = 16; cv.height = pr.length + 2; gc1.clearRect(0, 0, 16, cv.height);   // без тени-полоски под мешочком (его правка 2026-11-17)
       pr.forEach(function (row, jj) { for (var ii = 0; ii < row.length; ii++) if (row[ii] !== ".") px(gc1, 1 + ii, 1 + jj, 1, 1, map[row[ii]] || PP[row[ii]]); });
       return;
     }
@@ -2950,7 +2950,15 @@
     if (f && hasBuild(f, "mill")) jobsOf(f, "mill").forEach(function (j) { var rk = String(j.recipe).split("@")[0], gk0 = rk.indexOf("gemdust") === 0 && gemOf("p:" + rk);
       if (gk0 && j.ready > now && millGem.indexOf(gk0.k) < 0) millGem.push(gk0.k); });
     var gemSel = cv.id === "scenecv" && F.sel === "gem" && GEMK[F.gemKind] ? GEMK[F.gemKind] : null;   // пыль выбрана — по краям бегут её искры (его просьба 2026-11-17)
-    if (!sun && !mossy && !fire && !moonlit && !gemSel && !stars.length && !myth.length && !gfx.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    // появление и растворение (его просьба 2026-11-17): рамка не включается и не гаснет рывком — плавно наплывает и тает
+    if (cv.id === "scenecv") {
+      var nowT = Date.now(), dtA = Math.min(100, nowT - (F.gemAt || nowT)); F.gemAt = nowT;
+      if (gemSel) F.gemLast = gemSel;
+      F.gemA = Math.max(0, Math.min(1, (F.gemA || 0) + (gemSel ? dtA / 550 : -dtA / 750)));
+      if (!gemSel && F.gemA > 0 && F.gemLast) gemSel = F.gemLast;                          // гаснет — тем же цветом
+    }
+    var gA = gemSel ? (F.gemA || 0) : 0, gIn = !!(F.sel === "gem");
+    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
     var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
     var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
@@ -3021,17 +3029,20 @@
       }
       c.globalAlpha = 1;
     }
-    if (gemSel) {                                                                       // рамка из искр цвета выбранной пыли: «сейчас ты сыплешь пыль»
-      var PW = cw, PH = ch, ins = 7 * dpr, per = 2 * (PW + PH - 4 * ins), gc = gemSel.col, gr0 = gemSel.glow.join(",");
+    if (gemSel && gA > 0) {                                                             // рамка из искр цвета выбранной пыли: «сейчас ты сыплешь пыль»
+      var ease = gIn ? 1 - Math.pow(1 - gA, 3) : gA * gA;                                 // наплывает быстро и мягко, тает плавно
+      var drift = (1 - ease) * (gIn ? -22 : 26) * dpr;                                     // появляясь — искры въезжают из-за краёв, растворяясь — разлетаются наружу
+      var PW = cw, PH = ch, ins = 7 * dpr + drift, per = 2 * (PW + PH - 4 * ins), gc = gemSel.col, gr0 = gemSel.glow.join(",");
       var edge = function (d) { d = ((d % per) + per) % per; var w0 = PW - 2 * ins, h0 = PH - 2 * ins;
         if (d < w0) return [ins + d, ins]; d -= w0; if (d < h0) return [PW - ins, ins + d]; d -= h0; if (d < w0) return [PW - ins - d, PH - ins]; d -= w0; return [ins, PH - ins - d]; };
       // виньетка цвета пыли: середина чистая, к краям свечение гуще (его просьба 2026-11-17 — «больше»)
-      var pulse = .85 + .15 * Math.sin(t / 450), vg = c.createRadialGradient(PW / 2, PH / 2, Math.min(PW, PH) * .3, PW / 2, PH / 2, Math.hypot(PW, PH) / 2);
+      var pulse = (.85 + .15 * Math.sin(t / 450)) * ease, vg = c.createRadialGradient(PW / 2, PH / 2, Math.min(PW, PH) * (.3 + .35 * (1 - ease)), PW / 2, PH / 2, Math.hypot(PW, PH) / 2);   // виньетка подступает от краёв
       vg.addColorStop(0, "rgba(" + gr0 + ",0)"); vg.addColorStop(.55, "rgba(" + gr0 + "," + (.16 * pulse) + ")"); vg.addColorStop(1, "rgba(" + gr0 + "," + (.62 * pulse) + ")");
       c.globalAlpha = 1; c.fillStyle = vg; c.fillRect(0, 0, PW, PH);
       for (var gi = 0; gi < 26; gi++) {                                                   // искры бегут по кругу вдоль краёв, мерцая
         var pp = edge(per * (gi / 26) + t * .09 * dpr * (gi % 2 ? 1 : -.7)), jit = Math.sin(t / 300 + gi * 1.9) * 2.5 * dpr;
-        c.globalCompositeOperation = "lighter"; spark(pp[0] + jit, pp[1] - jit, (1.4 + hash01(gi + 90) * 1.6) * dpr, gc[gi % gc.length], 1, gi * 7); c.globalCompositeOperation = "source-over";
+        var lag = Math.max(0, Math.min(1, ease * 1.6 - hash01(gi + 55) * .6));          // искры появляются и гаснут не разом, а вразнобой
+        c.globalCompositeOperation = "lighter"; spark(pp[0] + jit, pp[1] - jit, (1.4 + hash01(gi + 90) * 1.6) * dpr * (.4 + .6 * lag), gc[gi % gc.length], lag, gi * 7); c.globalCompositeOperation = "source-over";
       }
       c.globalAlpha = 1;
     }
