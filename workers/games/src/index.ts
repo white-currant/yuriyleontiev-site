@@ -256,12 +256,12 @@ async function playerCard(ref: string) {
   const [p] = await q("SELECT name, points, karma, title, place, avatar FROM g_profiles WHERE user = ?", [uid]);
   if (!p) return { error: "Игрок не найден" };
   const [fm] = await q("SELECT pub, unlocked FROM f_farms WHERE user = ?", [uid]);
-  const kinds = fm ? (await q(`SELECT i.strain, s.genes FROM f_inv i LEFT JOIN f_strains s ON s.id = i.strain WHERE i.user = ?`, [uid])) : [];
-  const seen = new Set<string>();
-  for (const [st, genes] of kinds) { const g = genes ? JSON.parse(genes) : { shape: st, color: st }; seen.add(`${g.shape}/${g.color}`); }
+  // виды считаем как справочник: по форме и расцветке сорта; у сортов станции они свои (колосья станции — «колосья/солнечные», а не «wheat/wheat»; разные цифры заметил игрок 2026-11-17)
+  const ids = fm ? (await q("SELECT strain FROM f_inv WHERE user = ?", [uid])).map((x) => String(x[0])) : [];
+  const seen = new Set(Object.values(await farm.strains(ids)).map((g) => `${g.shape}/${g.color}`));
   const it = await q("SELECT game, kind, item, tier, finish, count, first_at FROM g_items WHERE user = ? ORDER BY first_at DESC", [uid]);
   return { name: p[0], points: Number(p[1]), karma: p[2] == null ? KARMA_START : Number(p[2]), title: p[3], place: Number(p[4] || 0), avatar: p[5] ? `/avatar/${p[5]}` : null,
-           farm: fm ? { pub: fm[0], beds: Number(fm[1]), species: seen.size } : null,
+           farm: fm ? { pub: fm[0], beds: Number(fm[1]), species: seen.size, species_total: farm.SPECIES_TOTAL } : null,
            items: it.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
 }
 

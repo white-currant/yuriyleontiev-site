@@ -115,6 +115,7 @@ const BADJ: Record<string, [string, string, string]> = { rain: ["Дождево�
 const NOUN: Record<string, [string, number]> = { moss: ["мох", 0], berry: ["ягоды", 1], crystal: ["хрусталь", 0],
   flower: ["звездоцвет", 0], mushroom: ["грибы", 1], pumpkin: ["тыква", 2], cactus: ["кактус", 0], grain: ["колосья", 1] };
 const SHAPES = Object.keys(NOUN), COLORS = Object.keys(ADJ);
+export const SPECIES_TOTAL = SHAPES.length * COLORS.length;          // всего видов (форма × расцветка) — как в справочнике
 const MYTH_ADJ: [string, string, string] = ["Мифический", "Мифические", "Мифическая"];
 const MUTATE_SHAPE = 0.12, MUTATE_COLOR = 0.12;      // шанс, что гибрид получит новую форму / новый цвет, которых нет у родителей
 function nameFor(g: any) {
@@ -199,7 +200,7 @@ async function hashId(g: any) {
 // (id — хэш его свойств), поэтому прочитанные сорта живут в памяти сервера. Раньше каждый запрос фермы перечитывал их заново —
 // это была пятая часть всех чтений. Память у каждого экземпляра сервера своя и короткая; не нашёл в ней — читаем из базы.
 const STRAIN_MEM = new Map<string, { name: string; genes: any }>(), STRAIN_NONE = new Map<string, number>();   // NONE — чего в базе нет (на 10 минут)
-async function strains(ids: string[]): Promise<Record<string, Strain>> {
+export async function strains(ids: string[]): Promise<Record<string, Strain>> {
   const out: Record<string, Strain> = {};
   for (const k in CROPS) if (!CROPS[k].hidden) out[k] = view(CROPS[k]);
   for (const i of ids) if (CROPS[i]?.hidden) out[i] = view(CROPS[i]);

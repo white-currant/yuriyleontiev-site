@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611171646";
+    var BUILD = "202611171657";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1162,7 +1162,7 @@
         body.appendChild(st);
         if (p.farm) {
           var fm = el("div", "pfarm"); fm.appendChild(el("b", "", "🌙 Лунная ферма"));
-          fm.appendChild(el("div", "", "Грядок: " + p.farm.beds + " из 9 · найдено видов растений: " + p.farm.species + " из 63"));
+          fm.appendChild(el("div", "", "Грядок: " + p.farm.beds + " из 9 · найдено видов растений: " + p.farm.species + " из " + (p.farm.species_total || 72)));
           body.appendChild(fm);
           if (p.farm.pub) body.appendChild(btn("В гости на ферму", "ghost", function () { close(); visit(p.farm.pub); }));
         }
