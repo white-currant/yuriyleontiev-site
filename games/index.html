@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611171854";
+    var BUILD = "202611171918";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2991,6 +2991,116 @@
     c.quadraticCurveTo(x, y, x + r, y); c.quadraticCurveTo(x, y, x, y + r); c.quadraticCurveTo(x, y, x - r, y); c.quadraticCurveTo(x, y, x, y - r); c.fill(); c.globalAlpha = 1;
   }
   var BEAM_MS = 2600;
+  // события грядок (его просьба 2026-11-17 «везде срочно нужны красивые анимации»): рисуются в плавном слое поверх фермы
+  var EVFX_MS = { frost: 2000, thaw: 2000, double: 1600, douse: 1900, comet: 2800, ignite: 2200 };
+  function evFx(k, i, delay) { if (!BC[i]) return; (F.evFx = F.evFx || []).push({ k: k, i: i, t0: Date.now() + (delay || 0) }); farmAnim(); }
+  function sceneShake(ms) { var b = $("scenecv") && $("scenecv").parentNode; if (!b || !b.animate) return;
+    b.animate([0, 1, 2, 3, 4, 5, 6].map(function (k) { var a = (6 - k) / 6 * 3; return { transform: "translate(" + (k % 2 ? a : -a) + "px," + (k % 3 - 1) * a * .6 + "px)" }; }), { duration: ms }); }
+  function drawEvFx(c, ev, t, kx, ky, dpr, spark) {
+    var p = BC[ev.i], e = (t - ev.t0) / EVFX_MS[ev.k]; if (!p || e < 0) return;
+    var gx = p[0] * kx, gy = (p[1] - 2) * ky, k, q, x, y, a;
+    var ez = function (v) { v = Math.max(0, Math.min(1, v)); return 1 - Math.pow(1 - v, 3); };
+    var glow = function (x0, y0, rx, ry, cols, al) { var g = c.createRadialGradient(x0, y0, 0, x0, y0, rx);
+      cols.forEach(function (cl, j) { g.addColorStop(j / (cols.length - 1), "rgba(" + cl + "," + (j === cols.length - 1 ? 0 : al * (1 - j / cols.length)) + ")"); });
+      c.fillStyle = g; c.beginPath(); c.ellipse(x0, y0, rx, ry, 0, 0, 7); c.fill(); };
+    var rhomb = function (w, h) { c.beginPath(); c.moveTo(gx, gy - h * ky); c.lineTo(gx + w * kx, gy); c.lineTo(gx, gy + h * ky); c.lineTo(gx - w * kx, gy); c.closePath(); };
+    var ring = function (v, rx, ry, col, w) { if (v <= 0 || v >= 1) return; c.globalAlpha = 1 - v; c.strokeStyle = col; c.lineWidth = (w * (1 - v) + .5) * dpr; c.beginPath(); c.ellipse(gx, gy, rx * ez(v) * kx + 2, ry * ez(v) * ky + 1, 0, 0, 7); c.stroke(); c.globalAlpha = 1; };
+    var blob = function (x0, y0, r, col, al) { if (al <= 0) return; var g = c.createRadialGradient(x0, y0, 0, x0, y0, r); g.addColorStop(0, "rgba(" + col + "," + al + ")"); g.addColorStop(1, "rgba(" + col + ",0)"); c.fillStyle = g; c.beginPath(); c.arc(x0, y0, r, 0, 7); c.fill(); };
+    c.save(); c.lineCap = "round";
+    if (ev.k === "frost") {                                                                 // иней: от центра грядки разрастаются ледяные узоры
+      var out = 1 - Math.max(0, (e - .6) / .4);
+      c.globalCompositeOperation = "lighter"; glow(gx, gy, 34 * kx, 20 * ky, ["200,235,255", "120,190,255", "80,140,255"], .55 * Math.sin(Math.min(1, e * 1.6) * Math.PI));
+      c.globalCompositeOperation = "source-over";
+      c.save(); rhomb(HW - 1, HH - 1); c.clip();
+      var ig = c.createRadialGradient(gx, gy, 0, gx, gy, (2 + ez(e / .5) * HW * 1.2) * kx);
+      ig.addColorStop(0, "rgba(235,250,255," + (.85 * out) + ")"); ig.addColorStop(.8, "rgba(180,225,255," + (.55 * out) + ")"); ig.addColorStop(1, "rgba(180,225,255,0)");
+      c.fillStyle = ig; c.fillRect(gx - HW * kx, gy - HH * ky, HW * 2 * kx, HH * 2 * ky); c.restore();
+      c.strokeStyle = "#f2fbff"; c.lineWidth = 1.1 * dpr;
+      for (k = 0; k < 6; k++) {                                                              // шесть веток с отростками, как у снежинки
+        var an = k * 1.047 + .26, L = ez(e / .5) * HW * .95, cs = Math.cos(an), sn = Math.sin(an) * .5;
+        c.globalAlpha = out; c.beginPath(); c.moveTo(gx, gy); c.lineTo(gx + cs * L * kx, gy + sn * L * ky * 2); c.stroke();
+        [.4, .7].forEach(function (f0, j) { var bx = gx + cs * L * f0 * kx, by = gy + sn * L * f0 * ky * 2, l2 = L * (.28 - j * .08);
+          [-.8, .8].forEach(function (d) { c.beginPath(); c.moveTo(bx, by); c.lineTo(bx + Math.cos(an + d) * l2 * kx, by + Math.sin(an + d) * .5 * l2 * ky * 2); c.stroke(); }); });
+        c.globalAlpha = 1; spark(gx + cs * L * kx, gy + sn * L * ky * 2, (.8 + hash01(k + ev.i) * .6) * dpr, "#d6f2ff", out * Math.min(1, e * 3), k + ev.i * 3);
+      }
+      for (k = 0; k < 10; k++) { q = (e - .15 - hash01(k + 70) * .4) / .45; if (q < 0 || q > 1) continue;   // морозные искры поднимаются
+        spark(gx + (hash01(k * 7 + 1) - .5) * 34 * kx, gy + (hash01(k * 3 + 2) - .5) * 14 * ky - q * 14 * ky, (.6 + hash01(k + 4) * .7) * dpr, k % 2 ? "#ffffff" : "#a8dcff", Math.sin(q * Math.PI), k * 5 + ev.i); }
+    } else if (ev.k === "thaw") {                                                           // таяние: лёд трескается, осколки разлетаются, валит пар
+      var br = .32;
+      c.globalCompositeOperation = "lighter"; glow(gx, gy, 30 * kx, 18 * ky, ["255,190,110", "255,130,60", "255,90,40"], .5 * Math.sin(Math.min(1, e / .45) * Math.PI));
+      c.globalCompositeOperation = "source-over";
+      if (e < br + .12) { c.globalAlpha = .82 * (e < br ? 1 : 1 - (e - br) / .12); c.fillStyle = "rgb(200,235,255)"; rhomb(HW - 3, HH - 2); c.fill(); c.globalAlpha = 1;
+        c.strokeStyle = "#ffffff"; c.lineWidth = 1 * dpr;                                     // трещины бегут от центра
+        for (k = 0; k < 5; k++) { var ca = k * 1.26 + hash01(ev.i + k) * .5, cl = ez(e / br) * (HW - 4); c.globalAlpha = e < br ? 1 : 1 - (e - br) / .12; c.beginPath(); c.moveTo(gx, gy);
+          for (var z = 1; z <= 3; z++) { var zl = cl * z / 3, jit = (hash01(k * 9 + z) - .5) * .5; c.lineTo(gx + Math.cos(ca + jit) * zl * kx, gy + Math.sin(ca + jit) * zl * .5 * ky * 2); } c.stroke(); }
+        c.globalAlpha = 1; }
+      if (e > br) for (k = 0; k < 16; k++) {                                                 // осколки льда
+        q = (e - br) / (1 - br); var da = hash01(k * 5 + ev.i) * 6.283, sp = 10 + hash01(k + 30) * 16;
+        x = gx + Math.cos(da) * sp * ez(q) * kx; y = gy + Math.sin(da) * sp * .5 * ez(q) * ky - (Math.sin(Math.min(1, q * 1.4) * Math.PI) * (8 + hash01(k) * 8)) * ky;
+        c.save(); c.translate(x, y); c.rotate(q * 6 + k); c.globalAlpha = Math.max(0, 1 - q * 1.2); c.fillStyle = k % 3 ? "#d9f2ff" : "#ffffff";
+        var s0 = (1.2 + hash01(k + 50) * 1.4) * dpr; c.fillRect(-s0, -s0 * .6, s0 * 2, s0 * 1.2); c.restore(); }
+      for (k = 0; k < 9; k++) { q = (e - .22 - hash01(k + 90) * .3) / .6; if (q < 0 || q > 1) continue;   // пар клубится вверх
+        blob(gx + (hash01(k * 3) - .5) * 30 * kx + Math.sin(q * 4 + k) * 3 * kx, gy - q * 30 * ky, (4 + q * 9) * kx, "255,255,255", .5 * Math.sin(q * Math.PI)); }
+      for (k = 0; k < 8; k++) { q = (e - .45 - hash01(k + 40) * .25) / .3; if (q < 0 || q > 1) continue;   // капли
+        c.fillStyle = "#8fd3f5"; c.globalAlpha = 1 - q; c.fillRect(gx + (hash01(k * 11) - .5) * 30 * kx, gy - 6 * ky + q * 10 * ky, 1 * dpr, 2.2 * dpr); c.globalAlpha = 1; }
+    } else if (ev.k === "double") {                                                         // щедрый урожай: два золотых толчка, фонтан искр
+      c.globalCompositeOperation = "lighter";
+      [0, .3].forEach(function (s0) { var v = (e - s0) / .5; if (v > 0 && v < 1) glow(gx, gy - 3 * ky, 30 * kx, 18 * ky, ["255,240,180", "255,200,80", "255,160,40"], .7 * Math.sin(v * Math.PI)); ring(v, 30, 16, "#ffd36b", 3); });
+      for (k = 0; k < 28; k++) { q = (e - (k % 2) * .3 - hash01(k + 7) * .1) / .62; if (q < 0 || q > 1) continue;
+        var vx = (hash01(k * 3 + 1) - .5) * 30, vy = 26 + hash01(k + 2) * 18;
+        spark(gx + vx * q * kx, gy - (vy * q - 30 * q * q) * ky, (.8 + hash01(k + 5) * 1.1) * dpr, k % 3 ? "#ffd36b" : "#fff6d0", (1 - q) * 1.3, k + ev.i * 7); }
+    } else if (ev.k === "douse") {                                                          // тушение: струя воды, шипящий пар, гаснущие угли
+      c.globalCompositeOperation = "source-over";
+      for (k = 0; k < 26; k++) { q = ((e / .42) - hash01(k + 3) * .6); if (q < 0 || q > 1) continue;   // струя падает сверху-слева
+        x = gx + (-18 + 18 * q + (hash01(k * 5) - .5) * 6) * kx; y = gy + (-34 + 34 * q * q) * ky;
+        c.strokeStyle = k % 3 ? "rgba(143,211,245,.95)" : "rgba(255,255,255,.95)"; c.lineWidth = 1.1 * dpr; c.beginPath(); c.moveTo(x, y); c.lineTo(x - 1.5 * kx, y - 3.5 * ky); c.stroke(); }
+      for (k = 0; k < 12; k++) { q = (e - .25 - hash01(k + 60) * .2) / .3; if (q < 0 || q > 1) continue;   // брызги
+        var bd = hash01(k * 7) * 3.14 + 3.14; c.fillStyle = "#bfe8ff"; c.globalAlpha = 1 - q;
+        c.fillRect(gx + Math.cos(bd) * 14 * q * kx, gy + Math.sin(bd) * 8 * q * ky + 12 * q * q * ky, 1 * dpr, 1 * dpr); c.globalAlpha = 1; }
+      for (k = 0; k < 12; k++) { q = (e - .2 - hash01(k + 20) * .35) / .6; if (q < 0 || q > 1) continue;   // пар — гуще, чем при таянии
+        blob(gx + (hash01(k * 5 + 1) - .5) * 28 * kx + Math.sin(q * 3 + k) * 4 * kx, gy - 2 * ky - q * 36 * ky, (5 + q * 11) * kx, k % 3 ? "235,235,240" : "255,255,255", .62 * Math.sin(q * Math.PI)); }
+      c.globalCompositeOperation = "lighter";
+      for (k = 0; k < 10; k++) { q = (e - hash01(k + 33) * .3) / .55; if (q < 0 || q > 1) continue;   // угли вспыхивают и сереют
+        var hot = 1 - q, col = hot > .5 ? "#ffb347" : hot > .25 ? "#e0703a" : "#8a8a8a";
+        spark(gx + (hash01(k * 9) - .5) * 26 * kx, gy - q * 18 * ky, .8 * dpr, col, hot, k + ev.i); }
+    } else if (ev.k === "comet") {                                                          // комета: падает с неба, удар, ударная волна, комья земли
+      var hit = .3, sx = gx - 90 * kx, sy = -20 * ky;
+      c.globalCompositeOperation = "lighter";
+      if (e < hit) { var h = ez(e / hit) * .85 + (e / hit) * .15; x = sx + (gx - sx) * h; y = sy + (gy - sy) * h;
+        var tl = c.createLinearGradient(x, y, x - (gx - sx) * .38, y - (gy - sy) * .38);
+        tl.addColorStop(0, "rgba(255,255,255,.95)"); tl.addColorStop(.25, "rgba(150,225,255,.7)"); tl.addColorStop(.7, "rgba(170,130,255,.3)"); tl.addColorStop(1, "rgba(120,80,255,0)");
+        c.strokeStyle = tl; c.lineWidth = 4 * dpr; c.beginPath(); c.moveTo(x, y); c.lineTo(x - (gx - sx) * .38, y - (gy - sy) * .38); c.stroke();
+        c.lineWidth = 1.6 * dpr; c.stroke();
+        glow(x, y, 12 * kx, 12 * kx, ["255,255,255", "160,230,255", "120,120,255"], .9);
+        for (k = 0; k < 8; k++) { var bk = hash01(k + 3) * .3; spark(x - (gx - sx) * bk + (hash01(k) - .5) * 6 * kx, y - (gy - sy) * bk, .7 * dpr, "#cfe9ff", 1 - bk * 3, k); }
+        spark(x, y, 2.4 * dpr, "#ffffff", 1.2, ev.i);
+      } else {
+        q = (e - hit) / (1 - hit); var fl = Math.max(0, 1 - q / .18);
+        if (fl > 0) { c.fillStyle = "rgba(200,235,255," + (.28 * fl) + ")"; c.fillRect(0, 0, c.canvas.width, c.canvas.height); }
+        glow(gx, gy, 40 * kx, 24 * ky, ["255,255,255", "150,220,255", "140,110,255"], Math.max(.25 * (1 - q), fl));
+        ring(q / .5, 52, 28, "#bfe6ff", 3.5); ring((q - .08) / .5, 36, 19, "#c9b6ff", 2.5);
+        for (k = 0; k < 18; k++) { var sa = hash01(k * 3 + ev.i) * 6.283, sd = (14 + hash01(k + 9) * 30) * ez(q / .7);   // искры разлетаются
+          spark(gx + Math.cos(sa) * sd * kx, gy + Math.sin(sa) * sd * .5 * ky - Math.sin(Math.min(1, q / .7) * Math.PI) * 12 * ky, (.9 + hash01(k + 2) * 1.1) * dpr,
+                k % 3 ? "#bfe6ff" : "#d8c6ff", (1 - q) * 1.3, k * 2 + ev.i); }
+        c.globalCompositeOperation = "source-over";
+        for (k = 0; k < 16; k++) { var v = q / .55; if (v > 1) break;                       // комья земли летят дугой и падают
+          var da2 = hash01(k * 13 + ev.i) * 6.283, dd = 8 + hash01(k + 77) * 20, s1 = (1 + hash01(k + 8)) * dpr;
+          c.globalAlpha = 1 - v * v; c.fillStyle = k % 3 ? "#5a3a22" : "#8a6040";
+          c.fillRect(gx + Math.cos(da2) * dd * v * kx, gy + Math.sin(da2) * dd * .5 * v * ky - (22 * v - 26 * v * v) * ky * (.6 + hash01(k) * .8), s1, s1); }
+        c.globalAlpha = 1;
+      }
+    } else if (ev.k === "ignite") {                                                         // вспышка огненного: огненный шар, кольцо, языки пламени
+      c.globalCompositeOperation = "lighter";
+      var fb = Math.sin(Math.min(1, e / .4) * Math.PI);
+      if (e < .15) { c.fillStyle = "rgba(255,170,80," + (.2 * (1 - e / .15)) + ")"; c.fillRect(0, 0, c.canvas.width, c.canvas.height); }
+      glow(gx, gy - 6 * ky, (6 + ez(e / .35) * 26) * kx, (5 + ez(e / .35) * 20) * ky, ["255,250,200", "255,190,70", "255,90,30", "200,30,10"], .9 * fb + .25 * (1 - e));
+      ring(e / .45, 34, 18, "#ffb347", 3);
+      for (k = 0; k < 26; k++) { q = ((e * 2.2 + hash01(k + 15)) % 1); if (e < hash01(k) * .2) continue;   // языки и искры летят вверх, мерцают
+        var fx0 = gx + (hash01(k * 3 + ev.i) - .5) * 30 * kx + Math.sin(q * 6 + k) * 2.5 * kx, fy0 = gy - q * (18 + hash01(k + 4) * 22) * ky;
+        spark(fx0, fy0, (.8 + hash01(k + 6) * 1.2) * dpr * (1 - q * .5), q < .4 ? "#fff1a8" : q < .7 ? "#ffb347" : "#ff6a3a", Math.sin(q * Math.PI) * (1 - Math.max(0, (e - .7) / .3)) * 1.2, k + ev.i); }
+    }
+    c.restore();
+  }
   function drawFxLayer(cv, f, now, t) {
     var L = fxLayer(cv), m = monoOf(f, now), sun = !!(m && m.kind === "solstice"), ss = (f && f.strains) || {};
     var stars = marksOf(f).filter(function (k) { return k.kind === "star" && BC[k.idx]; }).sort(function (a, b) { return a.n - b.n; });
@@ -3001,6 +3111,7 @@
     L.box.classList.toggle("sun", sun); L.box.classList.toggle("moss", mossy); L.box.classList.toggle("fire", fire); L.box.classList.toggle("moon", moonlit);
     var gfx = cv.id === "scenecv" ? (F.gemFx = (F.gemFx || []).filter(function (g) { return t - g.t0 < 1900; })) : [];   // самоцветная пыль: фиолетовые искры
     var bfx = cv.id === "scenecv" ? (F.beamFx = (F.beamFx || []).filter(function (g) { return t - g.t0 < BEAM_MS; })) : [];   // луч солнца
+    var efx = cv.id === "scenecv" ? (F.evFx = (F.evFx || []).filter(function (g) { return t - g.t0 < EVFX_MS[g.k]; })) : [];   // иней, таяние, ×2, тушение, комета, вспышка
     var millGem = [];                                                                   // мельница мелет самоцвет — какой (его просьба 2026-11-16)
     if (f && hasBuild(f, "mill")) jobsOf(f, "mill").forEach(function (j) { var rk = String(j.recipe).split("@")[0], gk0 = rk.indexOf("gemdust") === 0 && gemOf("p:" + rk);
       if (gk0 && j.ready > now && millGem.indexOf(gk0.k) < 0) millGem.push(gk0.k); });
@@ -3013,7 +3124,7 @@
       if (!gemSel && F.gemA > 0 && F.gemLast) gemSel = F.gemLast;                          // гаснет — тем же цветом
     }
     var gA = gemSel ? (F.gemA || 0) : 0, gIn = !!(F.sel === "gem");
-    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !bfx.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !bfx.length && !efx.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
     var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
     var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
@@ -3099,6 +3210,7 @@
         }
       }
     });
+    efx.forEach(function (ev) { drawEvFx(c, ev, t, kx, ky, dpr, spark); });
     c.globalAlpha = 1; c.globalCompositeOperation = "lighter";
     if (millGem.length) c.globalCompositeOperation = "source-over";                    // как у пыли: сложение цветов выбеливает
     if (moonlit) {                                                                       // лунные лучи и серебристые пылинки
@@ -3482,9 +3594,19 @@
   // iOS не показывает нажатие (:active) без слушателя касаний — кнопка «не прожималась»; плюс класс на время касания
   document.addEventListener("touchstart", function (e) { var b = e.target.closest && e.target.closest("button"); if (b) { b.classList.add("pressed"); setTimeout(function () { b.classList.remove("pressed"); }, 160); } }, { passive: true });
   function setText(node, t) { if (!node || node._t === t) return; node._t = t; node.textContent = t; }   // тот же текст — не трогаем (значки не мигают)
+  // комета и вспышка огненного случаются, пока растение растёт — обычно без игрока; показываем их, когда он впервые видит новый кратер или пожар
+  function evSpot(st) {
+    var nk = {}, old = F.evSeen; (st.plots || []).forEach(function (p) { if (!p) return; if (p.crater && !p.big) nk["c" + p.idx] = 1; if (p.burning) nk["b" + p.idx + ":" + p.burning] = 1; });
+    if (!old) { try { old = JSON.parse(localStorage.getItem("farm_evseen") || "{}"); } catch (e) { old = {}; } }
+    var d = 0; Object.keys(nk).forEach(function (k) { if (old[k]) return; var i = parseInt(k.slice(1), 10), cm = k[0] === "c";
+      evFx(cm ? "comet" : "ignite", i, 500 + d * 700);
+      setTimeout(function () { if (cm) { sceneShake(380); haptic("medium"); } else haptic("medium"); }, 500 + d * 700 + (cm ? 840 : 0)); d++; });
+    F.evSeen = nk; try { localStorage.setItem("farm_evseen", JSON.stringify(nk)); } catch (e) {}
+  }
   function setFarm(st) {
     siblings(st);
     var wasW = F.state && F.state.wanderer && F.state.wanderer.left > 0 && F.wanderIn;       // стоял странник, а полнолуние кончилось — уходит
+    evSpot(st);
     F.state = st; F.fetched = Date.now(); if (wasW && !st.wanderer) { F.wanderIn = 0; wanderLeave(); } renderFarm(); if (F.invRedraw) F.invRedraw();
     if (!$("farm-shop").hidden) { setText($("shopdust"), "✦ " + st.dust); if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
   }
@@ -3559,7 +3681,7 @@
     if (pl.burning) {                                                               // горит: потушить лейкой — уголь сразу; без воды — ждать
       if (F.state.water <= 0) { haptic("error"); return toast("Грядка горит ещё " + fmtLeft(pl.burning - now) + ". Потушить можно лейкой — набери воды в колодце."); }
       haptic("success"); addFx("water", pl.idx, { shape: "moss", color: "ember" });
-      F.state.water--; delete pl.burning; pl.coal = true; renderFarm(); floatText(pl.idx, "потушено — уголь!", "big");
+      F.state.water--; delete pl.burning; pl.coal = true; renderFarm(); evFx("douse", pl.idx); setTimeout(function () { floatText(pl.idx, "потушено — уголь!", "big"); }, 500);
       return farmCall("/api/farm/water", { idx: pl.idx }).catch(function () {});
     }
     if (pl.coal) {                                                                  // уголь — сразу в амбар (без амбара — пылью)
@@ -3603,9 +3725,10 @@
       if (!inf.s.myth) setTimeout(function () { flySeeds(pl.idx, inf.s); }, 260);
       return farmCall("/api/farm/harvest", { idx: pl.idx }).then(function (r) {
         if (r.error) return;
-        if (r.double) floatText(pl.idx, "×2 щедрый урожай!", "big");
+        if (r.double) { evFx("double", pl.idx); floatText(pl.idx, "×2 щедрый урожай!", "big"); }
         if (r.comet) floatText(pl.idx, "комета! +" + r.comet + " ✦", "big");
-        if (r.frost) setTimeout(function () { floatText(pl.idx, "грядку сковал лёд", "big"); }, 600);
+        if (r.frost) { evFx("frost", pl.idx, 350); setTimeout(function () { haptic("medium"); floatText(pl.idx, "грядку сковал лёд", "big"); }, 600); }
+        (r.thawed || []).forEach(function (ti, n) { evFx("thaw", ti, 150 + n * 180); setTimeout(function () { haptic("light"); floatText(ti, "лёд растаял", "big"); }, 600 + n * 180); });
         if (r.sunbeam >= 0) {                                                     // луч падает ~0,45 с — надпись и отдача в момент удара
           (F.beamFx = F.beamFx || []).push({ i: r.sunbeam, t0: Date.now() }); farmAnim(); haptic("light");
           setTimeout(function () { haptic("success"); floatText(r.sunbeam, "луч солнца — созрело!", "big"); }, 440);
@@ -3731,7 +3854,8 @@
     else it.count--;
     s.plots[pl.idx] = { idx: pl.idx, crop: st.id, planted: t0, grown: 0, wet_from: t0, water_until: t0 }; renderFarm();
     farmCall("/api/farm/plant", { idx: pl.idx, crop: seedId }).then(function (r) {
-      if (r && r.mono) { haptic("success"); setTimeout(function () { monoSheet(r.mono.kind, true); }, 450); }   // вся ферма одной расцветки — событие
+      if (r && r.mono) { haptic("success"); setTimeout(function () { monoSheet(r.mono.kind, true); }, 450); }
+      (r && r.thawed || []).forEach(function (ti, n) { evFx("thaw", ti, 100 + n * 180); setTimeout(function () { haptic("light"); floatText(ti, "лёд растаял", "big"); }, 550 + n * 180); });   // огненное рядом растопило лёд   // вся ферма одной расцветки — событие
     }).catch(function () {});
   }
   // свойства семени простыми словами; для своих выведенных сортов — продажа в своей лавке
@@ -4047,7 +4171,7 @@
             ["Посадка", "Выбери семена в полоске под фермой и нажми на пустую грядку. На старте есть мох и ягоды, остальное продаёт станция в лавке."],
             ["Полив", "Нажми на сухую грядку — польёшь её. Воды в лейке на 5 поливов, набрать снова — нажми на колодец. За полив сухой грядки — очко."],
             ["Рост", "Растение растёт, только пока грядка полита; без воды оно ждёт и ничего не теряет. Засыхает, только если не поливать двое суток. В лунный ливень грядки поливает небо."],
-            ["Урожай", "Нажми на созревшее растение. Если построен амбар, урожай ложится туда; если нет — сразу превращается в звёздную пыль. За сбор — очки для звания и 2–3 семени на следующую посадку."],
+            ["Урожай", "Нажми на созревшее растение. Если построен амбар, урожай ложится туда; если нет — сразу превращается в звёздную пыль. За сбор — очки для звания: чем реже сорт, тем больше (обычный — 2, редкий — 4, эпический — 6, легендарный — 10, долгие растения — по времени роста), и 2–3 семени на следующую посадку."],
             ["Лопата", "Внизу слева — лейка и лопата. Лопатой можно выкопать растение, посаженное по ошибке: семя вернётся в инвентарь, очко за посадку уйдёт обратно."],
             ["Грядки", "Сначала открыты три грядки, остальные покупаются за звёздную пыль — каждая следующая дороже."],
           ]);
@@ -4662,7 +4786,7 @@
     var s = F.state, mill = kind === "mill", top = el("div"), body = el("div");
     sh.appendChild(top);
     sh.appendChild(el("div", "sub", mill ? "Выбери колосья и нажми «Смолоть» — мука будет готовиться в свободной ячейке. Мука берёт расцветку колосьев, а сорт — по их цене."
-                                         : "Выбери блюдо и нажми «Испечь» — оно будет готовиться в свободной ячейке печи. Блюдо помнит сырьё: из дорогого сырья выходит дороже. Звёздный уголь из амбара допекает ячейку сразу."));
+                                         : "Выбери блюдо и нажми «Испечь» — оно будет готовиться в свободной ячейке печи. Блюдо помнит сырьё: из дорогого сырья выходит дороже. Звёздный уголь из амбара допекает ячейку сразу. Все рецепты — в справочнике, на странице «Кухня»."));
     sh.appendChild(body);
     var verb = mill ? "Смолоть " : "Испечь ";
     var drawTop = function () {
@@ -4728,8 +4852,9 @@
         var pl = el("div", "order ovcat"); pl.appendChild(el("b", "", c[0]));
         var vs = rows.filter(function (v) { return c[1].indexOf(v.k) >= 0 && v.can >= 1; })
           .sort(function (a, z) { return (a.info.dust || 0) - (z.info.dust || 0); });
+        var needOf = function (k) { var r = s.recipes[k]; return r ? r.name.toLowerCase() + ": " + Object.keys(r.needs).map(function (nd) { return NEED[nd] + " ×" + r.needs[nd]; }).join(" + ") : ""; };
         if (!vs.length) {
-          var need = c[1].map(function (k) { var r = s.recipes[k]; return r ? r.name.toLowerCase() + ": " + Object.keys(r.needs).map(function (nd) { return NEED[nd] + " ×" + r.needs[nd]; }).join(" + ") : ""; });
+          var need = c[1].map(needOf);
           pl.appendChild(el("div", "sub", (mill ? "Не из чего смолоть" : "Не из чего испечь") + ". Нужно — " + need.join("; ") + "."));
           body.appendChild(pl); return;
         }
@@ -4744,6 +4869,9 @@
           g.appendChild(cell);
         });
         pl.appendChild(g);
+        // в разделе два блюда, одно испечь можно, другое нет — рецепт второго не пропадает (баг 2026-11-17: у Егора исчез суп из мха — была похлёбка)
+        var miss = c[1].filter(function (k) { return s.recipes[k] && !vs.some(function (v) { return v.k === k; }); });
+        if (miss.length) { var ms = el("div", "sub", (mill ? "Пока не из чего смолоть" : "Пока не из чего испечь") + " " + miss.map(needOf).join("; ") + "."); ms.style.marginTop = "8px"; pl.appendChild(ms); }
         if (picked) {
           var v = picked, r = v.r, d = el("div", "ovpick");
           d.appendChild(el("b", "", itemName(v.pid) || r.name));

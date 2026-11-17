@@ -102,7 +102,9 @@ async function dropVinyl(user: number, chance: number) {
 function priceOf(s: Strain) { return Math.max(3, Math.round(s.dust * 0.5 + s.vinyl * 120 + (s.bonus ? 15 : 0) + s.gen * 2)); }
 function tierOf(p: number) { return p >= 70 ? "legendary" : p >= 40 ? "epic" : p >= 20 ? "rare" : "common"; }
 // за сбор всегда больше, чем за действие (посадка, полив — по 1): не меньше POINTS_HARVEST_MIN, в т.ч. у старых сортов
-function view(s: Strain): Strain { const price = priceOf(s); return { ...s, points: Math.max(POINTS_HARVEST_MIN, s.points), price, tier: tierOf(price) }; }
+// очки за сбор и по редкости (2026-11-17, вопрос Глеба: «нищий мох даёт столько же, сколько легендарная тыква»): берём большее — по времени роста или по редкости
+const TIER_POINTS: Record<string, number> = { common: 2, rare: 4, epic: 6, legendary: 10 };
+function view(s: Strain): Strain { const price = priceOf(s), tier = tierOf(price); return { ...s, points: Math.max(POINTS_HARVEST_MIN, s.points, TIER_POINTS[tier] || 0), price, tier }; }
 // формы растений и раскраски. Базовые — у сортов станции; остальные появляются только мутацией при скрещивании.
 // Прилагательные: [мужской, множественное, женский]; у существительного — какая форма ему нужна.
 const ADJ: Record<string, [string, string, string]> = {
