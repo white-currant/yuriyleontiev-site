@@ -57,9 +57,9 @@
   function P(u, v) { return [(u - v) * TW / 2, (u + v) * TH / 2]; }      // клетка мира → точка экрана комнаты
 
   // ---------- картинки из его листа ----------
-  var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "floor6", "floor7", "wall_r", "wall_l", "arch_r", "arch_l", "gate_r", "gate_l", "torch_r", "torch_l", "door_r", "door_l",
+  var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "floor6", "floor7", "wall_r", "wall_l", "arch_r", "arch_l", "archin_r", "archin_l", "gate_r", "gate_l", "torch_r", "torch_l", "door_r", "door_l",
     "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag"], wait = NAMES.length + 1;
-  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=8"; IMG[n] = im; });
+  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=10"; IMG[n] = im; });
   var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png";
   var CW = 64, CH = 56, AX = 32, AY = 53;
   var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
@@ -303,9 +303,24 @@
     return [ROW[name][0], i];
   }
   var GLOWS = { crys_blue: "rgba(90,160,255,A)", crys_teal: "rgba(80,230,210,A)", crys_violet: "rgba(170,110,255,A)", crys_green: "rgba(90,240,120,A)", crys_big: "rgba(90,160,255,A)", brazier: "rgba(90,170,255,A)", mush: "rgba(80,160,255,A)", mush2: "rgba(80,160,255,A)" };
+  // живой огонь (его просьба 2026-11-17): языки пламени по столбикам, высота колышется, сверху — искры
+  var FIRE = ["#fff1a8", "#ffc247", "#ff8a1f", "#d9481c"], BLUE = ["#eaffff", "#9fe6ff", "#4fb3ff", "#2a6bd9"];
+  function hz(n) { var x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+  var FQ = [];                                                 // пламя рисуется после освещения — светится, а не тонет в темноте
+  function fireQ(cx, base, w, h, t, sd, pal) { FQ.push([cx, base, w, h, t, sd, pal]); }
+  function fire(cx, base, w, h, t, sd, pal) {
+    for (var x = -w; x <= w; x++) {
+      var k = 1 - Math.abs(x) / (w + 1), hh = Math.round(k * h * (.62 + .38 * (.5 + .5 * Math.sin(t * 11 + x * 1.7 + sd) * Math.sin(t * 6.3 + x * .9 + sd * 2))));
+      for (var y = 0; y < hh; y++) { var f = y / Math.max(1, hh); if (f > .8 && hz(x * 7 + y + Math.floor(t * 14) + sd) < .45) continue;
+        ctx.fillStyle = f < .3 ? pal[0] : f < .55 ? pal[1] : f < .8 ? pal[2] : pal[3]; ctx.fillRect(Math.round(cx + x), Math.round(base - y), 1, 1); }
+    }
+    for (var e = 0; e < 3; e++) { var ph = (t * .9 + hz(e + sd)) % 1; ctx.fillStyle = ph < .5 ? pal[1] : pal[2];   // искры вверх
+      ctx.fillRect(Math.round(cx + Math.sin(t * 4 + e * 2 + sd) * (w * .8)), Math.round(base - h - ph * h * 1.2), 1, 1); }
+  }
   function img(name, x, y) { var im = IMG[name]; ctx.drawImage(im, Math.round(x), Math.round(y)); }
+  var T = 0;
   function draw(ts) {
-    var t = ts / 1000, i, j;
+    var t = ts / 1000, i, j; T = t;
     ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#0b0912"; ctx.fillRect(0, 0, W, H);
     // пол комнаты — готовая картинка (рисуется один раз на комнату): плитки и плоский узор не «плывут» друг относительно друга, а кадр дешевле
     if (!cur.floorC) {
@@ -323,11 +338,16 @@
     var list = [];
     var WW = TW / 2 + 1;
     cur.walls.forEach(function (wl) {
-      if (wl.side === "v") list.push({ z: wl.i + wl.j - .01, f: function () { var a = S(wl.i + 1, wl.j), im = IMG[wl.k + "_r"]; ctx.drawImage(im, Math.round(a[0] - WW), Math.round(a[1] - im.height + 2), WW, im.height); } });
-      else list.push({ z: wl.i + wl.j - .01, f: function () { var b = S(wl.i, wl.j + 1), im = IMG[wl.k + "_l"]; ctx.drawImage(im, Math.round(b[0]), Math.round(b[1] - im.height + 2), WW, im.height); } });
+      // арка: глубина проёма — позади всего (и героя, ушедшего в проход), рамка с дырой — на своём месте
+      if (wl.k === "arch") {
+        if (wl.side === "v") list.push({ z: -10, f: function () { var a = S(wl.i + 1, wl.j), im = IMG.archin_r; ctx.drawImage(im, Math.round(a[0] - WW), Math.round(a[1] - im.height + 2), WW, im.height); } });
+        else list.push({ z: -10, f: function () { var b = S(wl.i, wl.j + 1), im = IMG.archin_l; ctx.drawImage(im, Math.round(b[0]), Math.round(b[1] - im.height + 2), WW, im.height); } });
+      }
+      if (wl.side === "v") list.push({ z: wl.i + wl.j - .01, f: function () { var a = S(wl.i + 1, wl.j), im = IMG[wl.k + "_r"], x0 = Math.round(a[0] - WW), y0 = Math.round(a[1] - im.height + 2); ctx.drawImage(im, x0, y0, WW, im.height); } });
+      else list.push({ z: wl.i + wl.j - .01, f: function () { var b = S(wl.i, wl.j + 1), im = IMG[wl.k + "_l"], x0 = Math.round(b[0]), y0 = Math.round(b[1] - im.height + 2); ctx.drawImage(im, x0, y0, WW, im.height); } });
     });
     cur.decor.forEach(function (d) { if (d.flat) return; list.push({ z: d.u + d.v - .5, f: function () { var s = S(d.u, d.v), im = IMG[d.k]; img(d.k, s[0] - im.width / 2, s[1] - im.height + 6); } }); });
-    cur.props.forEach(function (p) { list.push({ z: p.i + p.j + 1, f: function () { var s = S(p.i + .5, p.j + .5), im = IMG[p.k]; img(p.k, s[0] - im.width / 2, s[1] - im.height + 16); } }); });
+    cur.props.forEach(function (p) { list.push({ z: p.i + p.j + 1, f: function () { var s = S(p.i + .5, p.j + .5), im = IMG[p.k], x0 = Math.round(s[0] - im.width / 2), y0 = Math.round(s[1] - im.height + 16); img(p.k, x0, y0); } }); });
     cur.drops.forEach(function (d) { list.push({ z: d.u + d.v, f: function () { var s = S(d.u, d.v), bob = Math.round(Math.sin(d.t * 5) * 2); px(ctx, s[0] - 5, s[1], 10, 2, "rgba(8,6,10,.4)"); ctx.drawImage(boneC, Math.round(s[0] - 6), Math.round(s[1] - 12 + bob)); } }); });
     cur.mobs.forEach(function (m) { if (m.hp <= 0) return; list.push({ z: m.u + m.v, f: function () {
       var s = S(m.u, m.v), fr = Math.sin(m.t * 5.5) > 0 ? 0 : 1, jump = Math.round(Math.max(0, Math.sin(m.t * 5.5)) * 4);
@@ -335,7 +355,8 @@
       ctx.drawImage((m.hit > 0 ? slimeHit : slimeF)[fr], Math.round(s[0] - 10), Math.round(s[1] - 12 - jump));
       if (m.hp < 3) { px(ctx, s[0] - 8, s[1] - 20 - jump, 16, 4, "#14151b"); px(ctx, s[0] - 7, s[1] - 19 - jump, 14 * m.hp / 3, 2, "#e2574b"); }
     } }); });
-    list.push({ z: hero.u + hero.v, f: function () {
+    // герой за линией задней стены (уходит в арку) — рисуется раньше стен, виден только в проёме
+    list.push({ z: hero.u < 0 || hero.v < 0 ? -5 : hero.u + hero.v, f: function () {
       var s = S(hero.u, hero.v), fr = heroFrame(), blink = hero.inv > 0 && hero.st !== "dead" && Math.floor(t * 16) % 2;
       px(ctx, s[0] - 10, s[1] - 2, 20, 4, "rgba(8,6,10,.5)"); px(ctx, s[0] - 7, s[1] - 3, 14, 6, "rgba(8,6,10,.35)");
       if (blink) return;
@@ -377,7 +398,7 @@
 
   var last = 0; function loop(ts) { requestAnimationFrame(loop); var dt = Math.min(.05, (ts - last) / 1000 || 0); last = ts; update(dt); draw(ts); }
   function start() { reset(); requestAnimationFrame(loop); }
-  window.__game = { hero: function () { return hero; }, room: function () { return cur; }, rooms: function () { return rooms; }, keys: keys, hit: function () { wantHit = true; }, joy: function (x, y) { joy.dx = x; joy.dy = y; }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; var p2 = P(hero.u, hero.v); camX = p2[0]; camY = p2[1]; drawMap(); }, step: function (dt) { update(dt); draw(performance.now()); } };
+  window.__game = { hero: function () { return hero; }, room: function () { return cur; }, rooms: function () { return rooms; }, keys: keys, hit: function () { wantHit = true; }, frame: function (ts) { draw(ts); }, joy: function (x, y) { joy.dx = x; joy.dy = y; }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; var p2 = P(hero.u, hero.v); camX = p2[0]; camY = p2[1]; drawMap(); }, step: function (dt) { update(dt); draw(performance.now()); } };
 })();
 </script>
 </body>
