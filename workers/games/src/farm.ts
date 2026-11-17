@@ -102,9 +102,16 @@ async function dropVinyl(user: number, chance: number) {
 function priceOf(s: Strain) { return Math.max(3, Math.round(s.dust * 0.5 + s.vinyl * 120 + (s.bonus ? 15 : 0) + s.gen * 2)); }
 function tierOf(p: number) { return p >= 70 ? "legendary" : p >= 40 ? "epic" : p >= 20 ? "rare" : "common"; }
 // за сбор всегда больше, чем за действие (посадка, полив — по 1): не меньше POINTS_HARVEST_MIN, в т.ч. у старых сортов
-// очки за сбор и по редкости (2026-11-17, вопрос Глеба: «нищий мох даёт столько же, сколько легендарная тыква»): берём большее — по времени роста или по редкости
-const TIER_POINTS: Record<string, number> = { common: 2, rare: 4, epic: 6, legendary: 10 };
-function view(s: Strain): Strain { const price = priceOf(s), tier = tierOf(price); return { ...s, points: Math.max(POINTS_HARVEST_MIN, s.points, TIER_POINTS[tier] || 0), price, tier }; }
+// очки за сбор (его решение 2026-11-17, после вопроса Глеба «нищий мох даёт столько же, сколько легендарная тыква»):
+// у каждого растения своё число — от времени роста, а сорт задаёт ставку «очков в час» (вместе с посадкой и поливом,
+// если сажать сразу после сбора): обычный 24, хороший 30, редкий 36, легендарный 48. Лучший сорт всегда приносит больше
+// и за сбор, и в час. Время сверх часа считается за половину: долгое растение растёт, пока игрока нет, — иначе оно обгоняло бы игру.
+const TIER_RATE: Record<string, number> = { common: 24, rare: 30, epic: 36, legendary: 48 };
+function harvestPoints(minutes: number, tier: string) {
+  const eff = minutes <= 60 ? minutes : 60 + (minutes - 60) / 2;
+  return Math.max(POINTS_HARVEST_MIN, Math.round((TIER_RATE[tier] || 24) * eff / 60 - POINTS_PLANT - POINTS_WATER));
+}
+function view(s: Strain): Strain { const price = priceOf(s), tier = tierOf(price); return { ...s, points: harvestPoints(s.minutes, tier), price, tier }; }
 // формы растений и раскраски. Базовые — у сортов станции; остальные появляются только мутацией при скрещивании.
 // Прилагательные: [мужской, множественное, женский]; у существительного — какая форма ему нужна.
 const ADJ: Record<string, [string, string, string]> = {
