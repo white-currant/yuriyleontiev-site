@@ -758,10 +758,17 @@ export function anomalyMarket(t = now()) {
   for (let i = 0, n = 6 + x % 3; i < n; i++) { x = Math.imul(x ^ (x >>> 13), 2654435761) >>> 0; name += GLYPHS[x % GLYPHS.length] + MARKS[(x >>> 7) % MARKS.length]; }
   return { key: "anomclaim:" + d, price: 25 + (h >>> 16) % 26, seller: name, until };
 }
+// иногда за ночь лежит больше одного семени (номер ночи → сколько). Ночь 0 (18.11.2026): он купил первое и попросил выложить ещё одно
+const ANOM_LOTS: Record<number, number> = { 0: 2 };
 async function anomalyLive(t = now()) {
   const o = anomalyMarket(t);
-  if (!o || (await q("SELECT 1 FROM f_evlog WHERE user = 0 AND kind = ?", [o.key])).length) return null;
-  return o;
+  if (!o) return null;
+  const d = Number(o.key.split(":")[1]), lots = ANOM_LOTS[d] || 1;
+  for (let i = 1; i <= lots; i++) {                                // первое некупленное
+    const key = i === 1 ? o.key : o.key + ":" + i;
+    if (!(await q("SELECT 1 FROM f_evlog WHERE user = 0 AND kind = ?", [key])).length) return { ...o, key };
+  }
+  return null;
 }
 async function buyAnomaly(u: any) {
   const o = await anomalyLive();
