@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611171237";
+    var BUILD = "202611171242";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -845,7 +845,9 @@
   /* справочник — книжка: пергаментный разворот, чернильный текст */
   body[data-screen^="farm"] .sheet.book { background: #f4e4bd; color: #3b2614; box-shadow: 0 -4px 0 #c9a86a, 0 -8px 0 var(--ink);
     background-image: linear-gradient(90deg, rgba(120, 80, 30, .12), rgba(120, 80, 30, 0) 14px, rgba(120, 80, 30, 0) calc(100% - 14px), rgba(120, 80, 30, .12)); }
-  .book .bpage { height: 408px; padding: 4px 6px 12px; opacity: 0; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }   /* длинные страницы листаются пальцем */
+  /* справочник — на всю высоту экрана (его решение 2026-11-17): пока читаешь, ферма под ним не рисуется */
+  body[data-screen^="farm"] .sheet.book { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-height: none; padding-top: calc(var(--top) + 16px); overflow: hidden; }
+  .book .bpage { flex: 1 1 auto; min-height: 0; padding: 4px 6px 12px; opacity: 0; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }   /* длинные страницы листаются пальцем */
   .book .bpage.in { opacity: 1; transform: none; transition: opacity .22s, transform .22s; }
   .book .bpage.fwd { transform: translateX(18px); } .book .bpage.back { transform: translateX(-18px); }
   .book .bpage.fwd.in, .book .bpage.back.in { transform: none; }
@@ -3212,6 +3214,10 @@
       var scr = document.body.dataset.screen;
       if (scr !== "farm" && scr !== "farm-visit") { F.anim = 0; return; }
       F.anim = requestAnimationFrame(step);
+      if (F.bookEl) {                                                              // открыт справочник (во весь экран) — ферму не рисуем
+        if (F.bookEl.isConnected) return;
+        F.bookEl = null; $("farm").style.visibility = "";
+      }
       if (ts - lastFx >= 33) { lastFx = ts; var tf = Date.now();                    // слой эффектов — плавнее, ~30 кадров
         if (scr === "farm" && F.state) drawFxLayer($("scenecv"), F.state, farmNow(), tf);
         if (scr === "farm-visit" && F.visiting) drawFxLayer($("visitcv"), F.visiting, F.visiting.now + (Date.now() - F.visiting.fetched) / 1000, tf); }
@@ -3443,7 +3449,7 @@
   }
   function farmLoop() {
     clearInterval(F.tick);
-    F.tick = setInterval(function () { if (F.state && !$("farm").hidden) renderFarm(); }, 1000);   // подписи «сколько осталось»
+    F.tick = setInterval(function () { if (F.state && !$("farm").hidden && !(F.bookEl && F.bookEl.isConnected)) renderFarm(); }, 1000);   // подписи «сколько осталось»
   }
   function openFarm() {
     show("farm"); haptic("light");
@@ -3958,7 +3964,8 @@
     var s = F.state; if (!s) return;
     var data = { strains: Object.keys(s.strains).map(function (k) { return s.strains[k]; }), bonuses: s.bonuses || {} };   // сразу — что уже известно
     var wrap = sheet(function (sh, close) {
-      sh.classList.add("book");
+      sh.classList.add("book"); F.bookEl = sh;
+      setTimeout(function () { if (F.bookEl === sh && sh.isConnected) $("farm").style.visibility = "hidden"; }, 400);   // окно выехало — ферму под ним убрать с экрана совсем
       var page = el("div", "bpage"), nav = el("div", "bnav"), prev = el("button", "bbtn", "‹"), next = el("button", "bbtn", "›"), num = el("span", "bnum");
       prev.type = next.type = "button";
       var known = function () {                              // вид (форма+цвет) → лучший найденный сорт и сколько сортов
