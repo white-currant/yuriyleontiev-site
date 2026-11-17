@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611171255";
+    var BUILD = "202611171315";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -4393,9 +4393,11 @@
       sh.appendChild(el("div", "sub", "Собранный урожай. Семена лежат в инвентаре."));
       // амбар: урожай превращается в звёздную пыль прямо здесь (его правка 2026-11-14: «не продать станции, а превратить в пыль»)
       var barnBox = el("div"); sh.appendChild(barnBox);
+      // описание выбранного и кнопки — прижаты к низу окна и видны всегда, сколько бы ни было ячеек (его просьба 2026-11-17, как в лавке)
+      var foot = el("div", "sheetfoot"), footInfo = el("div"); foot.appendChild(footInfo);
       var drawBarn = function () {
         var cur = F.state, barn = barnItems(), bgrid = el("div", "invgrid"), total = 0;
-        barnBox.innerHTML = "";
+        barnBox.innerHTML = ""; footInfo.innerHTML = "";
         // выделять одну ячейку или несколько — переключатель над ячейками (его просьба 2026-11-17: постоянное выделение нескольких не всегда удобно);
         // выбор запоминается на устройстве, по умолчанию — одна
         if (F.barnMulti == null) { try { F.barnMulti = localStorage.getItem("farm-barn-multi") === "1"; } catch (e) { F.barnMulti = false; } }
@@ -4427,7 +4429,7 @@
           barnBox.appendChild(mode);
         }
         barnBox.appendChild(bgrid);
-        if (!barn.length) { barnBox.appendChild(el("div", "sub", "Пока пусто. Сюда попадает всё, что ты собираешь с грядок.")); return; }
+        if (!barn.length) { footInfo.appendChild(el("div", "sub", "Пока пусто. Сюда попадает всё, что ты собираешь с грядок.")); return; }
         var picked = Object.keys(selSet).map(barnOf), acts = el("div", "invacts");
         var toStall = function (list) {                             // сразу: из амбара на прилавок; сервер подтвердит
           haptic("success"); var n = 0;
@@ -4438,14 +4440,14 @@
         };
         if (picked.length === 1) {
           var sel = picked[0], st = itemOf(sel.strain);
-          barnBox.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли." + (BARN_MULTI ? " Можно выделить ещё ячейки." : "")));
+          footInfo.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли." + (BARN_MULTI ? " Можно выделить ещё ячейки." : "")));
           var bsel = sel;
-          qtyBox(barnBox, { key: "barn:" + bsel.strain, max: function () { return (barnOf(bsel.strain) || { count: 0 }).count; },
+          qtyBox(footInfo, { key: "barn:" + bsel.strain, max: function () { return (barnOf(bsel.strain) || { count: 0 }).count; },
             acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + st.dust * n; }, run: function (n) { toDust(bsel.strain, n, st.dust * n); drawBarn(); } },
                    { t: function (n) { return "В лавку " + n; }, cls: "sell", run: function (n) { toStall([{ strain: bsel.strain, count: n }]); } }] });
         } else if (picked.length > 1) {
           var cnt = 0, sum = 0; picked.forEach(function (x) { cnt += x.count; sum += x.count * itemOf(x.strain).dust; });
-          barnBox.appendChild(el("div", "sub", "Выделено ячеек: " + picked.length + " — " + cnt + " " + plural(cnt, "штука", "штуки", "штук") + ", в пыль это ✦ " + sum + "."));
+          footInfo.appendChild(el("div", "sub", "Выделено ячеек: " + picked.length + " — " + cnt + " " + plural(cnt, "штука", "штуки", "штук") + ", в пыль это ✦ " + sum + "."));
           acts.appendChild(btn("В пыль · ✦ " + sum, "", function () {
             var cur2 = F.state; haptic("success");
             picked.forEach(function (x) { var k3 = x.count; if (k3 <= 0) return; x.count = 0; farmCall("/api/farm/sell", { strain: x.strain, n: k3 }).catch(function () {}); });
@@ -4454,13 +4456,13 @@
           acts.appendChild(btn("В лавку", "sell", function () { toStall(picked); }));
           acts.appendChild(btn("Отменить", "ghost", function () { F.barnSet = {}; drawBarn(); }));
         } else {
-          barnBox.appendChild(el("div", "sub", "Нажми на ячейку, чтобы превратить урожай в звёздную пыль или выставить в лавку." + (BARN_MULTI ? " Можно выделить несколько." : "")));
+          footInfo.appendChild(el("div", "sub", "Нажми на ячейку, чтобы превратить урожай в звёздную пыль или выставить в лавку." + (BARN_MULTI ? " Можно выделить несколько." : "")));
           acts.appendChild(btn("Весь урожай в пыль · ✦ " + total, "", function () { toDust("*", 0, total); drawBarn(); }));
         }
-        barnBox.appendChild(acts);
+        footInfo.appendChild(acts);
       };
       drawBarn();
-      var acts2 = el("div", "salebtns"); acts2.appendChild(btn("Готово", "", close)); sh.appendChild(acts2);
+      var acts2 = el("div", "salebtns"); acts2.appendChild(btn("Готово", "", close)); foot.appendChild(acts2); sh.appendChild(foot);
     });
   }
   // мельница и печь: построить → выбрать рецепт → ждать → забрать в амбар
