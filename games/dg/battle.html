@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Подземелье — проба боя</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: #07060a; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: -apple-system, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif; color: #efe6d2; }
+  #stage { --u: 1px; position: relative; width: min(100vw, calc(100vh * 360 / 640)); aspect-ratio: 360 / 640; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #cv { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+  .pan { background: #20222b; box-shadow: 0 0 0 calc(var(--u) * 2) #14151b, inset 0 calc(var(--u) * 2) 0 #565b6c, inset 0 calc(var(--u) * -2) 0 #16171d; }
+  #hud { position: absolute; left: calc(var(--u) * 10); right: calc(var(--u) * 10); top: calc(var(--u) * 10 + env(safe-area-inset-top)); display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
+  #hp { position: relative; width: calc(var(--u) * 120); height: calc(var(--u) * 20); }
+  #hp i { position: absolute; left: calc(var(--u) * 4); top: calc(var(--u) * 4); bottom: calc(var(--u) * 4); width: calc(100% - var(--u) * 8); background: linear-gradient(#e2574b 0 45%, #b8322c 45%); transform-origin: left; }
+  #hp b { position: absolute; inset: 0; display: grid; place-items: center; font-size: calc(var(--u) * 11); font-weight: 800; text-shadow: 0 var(--u) 0 rgba(0, 0, 0, .7); }
+  #bones { padding: 0 calc(var(--u) * 10); height: calc(var(--u) * 20); display: flex; align-items: center; gap: calc(var(--u) * 6); font-size: calc(var(--u) * 12); font-weight: 800; }
+  #bones canvas { width: calc(var(--u) * 12); height: calc(var(--u) * 11); image-rendering: pixelated; }
+  #over { position: absolute; inset: 0; display: none; place-items: center; background: rgba(6, 5, 9, .6); }
+  #over.on { display: grid; }
+  /* выход из подземелья (его правило 2026-11-17: найденное сохраняется, только если выйти вовремя или перебить всех) */
+  #leave { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--u) * 10 + env(safe-area-inset-top)); height: calc(var(--u) * 20); padding: 0 calc(var(--u) * 10);
+    font: inherit; font-size: calc(var(--u) * 11); font-weight: 800; color: #efe6d2; border: 0; cursor: pointer; }
+  #over button + button { margin-left: calc(var(--u) * 8); }
+  #over div { padding: calc(var(--u) * 16) calc(var(--u) * 20); text-align: center; font-size: calc(var(--u) * 15); font-weight: 800; line-height: 1.35; }
+  #over small { display: block; margin-top: calc(var(--u) * 4); font-size: calc(var(--u) * 12); font-weight: 600; opacity: .8; }
+  #over button { margin-top: calc(var(--u) * 14); padding: calc(var(--u) * 9) calc(var(--u) * 22); border: 0; background: #3f9e7c; color: #f2fff8; font: inherit; font-size: calc(var(--u) * 14);
+    box-shadow: 0 0 0 calc(var(--u) * 2) #14151b, inset 0 calc(var(--u) * -3) 0 #2a7058, inset 0 calc(var(--u) * 2) 0 #6fd0a8; }
+  #hint { position: absolute; left: 0; right: 0; bottom: calc(var(--u) * 6 + env(safe-area-inset-bottom)); text-align: center; font-size: calc(var(--u) * 10); font-weight: 600; opacity: .55; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="360" height="640"></canvas>
+  <div id="hud"><div id="hp" class="pan"><i></i><b>100</b></div><div id="bones" class="pan"><canvas id="boneic" width="12" height="11"></canvas><span id="bonen">0</span></div></div>
+  <div id="hint">слева — идти, справа — удар · на компьютере: стрелки и пробел</div>
+  <button id="leave" class="pan" type="button">выйти</button>
+  <div id="over"><div class="pan"><span id="overt"></span><small id="overs"></small><button id="again" type="button">Ещё раз</button><button id="home" type="button">В убежище</button></div></div>
+</div>
+<script>
+(function () {
+  var W = 360, H = 640, T = 32, stage = document.getElementById("stage"), cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  function fit() { stage.style.setProperty("--u", stage.clientWidth / W + "px"); } fit(); addEventListener("resize", fit);
+  function rng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function px(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), w, h); }
+  function sprite(c, x, y, rows, pal) { for (var j = 0; j < rows.length; j++) for (var i = 0; i < rows[j].length; i++) { var ch = rows[j][i]; if (ch !== "." && pal[ch]) px(c, x + i, y + j, 1, 1, pal[ch]); } }
+  function mk(w, h) { var c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+
+  // комната: стены по краям, лицевая стена сверху высотой в две плитки
+  var ROOM = { x0: 16, x1: W - 16, y0: 2 * T + 8, y1: H - 22 };
+
+  // ---------- пол и стены (рисуются один раз) ----------
+  var base = mk(W, H), b = base.getContext("2d");
+  (function () {
+    var r = rng(90210), x, y, i;
+    px(b, 0, 0, W, H, "#1a1722");
+    for (y = 2 * T; y < H - 16; y += 16) for (x = 16 + ((y / 16) % 2 ? -8 : 0); x < W - 16; x += 16) {         // каменные плиты 16×16 со сдвигом рядов
+      var v = r(), col = v < .16 ? "#463e52" : v < .5 ? "#3f384a" : v < .85 ? "#3a3345" : "#352f40";
+      px(b, x, y, 16, 16, col); px(b, x, y, 16, 1, "#4b4359"); px(b, x, y, 1, 16, "#463e53"); px(b, x, y + 15, 16, 1, "#2a2533"); px(b, x + 15, y, 1, 16, "#2c2735");
+      if (r() < .3) px(b, x + 3 + r() * 9, y + 3 + r() * 9, 2, 1, "#4f4760");
+      if (r() < .22) px(b, x + 2 + r() * 10, y + 4 + r() * 8, 1, 1, "#262130");
+      if (r() < .09) for (i = 0; i < 6; i++) px(b, x + 4 + i, y + 5 + Math.round(Math.sin(i * 1.3) * 2), 1, 1, "#231f2c");   // трещина
+      if (r() < .05) { px(b, x + 5, y + 8, 5, 2, "#56506a"); px(b, x + 6, y + 7, 3, 1, "#6a6380"); px(b, x + 5, y + 10, 5, 1, "#231f2c"); }   // камушек
+    }
+    // лицевая стена: кладка
+    for (y = 0; y < 2 * T; y += 8) for (x = ((y / 8) % 2 ? -8 : 0); x < W; x += 16) {
+      var u = r(), bc = u < .2 ? "#5a516b" : u < .6 ? "#524a62" : "#4a435a";
+      px(b, x, y, 16, 8, bc); px(b, x, y, 16, 1, "#665d79"); px(b, x, y + 7, 16, 1, "#2f2a39"); px(b, x + 15, y, 1, 8, "#2f2a39");
+    }
+    px(b, 0, 0, W, 6, "#211d2a"); px(b, 0, 6, W, 2, "#2f2a39");
+    px(b, 0, 2 * T - 2, W, 2, "#262130"); for (i = 0; i < 10; i++) px(b, 0, 2 * T + i, W, 1, "rgba(14,11,20," + (.55 - i * .055) + ")");   // тень стены на полу
+    // боковые и нижняя стены — вид сверху
+    [[0, 0, 16, H], [W - 16, 0, 16, H], [0, H - 16, W, 16]].forEach(function (q) { px(b, q[0], q[1], q[2], q[3], "#241f2d"); });
+    px(b, 15, 2 * T, 1, H - 2 * T - 16, "#4d4560"); px(b, W - 16, 2 * T, 1, H - 2 * T - 16, "#4d4560"); px(b, 16, H - 16, W - 32, 1, "#4d4560");
+    for (y = 8; y < H; y += 20) { px(b, 3, y, 10, 1, "#2e2838"); px(b, W - 13, y + 9, 10, 1, "#2e2838"); }
+    for (x = 20; x < W - 20; x += 24) px(b, x, H - 9, 14, 1, "#2e2838");
+    // тёмный проход в лицевой стене (выход с уровня)
+    px(b, 160, 12, 40, 52, "#0b0910"); px(b, 156, 8, 48, 4, "#6a5236"); px(b, 156, 8, 48, 1, "#8a6c48"); px(b, 156, 12, 4, 52, "#5b4630"); px(b, 200, 12, 4, 52, "#5b4630"); px(b, 156, 12, 1, 52, "#7a5e40");
+    for (i = 0; i < 4; i++) px(b, 164 + i * 3, 48 + i * 4, 32 - i * 6, 4, i % 2 ? "#15121c" : "#1d1926");
+    // факелы на стене: держатели
+    [134, 226].forEach(function (tx) { px(b, tx - 1, 36, 3, 12, "#6a5236"); px(b, tx - 3, 34, 7, 3, "#3c4049"); px(b, tx - 3, 34, 7, 1, "#6f7480"); });
+    // мелочи на полу
+    sprite(b, 40, 300, ["..w...ww..", ".wWw.wWWw.", "wWWWwWWw..", ".wwWWWw...", "...www...."], { w: "#8f8873", W: "#d9d2bf" });
+    sprite(b, 300, 470, ["...ww...", "..wWWw..", ".wWkWkw.", ".wWWWWw.", "..wWWw..", "..wkwk.."], { w: "#8f8873", W: "#d9d2bf", k: "#231f2c" });
+    [[26, 96], [318, 98], [30, 560]].forEach(function (q) {                                                   // ящики и бочка
+      px(b, q[0], q[1], 20, 20, "#5a3f28"); px(b, q[0], q[1], 20, 2, "#7a5836"); px(b, q[0], q[1], 2, 20, "#7a5836"); px(b, q[0] + 18, q[1], 2, 20, "#3d2a1a"); px(b, q[0], q[1] + 18, 20, 2, "#3d2a1a");
+      px(b, q[0] + 3, q[1] + 9, 14, 2, "#3d2a1a"); px(b, q[0] + 9, q[1] + 3, 2, 14, "#3d2a1a");
+    });
+  })();
+
+  // ---------- слизень и мелкие рисунки (кодом) ----------
+  var SL = { k: "#10202c", a: "#2f8fc4", A: "#5cc0ee", h: "#c8f1ff", d: "#1d6a96", e: "#0b0a10" };
+  var slimeF = [
+    ["......kkkkkkkk......", "....kkAAAAAAAAkk....", "...kAAhhAAAAAAAAk...", "..kAAhhAAAAAAAAAAk..", ".kaAAAAAAAAAAAAAAak.", ".kaAAAeeAAAAeeAAAak.", "kaaAAAeeAAAAeeAAAaak", "kaaAAAAAAAAAAAAAAaak", "kaaaAAAAAAAAAAAAaaak", "kdaaaaaAAAAAAaaaaadk", "kddaaaaaaaaaaaaaaddk", ".kddddaaaaaaaadddk..", "..kkkkkkkkkkkkkkkk.."],
+    ["....................", "....................", ".....kkkkkkkkkk.....", "...kkAAAAAAAAAAkk...", "..kAAhhAAAAAAAAAAk..", ".kaAhhAAAAAAAAAAAak.", "kaaAAAeeAAAAeeAAAaak", "kaaAAAeeAAAAeeAAAaak", "kaaaAAAAAAAAAAAAaaak", "kdaaaaaAAAAAAaaaaadk", "kddaaaaaaaaaaaaaaddk", "kdddddaaaaaaaaddddk.", ".kkkkkkkkkkkkkkkkkk."]
+  ].map(function (rows) { var c = mk(20, 13); sprite(c.getContext("2d"), 0, 0, rows, SL); return c; });
+  var slimeHit = slimeF.map(function (src) { var c = mk(20, 13), g = c.getContext("2d"); g.drawImage(src, 0, 0); g.globalCompositeOperation = "source-atop"; g.fillStyle = "#ffffff"; g.fillRect(0, 0, 20, 13); return c; });
+  var BONE = ["........kk..", ".......kWWk.", "......kWWWWk", ".....kWWkWwk", "....kWWk.kk.", "...kWWk.....", ".kkWWk......", "kWWkwk......", "kWWWwk......", ".kWwk.......", "..kk........"], BP = { k: "#3c362d", W: "#efe8d6", w: "#b9b09a" };
+  var boneC = mk(12, 11); sprite(boneC.getContext("2d"), 0, 0, BONE, BP); sprite(document.getElementById("boneic").getContext("2d"), 0, 0, BONE, BP);
+
+  // ---------- лист героя ----------
+  var HERO = new Image(); HERO.src = "hero.png";
+  var CW = 64, CH = 56, AX = 32, AY = 53;
+  var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], run_side: [6, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
+
+  // ---------- состояние ----------
+  var hero, mobs, drops, fx, bones, done;
+  function reset() {
+    hero = { x: 180, y: 500, dir: "back", flip: 1, st: "idle", t: 0, hp: 100, inv: 0, atk: 0, hitDone: false };
+    mobs = []; drops = []; fx = []; bones = 0; done = false;
+    var r = rng(Date.now() & 0xffff);
+    for (var i = 0; i < 6; i++) mobs.push({ x: 50 + r() * 260, y: 130 + r() * 230, hp: 3, t: r() * 10, hit: 0, vx: 0, vy: 0, wx: 0, wy: 0, wt: 0 });
+    document.getElementById("over").classList.remove("on"); hud();
+  }
+  function hud() {
+    document.querySelector("#hp i").style.transform = "scaleX(" + Math.max(0, hero.hp) / 100 + ")"; document.querySelector("#hp b").textContent = Math.max(0, Math.round(hero.hp));
+    document.getElementById("bonen").textContent = bones;
+  }
+  function finish(title, sub) { done = true; document.getElementById("overt").textContent = title; document.getElementById("overs").textContent = sub; setTimeout(function () { document.getElementById("over").classList.add("on"); }, 700); }
+  document.getElementById("again").onclick = reset;
+  document.getElementById("home").onclick = function () { location.href = "hub.html"; };
+  document.getElementById("leave").onclick = function () { location.href = "hub.html"; };
+
+  // ---------- управление ----------
+  var joy = { on: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 }, keys = {}, wantHit = false;
+  function pos(e) { var r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
+  stage.addEventListener("pointerdown", function (e) {
+    if (e.target.closest("#over")) return;
+    var p = pos(e);
+    if (p[0] < W * .55 && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.bx = p[0]; joy.by = p[1]; joy.dx = joy.dy = 0; }
+    else wantHit = true;
+    e.preventDefault();
+  });
+  stage.addEventListener("pointermove", function (e) {
+    if (!joy.on || e.pointerId !== joy.id) return;
+    var p = pos(e), dx = p[0] - joy.bx, dy = p[1] - joy.by, d = Math.hypot(dx, dy), m = 34;
+    if (d > m) { dx *= m / d; dy *= m / d; } joy.dx = dx / m; joy.dy = dy / m;
+  });
+  function up(e) { if (joy.on && e.pointerId === joy.id) { joy.on = false; joy.dx = joy.dy = 0; } }
+  stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
+  addEventListener("keydown", function (e) { keys[e.code] = true; if (e.code === "Space") { wantHit = true; e.preventDefault(); } });
+  addEventListener("keyup", function (e) { keys[e.code] = false; });
+
+  function nearest(maxD) { var best = null, bd = maxD; mobs.forEach(function (m) { if (m.hp <= 0) return; var d = Math.hypot(m.x - hero.x, m.y - hero.y); if (d < bd) { bd = d; best = m; } }); return best; }
+
+  // ---------- шаг игры ----------
+  function update(dt) {
+    var i;
+    if (hero.st !== "dead") {
+      var mx = joy.dx + ((keys.ArrowRight || keys.KeyD) ? 1 : 0) - ((keys.ArrowLeft || keys.KeyA) ? 1 : 0), my = joy.dy + ((keys.ArrowDown || keys.KeyS) ? 1 : 0) - ((keys.ArrowUp || keys.KeyW) ? 1 : 0), ml = Math.hypot(mx, my);
+      if (ml > 1) { mx /= ml; my /= ml; }
+      hero.inv = Math.max(0, hero.inv - dt);
+      if (hero.st === "hit") {                                                      // удар: три кадра, урон — на втором
+        hero.t += dt;
+        if (hero.t > .09 && !hero.hitDone) { hero.hitDone = true;
+          mobs.forEach(function (m) { if (m.hp <= 0) return; var dx = (m.x - hero.x) * hero.flip, dy = m.y - hero.y;
+            if (dx > -10 && dx < 46 && Math.abs(dy) < 30) { m.hp--; m.hit = .18; m.vx = hero.flip * 150; m.vy = dy * 2;
+              fx.push({ k: "spark", x: m.x, y: m.y - 8, t: 0 });
+              if (m.hp <= 0) { fx.push({ k: "poof", x: m.x, y: m.y - 6, t: 0 }); drops.push({ x: m.x, y: m.y, t: 0 }); } } });
+        }
+        if (hero.t > .3) { hero.st = "idle"; hero.t = 0; }
+      } else if (hero.st === "hurt") { hero.t += dt; if (hero.t > .28) { hero.st = "idle"; hero.t = 0; } }
+      else {
+        if (wantHit) { var tg = nearest(90); if (tg) hero.flip = tg.x >= hero.x ? 1 : -1; hero.dir = "side"; hero.st = "hit"; hero.t = 0; hero.hitDone = false; }
+        else if (ml > .15) {
+          hero.x += mx * 88 * dt; hero.y += my * 88 * dt; hero.st = "walk"; hero.t += dt;
+          if (Math.abs(mx) > Math.abs(my) * .9) { hero.dir = "side"; hero.flip = mx > 0 ? 1 : -1; } else hero.dir = my > 0 ? "front" : "back";
+        } else { if (hero.st !== "idle") hero.t = 0; hero.st = "idle"; hero.t += dt; }
+      }
+      wantHit = false;
+      hero.x = Math.max(ROOM.x0 + 10, Math.min(ROOM.x1 - 10, hero.x)); hero.y = Math.max(ROOM.y0 + 6, Math.min(ROOM.y1, hero.y));
+    } else hero.t += dt;
+
+    mobs.forEach(function (m) {
+      if (m.hp <= 0) return;
+      m.t += dt; m.hit = Math.max(0, m.hit - dt);
+      var dx = hero.x - m.x, dy = hero.y - m.y, d = Math.hypot(dx, dy) || 1, hop = Math.max(0, Math.sin(m.t * 5.5));      // движется прыжками
+      if (hero.st !== "dead" && d < 170) { m.x += dx / d * 34 * hop * dt; m.y += dy / d * 34 * hop * dt; }
+      else { m.wt -= dt; if (m.wt <= 0) { m.wt = 1 + Math.random() * 2; var a = Math.random() * 6.28; m.wx = Math.cos(a); m.wy = Math.sin(a); } m.x += m.wx * 14 * hop * dt; m.y += m.wy * 14 * hop * dt; }
+      m.x += m.vx * dt; m.y += m.vy * dt; m.vx *= Math.pow(.002, dt); m.vy *= Math.pow(.002, dt);
+      m.x = Math.max(ROOM.x0 + 10, Math.min(ROOM.x1 - 10, m.x)); m.y = Math.max(ROOM.y0 + 4, Math.min(ROOM.y1, m.y));
+      if (hero.st !== "dead" && d < 17 && hero.inv <= 0) {
+        hero.hp -= 12; hero.inv = .9; hero.st = "hurt"; hero.t = 0; hero.flip = dx < 0 ? 1 : -1; hero.dir = "side"; hero.x += dx / d * 10; hero.y += dy / d * 10; hud();
+        if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", "Добыча: костей " + bones); }
+      }
+    });
+    for (i = 0; i < mobs.length; i++) for (var j = i + 1; j < mobs.length; j++) {                                           // слизни не слипаются
+      var a2 = mobs[i], b2 = mobs[j]; if (a2.hp <= 0 || b2.hp <= 0) continue; var ex = b2.x - a2.x, ey = b2.y - a2.y, ed = Math.hypot(ex, ey) || 1;
+      if (ed < 18) { var push = (18 - ed) / 2; a2.x -= ex / ed * push; a2.y -= ey / ed * push; b2.x += ex / ed * push; b2.y += ey / ed * push; }
+    }
+    drops = drops.filter(function (d2) { d2.t += dt; if (hero.st !== "dead" && d2.t > .3 && Math.hypot(d2.x - hero.x, d2.y - hero.y) < 20) { bones++; hud(); fx.push({ k: "plus", x: d2.x, y: d2.y - 10, t: 0 }); return false; } return true; });
+    fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : .32); });
+    if (!done && hero.st !== "dead" && !mobs.some(function (m) { return m.hp > 0; }) && !drops.length) finish("Уровень зачищен", "Добыча: костей " + bones);
+  }
+
+  // ---------- рисование ----------
+  var lightC = mk(90, 160), L = lightC.getContext("2d");
+  function glow(x, y, r, col, k) { var g = L.createRadialGradient(x / 4, y / 4, 0, x / 4, y / 4, r / 4); g.addColorStop(0, col.replace("A", k)); g.addColorStop(1, col.replace("A", 0)); L.fillStyle = g; L.fillRect(0, 0, 90, 160); }
+  function heroFrame() {
+    var name, n, i;
+    if (hero.st === "dead") { name = "die"; i = Math.min(2, Math.floor(hero.t / .22)); }
+    else if (hero.st === "hit") { name = "hit_side"; i = hero.t < .09 ? 0 : hero.t < .2 ? 1 : 2; }
+    else if (hero.st === "hurt") { name = "hurt_side"; i = Math.min(2, Math.floor(hero.t / .1)); }
+    else if (hero.st === "walk") { name = "walk_" + hero.dir; i = Math.floor(hero.t / .13) % 4; }
+    else { name = "idle_" + hero.dir; i = Math.floor(hero.t / .55) % 2; }
+    return [ROW[name][0], i];
+  }
+  function draw(ts) {
+    var t = ts / 1000, i;
+    ctx.globalCompositeOperation = "source-over"; ctx.drawImage(base, 0, 0);
+    var list = [];
+    drops.forEach(function (d) { list.push({ y: d.y - 1, f: function () { var bob = Math.round(Math.sin(d.t * 5) * 2); px(ctx, d.x - 5, d.y, 10, 2, "rgba(8,6,10,.4)"); ctx.drawImage(boneC, Math.round(d.x - 6), Math.round(d.y - 12 + bob)); } }); });
+    mobs.forEach(function (m) { if (m.hp <= 0) return; list.push({ y: m.y, f: function () {
+      var fr = Math.sin(m.t * 5.5) > 0 ? 0 : 1, jump = Math.round(Math.max(0, Math.sin(m.t * 5.5)) * 4);
+      px(ctx, m.x - 8, m.y - 1, 16, 3, "rgba(8,6,10,.45)");
+      ctx.drawImage((m.hit > 0 ? slimeHit : slimeF)[fr], Math.round(m.x - 10), Math.round(m.y - 12 - jump));
+      if (m.hp < 3) { px(ctx, m.x - 8, m.y - 20 - jump, 16, 4, "#14151b"); px(ctx, m.x - 7, m.y - 19 - jump, 14 * m.hp / 3, 2, "#e2574b"); }
+    } }); });
+    list.push({ y: hero.y, f: function () {
+      if (!HERO.complete || !HERO.naturalWidth) return;
+      var fr = heroFrame(), blink = hero.inv > 0 && hero.st !== "dead" && Math.floor(t * 16) % 2;
+      px(ctx, hero.x - 10, hero.y - 2, 20, 4, "rgba(8,6,10,.5)"); px(ctx, hero.x - 7, hero.y - 3, 14, 6, "rgba(8,6,10,.35)");
+      if (blink) return;
+      ctx.save(); ctx.translate(Math.round(hero.x), Math.round(hero.y)); ctx.scale(hero.flip < 0 && (hero.dir === "side" || hero.st === "dead") ? -1 : 1, 1);
+      ctx.drawImage(HERO, fr[1] * CW, fr[0] * CH, CW, CH, -AX, -AY + 2, CW, CH); ctx.restore();
+    } });
+    list.sort(function (a, c) { return a.y - c.y; }).forEach(function (o) { o.f(); });
+
+    // свет: тёмная пещера, тёплые факелы, мягкий круг вокруг героя
+    L.globalCompositeOperation = "source-over"; L.fillStyle = "#8f89b0"; L.fillRect(0, 0, 90, 160); L.globalCompositeOperation = "lighter";
+    var f1 = .85 + Math.sin(t * 9) * .06 + Math.sin(t * 23) * .04, f2 = .85 + Math.sin(t * 8 + 2) * .06 + Math.sin(t * 19) * .04;
+    glow(134, 44, 210, "rgba(255,160,80,A)", .7 * f1); glow(226, 44, 210, "rgba(255,160,80,A)", .7 * f2);
+    glow(180, 60, 70, "rgba(110,90,200,A)", .25); glow(hero.x, hero.y - 20, 130, "rgba(225,215,255,A)", .75);
+    drops.forEach(function (d) { glow(d.x, d.y - 6, 30, "rgba(255,240,200,A)", .35); });
+    ctx.globalCompositeOperation = "multiply"; ctx.drawImage(lightC, 0, 0, W, H); ctx.globalCompositeOperation = "source-over";
+
+    // светится само: огонь факелов, глаза героя, прицел, эффекты
+    [134, 226].forEach(function (tx, k) {
+      var fl = Math.sin(t * 11 + k * 2) > 0 ? 1 : 0;
+      px(ctx, tx - 3, 26, 7, 8, "#ff8a1f"); px(ctx, tx - 2, 23 - fl, 5, 10 + fl, "#ffc247"); px(ctx, tx - 1, 25 - fl, 3, 7, "#fff3b0"); px(ctx, tx, 19 - fl * 2, 1, 4, "#ffc247");
+      if (Math.random() < .2) fx.push({ k: "ember", x: tx + (Math.random() * 6 - 3), y: 20, t: 0 });
+    });
+    var tg = hero.st !== "dead" ? nearest(110) : null;
+    if (tg) { var jx = Math.round(tg.x), jy = Math.round(tg.y - 7), s = 13 + Math.round(Math.sin(t * 6)), c2 = "#f4ead0";
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) { px(ctx, jx + q[0] * s - (q[0] > 0 ? 3 : 0), jy + q[1] * s, 4, 1, c2); px(ctx, jx + q[0] * s, jy + q[1] * s - (q[1] > 0 ? 3 : 0), 1, 4, c2); }); }
+    fx.forEach(function (f) {
+      var k = f.t / .32;
+      if (f.k === "spark") { for (i = 0; i < 6; i++) { var a = i * 1.05, d = 4 + k * 14; px(ctx, f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, 2, 2, k < .5 ? "#ffffff" : "#bfeeff"); } }
+      else if (f.k === "poof") { for (i = 0; i < 8; i++) { var a3 = i * .785, d3 = 3 + k * 12; px(ctx, f.x + Math.cos(a3) * d3 - 1, f.y + Math.sin(a3) * d3 - 1 - k * 6, 3 - Math.floor(k * 2), 3 - Math.floor(k * 2), k < .5 ? "#bfeeff" : "#5cc0ee"); } }
+      else if (f.k === "ember") { px(ctx, f.x + Math.sin(f.t * 20) * 2, f.y - f.t * 40, 1, 1, "#ffd27a"); }
+      else if (f.k === "plus") { var yy = f.y - f.t * 22; ctx.globalAlpha = 1 - f.t / .8; px(ctx, f.x - 3, yy, 7, 1, "#efe8d6"); px(ctx, f.x, yy - 3, 1, 7, "#efe8d6"); ctx.drawImage(boneC, Math.round(f.x + 6), Math.round(yy - 6)); ctx.globalAlpha = 1; }
+    });
+    // джойстик
+    if (joy.on) { ctx.globalAlpha = .28; ctx.fillStyle = "#efe6d2"; ctx.beginPath(); ctx.arc(joy.bx, joy.by, 34, 0, 7); ctx.fill(); ctx.globalAlpha = .55; ctx.beginPath(); ctx.arc(joy.bx + joy.dx * 34, joy.by + joy.dy * 34, 14, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+  }
+
+  var last = 0; function loop(ts) { requestAnimationFrame(loop); var dt = Math.min(.05, (ts - last) / 1000 || 0); last = ts; update(dt); draw(ts); }
+  reset(); requestAnimationFrame(loop);
+  window.__game = { hero: function () { return hero; }, mobs: function () { return mobs; }, keys: keys, hit: function () { wantHit = true; } };   // для проверки на стенде
+})();
+</script>
+</body>
+</html>

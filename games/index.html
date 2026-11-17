@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611172051";
+    var BUILD = "202611172146";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -86,6 +86,10 @@
   .sigil.photo { background-size: cover; background-position: center; color: transparent; }
   /* рамка звания вокруг аватарки (его рамки, 2026-11-17): место под аватарку — по размеру рамки, остальное раздвигается */
   .fav { position: relative; flex: none; display: block; justify-self: center; }
+  .dgwrap { position: fixed; inset: 0; z-index: 200; background: #07060a; }
+  .dgwrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+  .dgx { position: absolute; right: 10px; bottom: calc(12px + env(safe-area-inset-bottom)); width: 34px; height: 34px; border-radius: 50%; border: 0;
+    background: rgba(0, 0, 0, .55); color: #efe6d2; font-size: 16px; z-index: 2; }
   .fav > .sigil, .fav > .av { position: absolute; margin: 0; }
   .fav > img { position: absolute; left: 0; top: 0; max-width: none; pointer-events: none; }
   .who .sigil { width: 72px; height: 72px; font-size: 28px; }
@@ -933,6 +937,15 @@
           <button class="btn" id="tofarm">На ферму</button>
         </div>
       </div>
+      <!-- Подземелье: проба, видна только хозяину (его решение 2026-11-17) -->
+      <div class="game-card art-card dg-card" id="dgcard" hidden>
+        <img class="art" id="dgart" src="dg/card.jpg" alt="" style="object-fit:cover">
+        <div class="art-body">
+          <h2>Подземелье</h2>
+          <p>Проба — видишь только ты.</p>
+          <button class="btn" id="todg">Войти</button>
+        </div>
+      </div>
     </div>
 
     <div class="tab hall" id="tab-hall" hidden>
@@ -1076,6 +1089,7 @@
     $("title").textContent = p.title; $("name").textContent = p.name;
     $("sigil").textContent = initial(p.name);
     setPhoto($("sigil"), p.avatar); rankFrame($("sigil"), p.title, 36);
+    $("dgcard").hidden = !("link" in p && p.link === null);                 // подземелье — пока только хозяину: у него одного нет привязки канала
     $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
     $("karma").textContent = p.karma; $("place").textContent = p.place || "—";
     var lad = [0, 30, 100, 250, 500, 1000, 2000, 5000, 12000, 25000, 50000], prev = 0;
@@ -5299,7 +5313,15 @@
       if (finish === "star") [[2, 2], [sl - 4, 4], [4, sl - 5], [sl - 6, sl - 4], [sl / 2 | 0, 1]].forEach(function (q) {
         px(c, x0 + q[0], y0 + q[1], 1, 3, "#fff6df"); px(c, x0 + q[0] - 1, y0 + q[1] + 1, 3, 1, "#fff6df"); });
     };
-    if (img && img.complete && img.naturalWidth) paint(); else { img = coverCache[rel.cover] = coverCache[rel.cover] || new Image(); img.addEventListener("load", paint); if (!img.src && rel.cover) img.src = "../" + rel.cover; }
+    // обложка не догрузилась (связь мигнула) — пробуем ещё раз, до трёх попыток; раньше сломанная картинка запоминалась навсегда (жалоба 2026-11-17: пластинки без обложек)
+    if (img && img.complete && img.naturalWidth) return paint();
+    if (img && img.complete && img.src && !img.naturalWidth && !img._try) img = null;      // загрузка уже сорвалась, а повторов не было — начинаем заново
+    if (!img) {
+      img = coverCache[rel.cover] = new Image(); img._try = 0;
+      img.addEventListener("error", function () { var me = img; if (me._try >= 3) return; me._try++; setTimeout(function () { me.src = "../" + rel.cover + "?r=" + me._try; }, 700 * me._try); });
+      if (rel.cover) img.src = "../" + rel.cover;
+    }
+    img.addEventListener("load", paint);
   }
   function pips(vs) {                                      // четыре точки — какие редкости этого трека уже найдены
     var p = el("span", "pips"), have = {};
@@ -5444,7 +5466,7 @@
     li.appendChild(el("small", "", agoText(x.at)));
     return li;
   }
-  function openFeed() {
+  function openFeed(again) {
     var box = $("feedbox"); box.innerHTML = ""; box.appendChild(el("div", "feednote", "Загружаю…"));
     call("/api/farm/feed").then(function (r) {
       box.innerHTML = "";
@@ -5468,7 +5490,11 @@
       var top = r.items.reduce(function (m, x) { return Math.max(m, x.id); }, 0);
       try { localStorage.setItem("feed-seen", String(Math.max(top, feedSeen()))); } catch (e) {}
       feedDot();
-    }).catch(function () { box.innerHTML = ""; box.appendChild(el("div", "feednote", "Не получилось загрузить новости")); });
+    }).catch(function () {                                          // связь мигнула (часто — сразу после возврата в Телеграм): ещё раз сами, потом кнопка (жалоба 2026-11-17)
+      if (!again) return setTimeout(function () { openFeed(true); }, 1200);
+      box.innerHTML = ""; box.appendChild(el("div", "feednote", "Не получилось загрузить новости — проверь связь."));
+      var a = el("div", "invacts"); a.appendChild(btn("Повторить", "", function () { haptic("light"); openFeed(); })); box.appendChild(a);
+    });
   }
   // всплывающие уведомления: пока игра открыта, раз в 20 секунд спрашиваем свежие новости и показываем их сверху
   F.pingSince = 0;
@@ -5551,6 +5577,18 @@
   }
 
   $("tofarm").onclick = openFarm;
+  // подземелье — поверх мини-приложения, в своей рамке: внутри свои страницы (убежище ↔ бой), а вход Телеграма не теряется
+  function openDungeon() {
+    haptic("light");
+    var w = el("div", "dgwrap"), f = el("iframe"), x = el("button", "dgx", "✕");
+    f.src = "dg/hub.html?v=" + Date.now(); f.setAttribute("allow", "autoplay"); x.type = "button"; x.setAttribute("aria-label", "Закрыть");
+    var bb = tg && tg.BackButton, close = function () { haptic("light"); w.remove(); document.documentElement.classList.remove("locked"); if (bb && document.body.dataset.screen === "home") bb.hide(); };
+    w._close = close; x.onclick = close; w.appendChild(f);
+    if (bb && bb.show) bb.show();
+    if (!(bb && bb.isVisible)) w.appendChild(x);                                    // вне Телеграма (или старый клиент) «Назад» нет — свой крестик       // в Телеграме выход — его кнопка «Назад» в шапке (её ловит back()), свой крестик не налезает на кнопки игры
+    document.body.appendChild(w); document.documentElement.classList.add("locked");
+  }
+  $("todg").onclick = openDungeon; $("dgart").onclick = openDungeon;
   $("toneighbors").onclick = openNeighbors;
   $("toshop").onclick = function () { openShop("buy"); };
   $("decorbtn").onclick = function () { haptic("light"); decorSheet(); };
@@ -5560,6 +5598,7 @@
     b.onclick = function () { var to = b.dataset.go; if (to === "home") home(); else if (to === "farm") openFarm(); else if (to === "farm-neighbors") openNeighbors(); };
   });
   function back() {
+    var dw = document.querySelector(".dgwrap"); if (dw && dw._close) { dw._close(); return; }   // открыто подземелье — «Назад» закрывает его
     var cur = document.body.dataset.screen, ws = document.querySelectorAll(".sheet-wrap");
     if (ws.length) { ws[ws.length - 1].click(); return; }      // «Назад» Телеграма сначала закрывает открытое окно, а не уходит с экрана
     if (cur === "farm-visit") openNeighbors(); else if (cur === "farm-neighbors" || cur === "farm-shop") openFarm(); else home();
