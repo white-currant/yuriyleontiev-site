@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611171436";
+    var BUILD = "202611171639";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2581,7 +2581,7 @@
       var fillPick = function (k) {
         var gk = GEMK[k], own = barnOf(gk.gem), ownD = barnOf(gk.dust);
         pick.innerHTML = ""; pick.appendChild(el("b", "", gk.name));
-        pick.appendChild(document.createTextNode("Если посыпать " + gk.pyl + " самоцветную пыль на растущую грядку, " + gk.does + "."
+        pick.appendChild(document.createTextNode("Если посыпать " + gk.pyl + " самоцветную пыль " + (gk.mark ? "на грядку" : "на растущую грядку") + ", " + gk.does + "."
           + ((own && own.count) || (ownD && ownD.count) ? " У тебя: камней " + ((own && own.count) || 0) + ", пыли " + ((ownD && ownD.count) || 0) + "." : "")));
       };
       // высота блока описания — по самому длинному из трёх камней, чтобы окно не прыгало при выборе (его просьба 2026-11-17)
@@ -3531,7 +3531,12 @@
       s.plots[pl.idx] = { idx: pl.idx, crop: null }; renderFarm();
       return farmCall("/api/farm/harvest", { idx: pl.idx }).catch(function () {});
     }
-    if (inf.ripe) {                                                                 // созрело — собрать сразу, без вопросов
+    if (inf.ripe && F.sel === "gem") {                                              // с выбранной пылью созревшее не собираем, а посыпаем (жалоба игрока 2026-11-17)
+      var gkr = GEMK[F.gemKind];                                                    // бирюзовая, травяная, розовая срабатывают при сборе — их и на созревшее; лунная и золотая созревшему не нужны
+      if (!gkr || !gkr.mark) { haptic("error"); return toast("Уже созрело — эта пыль не нужна. Чтобы собрать, нажми «Отменить» внизу."); }
+      if (marksAt(pl.idx).indexOf(gkr.mark) >= 0) { haptic("error"); return toast("Эта пыль тут уже посыпана. Чтобы собрать, нажми «Отменить» внизу."); }
+    }
+    if (inf.ripe && F.sel !== "gem") {                                                                 // созрело — собрать сразу, без вопросов
       var gain = s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1, hasB = hasBuild(s, "barn");   // есть амбар — урожай туда, нет — сразу в пыль
       var mk = marksAt(pl.idx), starX = mk.indexOf("star") >= 0, mythX = !inf.s.myth && mk.indexOf("myth") >= 0 && mythNear(pl.idx);
       if (starX) gain *= 2;                                                         // грядка созвездия — урожай ×2
@@ -3884,11 +3889,11 @@
   function gemSheet(onPick) {                                    // какая пыль есть и что каждая делает
     sheet(function (sh, close) {
       sh.appendChild(el("h3", "", "Самоцветная пыль"));
-      sh.appendChild(el("div", "sub", "Выбери пыль, потом нажми на растущую грядку."));
+      sh.appendChild(el("div", "sub", "Выбери пыль, потом нажми на грядку."));
       gemDusts().forEach(function (k) {
         var gk = GEMK[k], b = el("button", "gempick" + (F.gemKind === k ? " on" : "")); b.type = "button";
         var cv = el("canvas", "pix"); itemIcon(cv, gk.dust); b.appendChild(cv);
-        var tx = el("div"); tx.appendChild(el("b", "", itemName(gk.dust) + " · " + barnOf(gk.dust).count)); tx.appendChild(el("small", "", "Если посыпать на растущую грядку, " + gk.does + ".")); b.appendChild(tx);
+        var tx = el("div"); tx.appendChild(el("b", "", itemName(gk.dust) + " · " + barnOf(gk.dust).count)); tx.appendChild(el("small", "", "Если посыпать " + (gk.mark ? "на грядку" : "на растущую грядку") + ", " + gk.does + ".")); b.appendChild(tx);
         b.onclick = function () { haptic("light"); F.gemKind = k; F.sel = "gem"; close(); renderHotbar(); if (onPick) onPick(); };
         sh.appendChild(b);
       });
@@ -3915,7 +3920,7 @@
   function selText() {
     var s = F.state;
     if (F.sel === "gem") { var gkk = GEMK[F.gemKind] || GEMK.moon;
-      return itemName(gkk.dust) + ": нажми на растущую грядку — " + gkk.does + "."; }
+      return itemName(gkk.dust) + ": нажми " + (gkk.mark ? "на грядку" : "на растущую грядку") + " — " + gkk.does + "."; }
     if (F.sel === "shovel") return "Лопата: нажми на посаженную грядку, чтобы выкопать растение — семя вернётся в инвентарь (очки за посадку и полив спишутся). Созревшее лопата просто соберёт.";
     if (F.sel === "can") return "Лейка: воды на " + s.water + " " + plural(s.water, "полив", "полива", "поливов") + ". Сухие грядки поливаются тапом, набрать воду — колодец." + (seedItems().length ? " Выбери семена, чтобы сажать." : "");
     var sx = s.strains[F.sel];
@@ -4078,7 +4083,7 @@
           });
         } else if (q === SH + 9) {                                                    // самоцветы (его текст 2026-11-16); что странник приходит в полнолуние — не пишем
           page.appendChild(el("h3", "", "Самоцветы"));
-          page.appendChild(el("p", "brule", "Иногда к калитке приходит лунный странник и продаёт самоцветы. Из них можно получить самоцветную пыль, которую можно посыпать на растущую грядку, и получить её эффект."));
+          page.appendChild(el("p", "brule", "Иногда к калитке приходит лунный странник и продаёт самоцветы. Из них можно получить самоцветную пыль, которую можно посыпать на грядку и получить её эффект. Лунная и золотая действуют только на растущие растения, остальные — и на созревшие: они срабатывают при сборе."));
           var gl = el("div", "recipes");
           GEM_ORDER.forEach(function (k) {
             var gk = GEMK[k], row = el("div", "rrow gemrow"), cv = el("canvas", "pix"); itemIcon(cv, gk.dust);

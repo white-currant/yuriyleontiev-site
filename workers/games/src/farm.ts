@@ -1561,7 +1561,7 @@ async function gemPrices(t: number) {
 //   moon  — сиреневый: растение созревает сразу          crop  — бирюзовый: урожай с грядки ×2 (складывается с другими множителями)
 //   seed  — травяной: семян с грядки втрое больше        dew   — золотой: растение не просит полива до сбора
 //   cross — розовый: при сборе наверняка гибрид, мутации втрое чаще
-// Пыль сыплют на растущую грядку; одна и та же пыль на одно растение — один раз.
+// Лунную и золотую пыль сыплют на растущую грядку, остальные — и на созревшую (срабатывают при сборе); одна и та же пыль на одно растение — один раз.
 export const GEM_KINDS: Record<string, { gem: string; dust: string; mark?: string; step: number }> = {
   moon:  { gem: "p:gem",       dust: "p:gemdust",       step: 0 },
   crop:  { gem: "p:gem-crop",  dust: "p:gemdust-crop",  mark: "g2", step: 0 },
@@ -1615,7 +1615,7 @@ export async function gemDust(u: any, idx: number, kind = "moon") {
   const [p] = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ? AND idx = ?`, [u.id, idx]);
   if (!p) return { error: "Грядка пустая" };
   const t = now(), boost = await boostOf(u.id), s = (await strains([String(p[1])]))[String(p[1])], st = stateOf(p, s, t, boost);
-  if (st.ripe) return { error: "Уже созрело — собирай" };
+  if (st.ripe && !g.mark) return { error: "Уже созрело — эта пыль не нужна, собирай" };   // лунная и золотая — для растущих; бирюзовая, травяная, розовая срабатывают при сборе — их можно и на созревшее (его решение 2026-11-17)
   if (st.dead) return { error: "Растение засохло" };
   if (g.mark && (await q("SELECT 1 FROM f_monomark WHERE user = ? AND idx = ? AND kind = ?", [u.id, idx, g.mark])).length) return { error: "Эта пыль тут уже посыпана" };
   if (kind === "dew" && Number(p[5]) - t > DAY) return { error: "Эта пыль тут уже посыпана" };
