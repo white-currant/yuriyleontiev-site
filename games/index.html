@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611171242";
+    var BUILD = "202611171255";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -4328,7 +4328,7 @@
           f.style.width = (z.right - a.left + 14) + "px"; f.style.height = (a.height + 14) + "px"; grid.appendChild(f);
         });
       };
-      if (groupItems().length > 5) ihead.appendChild(btn("Сортировать", "ghost sortbtn", function () { haptic("success"); sortSeeds(); draw(); renderFarm(); toast("Отсортировано — первые четыре на месте"); }));
+      if (groupItems().length > 5) ihead.appendChild(btn("Сортировать", "ghost sortbtn", function () { haptic("success"); sortSeeds(); draw(); renderFarm(); toast("Отсортировано"); }));
       grid.classList.add("drag"); draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
       F.invRedraw = function () { if (document.body.contains(grid)) draw(); else F.invRedraw = null; };   // открытый инвентарь — перерисовать после распыления и ответа сервера
       var acts = el("div", "salebtns sheetfoot");
