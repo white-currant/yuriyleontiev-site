@@ -20,7 +20,7 @@
   #over { position: absolute; inset: 0; display: none; place-items: center; background: rgba(6, 5, 9, .6); }
   #over.on { display: grid; }
   /* выход из подземелья (его правило 2026-11-17: найденное сохраняется, только если выйти вовремя или перебить всех) */
-  #leave { position: absolute; right: calc(var(--u) * 10); bottom: calc(var(--u) * 24 + env(safe-area-inset-bottom)); height: calc(var(--u) * 22); padding: 0 calc(var(--u) * 12);
+  #leave { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--u) * 10 + env(safe-area-inset-top)); height: calc(var(--u) * 20); padding: 0 calc(var(--u) * 10);
     font: inherit; font-size: calc(var(--u) * 11); font-weight: 800; color: #efe6d2; border: 0; cursor: pointer; }
   #over button + button { margin-left: calc(var(--u) * 8); }
   #over div { padding: calc(var(--u) * 16) calc(var(--u) * 20); text-align: center; font-size: calc(var(--u) * 15); font-weight: 800; line-height: 1.35; }
@@ -28,7 +28,7 @@
   #over button { margin-top: calc(var(--u) * 14); padding: calc(var(--u) * 9) calc(var(--u) * 22); border: 0; background: #3f9e7c; color: #f2fff8; font: inherit; font-size: calc(var(--u) * 14);
     box-shadow: 0 0 0 calc(var(--u) * 2) #14151b, inset 0 calc(var(--u) * -3) 0 #2a7058, inset 0 calc(var(--u) * 2) 0 #6fd0a8; }
   /* карта комнат: пройденные — светлые, текущая — золотая (его просьба 2026-11-17: уровень из комнат-экранов) */
-  #map { position: absolute; left: calc(var(--u) * 10); bottom: calc(var(--u) * 24 + env(safe-area-inset-bottom)); width: calc(var(--u) * 60); height: calc(var(--u) * 60); image-rendering: pixelated; opacity: .85; pointer-events: none; }
+  #map { position: absolute; left: calc(var(--u) * 10); top: calc(var(--u) * 38 + env(safe-area-inset-top)); width: calc(var(--u) * 60); height: calc(var(--u) * 60); image-rendering: pixelated; opacity: .85; pointer-events: none; }
   #hint { position: absolute; left: 0; right: 0; bottom: calc(var(--u) * 6 + env(safe-area-inset-bottom)); text-align: center; font-size: calc(var(--u) * 10); font-weight: 600; opacity: .55; pointer-events: none; }
 </style>
 </head>
@@ -37,7 +37,7 @@
   <canvas id="cv" width="216" height="384"></canvas>
   <canvas id="map" width="40" height="40"></canvas>
   <div id="hud"><div id="hp" class="pan"><i></i><b>100</b></div><div id="bones" class="pan"><canvas id="boneic" width="12" height="11"></canvas><span id="bonen">0</span></div></div>
-  <div id="hint">слева — идти, справа — удар · на компьютере: стрелки и пробел</div>
+  
   <button id="leave" class="pan" type="button">выйти</button>
   <div id="over"><div class="pan"><span id="overt"></span><small id="overs"></small><button id="again" type="button">Ещё раз</button><button id="home" type="button">В убежище</button></div></div>
 </div>
@@ -59,7 +59,7 @@
   // ---------- картинки из его листа ----------
   var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "wall_r", "wall_l", "arch_r", "arch_l", "gate_r", "gate_l", "torch_r", "torch_l", "door_r", "door_l",
     "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag"], wait = NAMES.length + 1;
-  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=2"; IMG[n] = im; });
+  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=4"; IMG[n] = im; });
   var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png";
   var CW = 64, CH = 56, AX = 32, AY = 53;
   var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
@@ -193,22 +193,20 @@
   document.getElementById("leave").onclick = function () { location.href = "hub.html?v=" + Date.now(); };
 
   // ---------- управление: джойстик по экрану, мир — по диагоналям ----------
-  var JR = 22, joy = { on: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 }, keys = {}, wantHit = false;
+  // джойстик слева внизу и кнопка удара справа внизу — видны всегда (его просьба 2026-11-17); палец ведёт ручку от центра основания
+  var JR = 24, JX = 44, JY = H - 52, BX = W - 42, BY = H - 54, BR = 22, joy = { on: false, id: -1, bx: JX, by: JY, dx: 0, dy: 0 }, keys = {}, wantHit = false, hitFlash = 0;
   function pos(e) { var r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
   stage.addEventListener("pointerdown", function (e) {
     if (e.target.closest("#over") || e.target.closest("#leave")) return;
     var p = pos(e);
-    if (p[0] < W * .55 && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.bx = p[0]; joy.by = p[1]; joy.dx = joy.dy = 0; } else wantHit = true;
+    if (p[0] < W * .55 && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.bx = JX; joy.by = JY; move(p); } else { wantHit = true; hitFlash = .15; }
     e.preventDefault();
   });
-  stage.addEventListener("pointermove", function (e) {
-    if (!joy.on || e.pointerId !== joy.id) return;
-    var p = pos(e), dx = p[0] - joy.bx, dy = p[1] - joy.by, d = Math.hypot(dx, dy);
-    if (d > JR) { dx *= JR / d; dy *= JR / d; } joy.dx = dx / JR; joy.dy = dy / JR;
-  });
+  function move(p) { var dx = p[0] - JX, dy = p[1] - JY, d = Math.hypot(dx, dy); if (d > JR) { dx *= JR / d; dy *= JR / d; } joy.dx = dx / JR; joy.dy = dy / JR; }
+  stage.addEventListener("pointermove", function (e) { if (joy.on && e.pointerId === joy.id) move(pos(e)); });
   function up(e) { if (joy.on && e.pointerId === joy.id) { joy.on = false; joy.dx = joy.dy = 0; } }
   stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
-  addEventListener("keydown", function (e) { keys[e.code] = true; if (e.code === "Space") { wantHit = true; e.preventDefault(); } });
+  addEventListener("keydown", function (e) { keys[e.code] = true; if (e.code === "Space") { wantHit = true; hitFlash = .15; e.preventDefault(); } });
   addEventListener("keyup", function (e) { keys[e.code] = false; });
 
   var camX = 0, camY = 0;
@@ -357,7 +355,16 @@
       else if (f.k === "poof") { for (i = 0; i < 8; i++) { var a4 = i * .785, d4 = 3 + k * 12; px(ctx, s[0] + Math.cos(a4) * d4 - 1, s[1] - 6 + Math.sin(a4) * d4 - 1 - k * 6, 3 - Math.floor(k * 2), 3 - Math.floor(k * 2), k < .5 ? "#bfeeff" : "#5cc0ee"); } }
       else if (f.k === "plus") { var yy = s[1] - 10 - f.t * 22; ctx.globalAlpha = 1 - f.t / .8; px(ctx, s[0] - 3, yy, 7, 1, "#efe8d6"); px(ctx, s[0], yy - 3, 1, 7, "#efe8d6"); ctx.drawImage(boneC, Math.round(s[0] + 6), Math.round(yy - 6)); ctx.globalAlpha = 1; }
     });
-    if (joy.on) { ctx.globalAlpha = .28; ctx.fillStyle = "#efe6d2"; ctx.beginPath(); ctx.arc(joy.bx, joy.by, JR, 0, 7); ctx.fill(); ctx.globalAlpha = .55; ctx.beginPath(); ctx.arc(joy.bx + joy.dx * JR, joy.by + joy.dy * JR, 9, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+    // джойстик: основание и ручка
+    ctx.globalAlpha = joy.on ? .34 : .22; ctx.fillStyle = "#efe6d2"; ctx.beginPath(); ctx.arc(JX, JY, JR + 4, 0, 7); ctx.fill();
+    ctx.globalAlpha = .5; ctx.strokeStyle = "#efe6d2"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(JX, JY, JR + 4, 0, 7); ctx.stroke();
+    ctx.globalAlpha = joy.on ? .8 : .55; ctx.beginPath(); ctx.arc(JX + joy.dx * JR, JY + joy.dy * JR, 11, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+    // кнопка удара: круг с мечом, вспыхивает при нажатии
+    hitFlash = Math.max(0, hitFlash - 1 / 60);
+    ctx.globalAlpha = hitFlash > 0 ? .75 : .45; ctx.fillStyle = hitFlash > 0 ? "#ffd27a" : "#3a2f45"; ctx.beginPath(); ctx.arc(BX, BY, BR, 0, 7); ctx.fill();
+    ctx.globalAlpha = .7; ctx.strokeStyle = "#efe6d2"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(BX, BY, BR, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+    (function () { var x = BX - 7, y = BY + 7; for (var q = 0; q < 12; q++) px(ctx, x + q, y - q, 2, 2, q < 2 ? "#8a6a3a" : "#e8ecf4");   // меч наискосок
+      px(ctx, x - 1, y - 4, 2, 2, "#d9a441"); px(ctx, x + 3, y, 2, 2, "#d9a441"); })();
     if (trans) { ctx.fillStyle = "rgba(6,5,9," + Math.min(1, 1 - Math.abs(trans.t - .16) / .16) + ")"; ctx.fillRect(0, 0, W, H); }
   }
 
