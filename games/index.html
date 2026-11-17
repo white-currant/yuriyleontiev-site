@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611171657";
+    var BUILD = "202611171854";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2990,6 +2990,7 @@
     c.globalAlpha = Math.max(0, Math.min(1, a)); c.fillStyle = col; c.beginPath(); c.moveTo(x, y - r);
     c.quadraticCurveTo(x, y, x + r, y); c.quadraticCurveTo(x, y, x, y + r); c.quadraticCurveTo(x, y, x - r, y); c.quadraticCurveTo(x, y, x, y - r); c.fill(); c.globalAlpha = 1;
   }
+  var BEAM_MS = 2600;
   function drawFxLayer(cv, f, now, t) {
     var L = fxLayer(cv), m = monoOf(f, now), sun = !!(m && m.kind === "solstice"), ss = (f && f.strains) || {};
     var stars = marksOf(f).filter(function (k) { return k.kind === "star" && BC[k.idx]; }).sort(function (a, b) { return a.n - b.n; });
@@ -2999,6 +3000,7 @@
     var wtd = f && f.weather && f.weather.today, moonlit = !!(wtd && wtd.id === "fullmoon") && !sun && !fire;   // полнолуние — ферма в лунном свете (его просьба 2026-11-16)
     L.box.classList.toggle("sun", sun); L.box.classList.toggle("moss", mossy); L.box.classList.toggle("fire", fire); L.box.classList.toggle("moon", moonlit);
     var gfx = cv.id === "scenecv" ? (F.gemFx = (F.gemFx || []).filter(function (g) { return t - g.t0 < 1900; })) : [];   // самоцветная пыль: фиолетовые искры
+    var bfx = cv.id === "scenecv" ? (F.beamFx = (F.beamFx || []).filter(function (g) { return t - g.t0 < BEAM_MS; })) : [];   // луч солнца
     var millGem = [];                                                                   // мельница мелет самоцвет — какой (его просьба 2026-11-16)
     if (f && hasBuild(f, "mill")) jobsOf(f, "mill").forEach(function (j) { var rk = String(j.recipe).split("@")[0], gk0 = rk.indexOf("gemdust") === 0 && gemOf("p:" + rk);
       if (gk0 && j.ready > now && millGem.indexOf(gk0.k) < 0) millGem.push(gk0.k); });
@@ -3011,7 +3013,7 @@
       if (!gemSel && F.gemA > 0 && F.gemLast) gemSel = F.gemLast;                          // гаснет — тем же цветом
     }
     var gA = gemSel ? (F.gemA || 0) : 0, gIn = !!(F.sel === "gem");
-    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !bfx.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
     var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
     var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
@@ -3057,6 +3059,44 @@
         var ang = hash01(n * 5 + 2) * 6.283, rad = (5 + hash01(n + 3) * 19) * (1 - Math.pow(1 - sp, 2));
         spark(bx + Math.cos(ang) * rad * kx, by + Math.sin(ang) * rad * ky * .5 - sp * sp * 28 * ky, (1 + hash01(n + 8) * 1.6) * dpr * (1 - sp * .5),
               GCOL[(n + 1) % GCOL.length], (1 - sp) * 1.3, n * 3 + g.i);
+      }
+    });
+    // луч солнца (2026-11-17: событие проходило незаметно — была только надпись): луч падает с неба наискосок,
+    // раскрывается в столб света, на грядке вспышка с кольцом и лучиками по земле, в столбе поднимаются золотые пылинки
+    bfx.forEach(function (b) {
+      var p = BC[b.i]; if (!p) return;
+      var e = (t - b.t0) / BEAM_MS, hit = .17, dn = Math.min(1, e / hit), fade = e < .62 ? 1 : Math.max(0, 1 - (e - .62) / .38);
+      var gx = p[0] * kx, gy = (p[1] - 2) * ky, tx = (p[0] + 30) * kx, ty = -8 * ky, ex = tx + (gx - tx) * dn, ey = ty + (gy - ty) * dn;
+      var after = e > hit, grow = after ? Math.min(1, (e - hit) / .12) : 0, fl = after ? Math.max(0, 1 - (e - hit) / .28) : 0;
+      var wid = (1.8 + 9 * grow * (1 + .07 * Math.sin(t / 60))) * kx * Math.sqrt(fade);
+      var ax = ex - tx, ay = ey - ty, al = Math.hypot(ax, ay) || 1, nx = -ay / al, ny = ax / al, mx = (tx + ex) / 2, my = (ty + ey) / 2;
+      var quad = function (w) { c.beginPath(); c.moveTo(tx + nx * w * 1.25, ty + ny * w * 1.25); c.lineTo(tx - nx * w * 1.25, ty - ny * w * 1.25); c.lineTo(ex - nx * w, ey - ny * w); c.lineTo(ex + nx * w, ey + ny * w); c.closePath(); };
+      var band = function (w, a, core) { var lg = c.createLinearGradient(mx + nx * w, my + ny * w, mx - nx * w, my - ny * w);
+        lg.addColorStop(0, "rgba(255,190,80,0)"); lg.addColorStop(.3, "rgba(255,206,110," + (.45 * a) + ")"); lg.addColorStop(.5, core ? "rgba(255,253,235," + a + ")" : "rgba(255,226,150," + (.7 * a) + ")");
+        lg.addColorStop(.7, "rgba(255,206,110," + (.45 * a) + ")"); lg.addColorStop(1, "rgba(255,190,80,0)"); c.fillStyle = lg; quad(w); c.fill(); };
+      c.globalAlpha = 1; c.globalCompositeOperation = "lighter";
+      if (fl > 0) { c.fillStyle = "rgba(255,226,150," + (.13 * fl) + ")"; c.fillRect(0, 0, cw, ch); }      // всю ферму на миг заливает тёплым светом
+      band(wid * 2.6, .32 * fade, false);                                                   // ореол вокруг столба
+      c.globalCompositeOperation = "source-over"; band(wid, .95 * fade, true);              // сам столб — на траве сложение выбеливает в ничто
+      c.globalCompositeOperation = "lighter";
+      if (!after) spark(ex, ey, 2.6 * dpr, "#fff3c0", 1.2, b.i);                            // пока падает — яркий наконечник
+      else {
+        var pool = c.createRadialGradient(gx, gy, 0, gx, gy, 30 * kx);                       // пятно света на грядке: вспышка, потом ровное сияние
+        pool.addColorStop(0, "rgba(255,248,215," + Math.min(1, .55 * fade + .6 * fl) + ")"); pool.addColorStop(.45, "rgba(255,200,90," + (.32 * fade + .3 * fl) + ")"); pool.addColorStop(1, "rgba(255,180,60,0)");
+        c.fillStyle = pool; c.beginPath(); c.ellipse(gx, gy, 30 * kx, 18 * ky, 0, 0, 7); c.fill();
+        var rp = (e - hit) / .38;
+        if (rp < 1) { c.globalAlpha = 1 - rp; c.strokeStyle = "#ffe08a"; c.lineWidth = (3 * (1 - rp) + .5) * dpr; c.beginPath(); c.ellipse(gx, gy, (5 + rp * 32) * kx, (3 + rp * 17) * ky, 0, 0, 7); c.stroke(); }
+        c.lineCap = "round"; c.strokeStyle = "rgba(255,232,150,1)"; c.lineWidth = 1.3 * dpr;  // лучики по земле, медленно поворачиваются
+        for (var rk = 0; rk < 10; rk++) {
+          var ra = rk * .628 + (t - b.t0) / 1700, r0 = 9 + 2 * grow, r1 = r0 + (5 + 9 * hash01(rk + 61)) * grow * (.75 + .25 * Math.sin(t / 140 + rk));
+          c.globalAlpha = .75 * fade * (rk % 2 ? .6 : 1); c.beginPath();
+          c.moveTo(gx + Math.cos(ra) * r0 * kx, gy + Math.sin(ra) * r0 * ky * .55); c.lineTo(gx + Math.cos(ra) * r1 * kx, gy + Math.sin(ra) * r1 * ky * .55); c.stroke();
+        }
+        for (var mn = 0; mn < 18; mn++) {                                                   // пылинки поднимаются по лучу
+          var ph = ((t - b.t0 - hit * BEAM_MS) / 1100 + hash01(mn + 21)) % 1, up = ph * .7;
+          spark(gx + (tx - gx) * up + (hash01(mn * 3 + 5) - .5) * wid * 1.6, gy + (ty - gy) * up, (.6 + hash01(mn + 9) * .9) * dpr,
+                mn % 3 ? "#ffd36b" : "#fff8dc", Math.sin(ph * Math.PI) * fade * 1.1, mn + b.i * 5);
+        }
       }
     });
     c.globalAlpha = 1; c.globalCompositeOperation = "lighter";
@@ -3566,7 +3606,10 @@
         if (r.double) floatText(pl.idx, "×2 щедрый урожай!", "big");
         if (r.comet) floatText(pl.idx, "комета! +" + r.comet + " ✦", "big");
         if (r.frost) setTimeout(function () { floatText(pl.idx, "грядку сковал лёд", "big"); }, 600);
-        if (r.sunbeam >= 0) setTimeout(function () { haptic("success"); floatText(r.sunbeam, "луч солнца — созрело!", "big"); }, 400);
+        if (r.sunbeam >= 0) {                                                     // луч падает ~0,45 с — надпись и отдача в момент удара
+          (F.beamFx = F.beamFx || []).push({ i: r.sunbeam, t0: Date.now() }); farmAnim(); haptic("light");
+          setTimeout(function () { haptic("success"); floatText(r.sunbeam, "луч солнца — созрело!", "big"); }, 440);
+        }
         if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в инвентарь", "seedf"); }, 450);
         if (r.vinyl) F.items = null;
         var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl); };
