@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611171921";
+    var BUILD = "202611172000";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -795,7 +795,9 @@
   body[data-screen^="farm"] .sheet > .shx:active { transform: translateY(1px); box-shadow: 0 0 0 2px var(--ink), inset 0 -1px 0 #6e4425; }
   body[data-screen^="farm"] .sheet.wander > .shx { top: 40px; background: #3a2268; color: #e6dcff; box-shadow: 0 0 0 2px #140c22, inset 0 -3px 0 #24143f; }
   body[data-screen^="farm"] .gempill { padding: 0 8px; gap: 4px; }
-  .farm-actions .gemcancel { grid-column: 1 / -1; }                                     /* «Отменить» — во всю ширину вместо двух кнопок */
+  .farm-actions .gemcancel { grid-column: 1 / -1; }
+  /* «Отменить» пыли — фиолетовая, в цвет самоцветов (его просьба 2026-11-17): сразу видно, что в руке пыль и как её убрать */
+  body[data-screen^="farm"] .farm-actions .btn.gemcancel { background: #6a40c2; color: #f3edff; box-shadow: var(--frame), inset 0 -5px 0 #452887, inset 0 3px 0 #9470e0; }                                     /* «Отменить» — во всю ширину вместо двух кнопок */
   body[data-screen^="farm"] .gempill canvas { width: 22px; height: auto; image-rendering: pixelated; }
   body[data-screen^="farm"] .gempill.on { box-shadow: 0 0 0 3px var(--pgold), inset 0 2px 0 var(--wood3); }
   /* сундук у левого края сцены: подпись не по центру, а от его левой кромки — иначе «сундук» уезжает за край (жалоба игрока 2026-11-16) */
@@ -1029,6 +1031,7 @@
   function show(id) {
     ["home", "game", "nope", "farm", "farm-shop", "farm-neighbors", "farm-visit"].forEach(function (s) { $(s).hidden = s !== id; });
     var was = document.body.dataset.screen; document.body.dataset.screen = id; scrollTo(0, 0);
+    if (id !== "farm") dropGem();
     if (was && was !== id) document.querySelectorAll(".sheet-wrap,.thanks-wrap").forEach(function (w) { w.remove(); });   // ушёл с экрана — его окна закрываются (баг 2026-11-16: окно семени осталось поверх гильдии)
     if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked");
     // ферма: сверху закатное небо сцены, снизу трава; остальные экраны фермы — ночное небо
@@ -3388,7 +3391,11 @@
   function fmtShort(sec) { sec = Math.max(0, sec | 0); return sec >= 3600 ? Math.floor(sec / 3600) + "ч " + Math.floor(sec % 3600 / 60) + "м" : sec >= 60 ? Math.ceil(sec / 60) + " мин" : sec + " с"; }
   function toast(text) { var t = document.createElement("div"); t.className = "toast"; t.textContent = text; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2600); }
   var UPGRADES_ON = false;            // прокачка мельницы и печи готова, но пока выключена (его решение 2026-11-16: сначала только отмена)
-  function sheet(build) {
+  // выбранная самоцветная пыль не «прилипает» (жалоба Дениса 2026-11-17: ушёл в магазин, в покраску крыш — пыль осталась в руке,
+  // а потом тратится от нажатия на грядку, чтобы глянуть время): любое другое окно или уход с фермы кладут пыль обратно, в руке — лейка
+  function dropGem() { if (typeof F === "undefined" || F.sel !== "gem") return; F.sel = "can"; try { renderHotbar(); renderFarm(); } catch (e) {} }
+  function sheet(build, keepGem) {
+    if (!keepGem) dropGem();
     var w = document.createElement("div"); w.className = "sheet-wrap"; var sh = document.createElement("div"); sh.className = "sheet";
     var shut = function () { w.remove(); if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked"); };
     shut._close = true;                                          // кнопки «Готово» / «Закрыть» с этой функцией срабатывают с первого касания
@@ -4072,8 +4079,9 @@
         b.onclick = function () { haptic("light"); F.gemKind = k; F.sel = "gem"; close(); renderHotbar(); if (onPick) onPick(); };
         sh.appendChild(b);
       });
+      if (F.sel === "gem") sh.appendChild(btn("Убрать пыль", "", function () { haptic("light"); F.sel = "can"; close(); renderHotbar(); renderFarm(); }));
       sh.appendChild(btn("Закрыть", "ghost", close));
-    });
+    }, true);
   }
   function makeSlot(key, onPick) {
     var s = F.state, b = el("button", "slot" + (F.sel === key ? " on" : "")); b.type = "button"; b.dataset.key = key;
