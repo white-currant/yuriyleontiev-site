@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611172146";
+    var BUILD = "202611172225";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -5582,7 +5582,8 @@
     haptic("light");
     var w = el("div", "dgwrap"), f = el("iframe"), x = el("button", "dgx", "✕");
     f.src = "dg/hub.html?v=" + Date.now(); f.setAttribute("allow", "autoplay"); x.type = "button"; x.setAttribute("aria-label", "Закрыть");
-    var bb = tg && tg.BackButton, close = function () { haptic("light"); w.remove(); document.documentElement.classList.remove("locked"); if (bb && document.body.dataset.screen === "home") bb.hide(); };
+    attractor.stop();                                                               // фон главного экрана под подземельем не крутим — телефон тормозил (жалоба 2026-11-17)
+    var bb = tg && tg.BackButton, close = function () { haptic("light"); w.remove(); document.documentElement.classList.remove("locked"); if (bb && document.body.dataset.screen === "home") bb.hide(); if (document.body.dataset.screen === "home") attractor.start(); };
     w._close = close; x.onclick = close; w.appendChild(f);
     if (bb && bb.show) bb.show();
     if (!(bb && bb.isVisible)) w.appendChild(x);                                    // вне Телеграма (или старый клиент) «Назад» нет — свой крестик       // в Телеграме выход — его кнопка «Назад» в шапке (её ловит back()), свой крестик не налезает на кнопки игры

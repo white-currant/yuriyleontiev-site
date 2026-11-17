@@ -212,7 +212,7 @@
   addEventListener("keyup", function (e) { keys[e.code] = false; });
 
   var camX = 0, camY = 0;
-  function S(u, v) { var p = P(u, v); return [p[0] - camX + W / 2, p[1] - camY + H * .56]; }   // мир → экран; герой чуть ниже середины
+  function S(u, v) { var p = P(u, v); return [p[0] - Math.round(camX) + W / 2, p[1] - Math.round(camY) + Math.round(H * .56)]; }   // мир → экран; герой чуть ниже середины
   function nearest(maxPx) { var best = null, bd = maxPx, hs = S(hero.u, hero.v); cur.mobs.forEach(function (m) { if (m.hp <= 0) return; var s2 = S(m.u, m.v), d = Math.hypot(s2[0] - hs[0], s2[1] - hs[1]); if (d < bd) { bd = d; best = m; } }); return best; }
 
   function go(du, dv) { var nx = room(cur.gx + du, cur.gy + dv); if (!nx || trans) return; trans = { t: 0, to: nx, du: du, dv: dv }; }
@@ -303,12 +303,18 @@
   function draw(ts) {
     var t = ts / 1000, i, j;
     ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#0b0912"; ctx.fillRect(0, 0, W, H);
-    // пол по форме комнаты; проходы на передних краях — клетка пола за краем
-    var tiles = [];
-    for (j = 0; j < cur.h; j++) for (i = 0; i < cur.w; i++) if (cur.open[j][i]) tiles.push([i, j, cur.floor[j][i]]);
-    if (cur.pu) tiles.push([cur.w, cur.door.pu, 0]); if (cur.pv) tiles.push([cur.door.pv, cur.h, 0]);
-    tiles.sort(function (p, q) { return (p[0] + p[1]) - (q[0] + q[1]); }).forEach(function (q) { var s = S(q[0], q[1]); if (s[0] < -TW || s[0] > W + TW || s[1] < -TH * 2 || s[1] > H + TH) return; img("floor" + q[2], s[0] - TW / 2, s[1]); });
-    cur.decor.forEach(function (d) { if (!d.flat) return; var s = S(d.u, d.v), im = IMG[d.k]; img(d.k, s[0] - im.width / 2, s[1] - im.height / 2); });
+    // пол комнаты — готовая картинка (рисуется один раз на комнату): плитки и плоский узор не «плывут» друг относительно друга, а кадр дешевле
+    if (!cur.floorC) {
+      var tiles = [], mnX = 1e9, mnY = 1e9, mxX = -1e9, mxY = -1e9;
+      for (j = 0; j < cur.h; j++) for (i = 0; i < cur.w; i++) if (cur.open[j][i]) tiles.push([i, j, cur.floor[j][i]]);
+      if (cur.pu) tiles.push([cur.w, cur.door.pu, 0]); if (cur.pv) tiles.push([cur.door.pv, cur.h, 0]);
+      tiles.forEach(function (q) { var p = P(q[0], q[1]); mnX = Math.min(mnX, p[0] - TW / 2); mxX = Math.max(mxX, p[0] + TW / 2); mnY = Math.min(mnY, p[1]); mxY = Math.max(mxY, p[1] + 64); });
+      var fc = mk(mxX - mnX + 2, mxY - mnY + 2), fg = fc.getContext("2d"); fg.imageSmoothingEnabled = false;
+      tiles.sort(function (p, q) { return (p[0] + p[1]) - (q[0] + q[1]); }).forEach(function (q) { var p = P(q[0], q[1]); fg.drawImage(IMG["floor" + q[2]], p[0] - TW / 2 - mnX, p[1] - mnY); });
+      cur.decor.forEach(function (d) { if (!d.flat) return; var p = P(d.u, d.v), im = IMG[d.k]; fg.drawImage(im, Math.round(p[0] - im.width / 2 - mnX), Math.round(p[1] - im.height / 2 - mnY)); });
+      cur.floorC = fc; cur.floorO = [mnX, mnY];
+    }
+    var o0 = S(0, 0), p00 = P(0, 0); ctx.drawImage(cur.floorC, o0[0] - p00[0] + cur.floorO[0], o0[1] - p00[1] + cur.floorO[1]);
     // стены, предметы, герой и слизни — по глубине (стена за клеткой: глубина середины её края)
     var list = [];
     var WW = TW / 2 + 1;
