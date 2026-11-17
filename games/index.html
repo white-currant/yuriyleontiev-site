@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611171315";
+    var BUILD = "202611171436";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -4554,7 +4554,7 @@
             haptic("success");
             var body = { slot: o.slot, pick: {} };
             Object.keys(pk.ids).forEach(function (id) { body.pick[id] = pk.ids[id]; var b0 = barnOf(id); if (b0) b0.count -= pk.ids[id]; }); delete F.orderPicks[o.slot];
-            F.state.dust += o.reward; var rw = o.reward; o.items = []; o.ready = farmNow() + [43200, 86400, 172800][o.slot]; renderFarm(); draw(); toast("Заказ сдан: +✦ " + rw);   // как ORDER_NEXT на сервере
+            F.state.dust += o.reward; var rw = o.reward; o.items = []; o.ready = Math.min(o.until, farmNow() + [86400, 86400, 172800][o.slot]); renderFarm(); draw(); toast("Заказ сдан: +✦ " + rw);   // как на сервере: новый — в конце срока сданного (ритм сутки/сутки/двое, 2026-11-17); было ORDER_NEXT на сервере
             farmCall("/api/farm/order", body).catch(function () {});
           });
           give.disabled = !ready; a.appendChild(give);
