@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611180117";
+    var BUILD = "202611180204";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1617,6 +1617,10 @@
                   [".....0.....", "....00.11..", "..3535353..", ".335353533.", "3345353533.", "3335353533.", ".33535353..", "..5555555.."]];
   CROP.cactus = [SEED0, SPROUT, ["...1...", "..121..", "..121.1", "1.121.1", ".11211.", "..121..", ".00000."],
                  ["....4....", "...434...", "...121...", "...121..1", "1..121.11", "11.121.1.", ".1.121.1.", ".111211..", "...121...", "...121...", "..00000.."]];
+  // странное растение (ночная аномалия 2026-11-18): кривой чёрный стебель, костяные отростки, на верхушке — глаз (созрело — открыт)
+  CROP.anomaly = [["..1..", ".MMM.", "mmmmm"], ["..0..", ".0.1.", "..0.."],
+                  ["...333...", "..30003..", "...333...", "....0....", "...10....", "....01...", ".1..0....", "....0..1.", "..00000.."],
+                  ["....333....", "...33333...", "..3304033..", "...33333...", "....333....", ".....0.....", "....10.....", ".....01....", "...1.0..2..", "..1..0.21..", ".2..10.....", "....00.....", "..0000000.."]];
   // колосья (зерно, 2026-11-14): стебли зелёные (G, s), колос — в цветах сорта
   CROP.grain = [SEED0, ["G.G.G", ".GsG.", "..s.."],
                 [".1..1..1.", ".2..2..2.", ".1..1..1.", ".s..s..s.", "Gs.Gs.Gs.", ".s..s.Gs.", ".0000000."],
@@ -1926,7 +1930,7 @@
     crystal: ["#1f5f98", "#86e6ff", "#c9f6ff", "#e8fbff", "#ffffff", "#3aa6d9"],
     sun: ["#8a4a12", "#ffb627", "#ffe08a", "#ff6b35", "#fff1c1", "#c8661a"], nebula: ["#3b1f6e", "#8b5cf6", "#c4b5fd", "#f472b6", "#fbcfe8", "#6d28d9"],
     ember: ["#5c1a0b", "#e2492b", "#ff9f6b", "#ffd166", "#fff3c4", "#a8301a"], frost: ["#5d7f9e", "#dff4ff", "#ffffff", "#a5e4ff", "#ffffff", "#9cc3dd"],
-    night: ["#14123a", "#3a3494", "#7d77d9", "#e8e6ff", "#ffffff", "#262066"], aurora: ["#0f5e5b", "#34d399", "#a7f3d0", "#f472b6", "#fde68a", "#0e8f7a"],
+    night: ["#14123a", "#3a3494", "#7d77d9", "#e8e6ff", "#ffffff", "#262066"], anomaly: ["#c9c0a6", "#6e3f8a", "#9a72b4", "#f1ecdc", "#ff2a3a", "#2a1638"], aurora: ["#0f5e5b", "#34d399", "#a7f3d0", "#f472b6", "#fde68a", "#0e8f7a"],
   };
   var DEAD = ["#5a4630", "#8a6a42", "#a88a5a", "#7a5a3a", "#b89a6a", "#4a3826"];
   var SIL = ["#c4ad80", "#d2bd92", "#dccaa2", "#d2bd92", "#dccaa2", "#c4ad80"];     // силуэт ненайденного вида — едва заметный на пергаменте
@@ -1992,7 +1996,8 @@
              dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: need - g, wetLeft: raining ? 1e9 : pl.water_until - t };
   }
   function strainCode(s) { return s.base ? "" : "сорт " + s.id.slice(1, 5).toUpperCase(); }
-  function describe(s) {                                    // коротко, значками: рост · пыль · полив · шанс артефакта (коллекционного предмета; сейчас это пластинки)
+  function describe(s) {
+    if (s.odd) return "Растёт долго. Что из него вырастет — неизвестно.";                                    // коротко, значками: рост · пыль · полив · шанс артефакта (коллекционного предмета; сейчас это пластинки)
     return "⏱ " + fmtLeft(s.minutes * 60) + "  ✦ " + s.dust + "  💧 " + fmtLeft(thirstOf(s) * 60) + "  🏺 " + Math.round(s.vinyl * 100) + "%";
   }
   function factGrid(s) {                                    // то же, но с подписями — для справочника
@@ -2174,8 +2179,20 @@
     }
     var s = inf.s, rows = CROP[s.shape] || CROP.moss, st = inf.f >= 1 ? 3 : inf.f > .6 ? 2 : inf.f > .25 ? 1 : 0;
     if (inf.dead) st = Math.max(2, st);
-    for (var n = 0; n < NSP; n++) {
-      var p = spot(i, n), sp = rows[st];
+    var odd = !!s.odd, gl = odd && st >= 2 && (Math.floor(t / 90) % 37 === i % 37 || Math.floor(t / 90) % 53 === 7) ? (Math.floor(t / 45) % 2 ? 1 : -1) : 0;   // аномалия дёргается
+    for (var n = 0; n < (odd ? 1 : NSP); n++) {
+      var p = odd ? [cx, cy + 3] : spot(i, n), sp = rows[st];
+      if (odd) {                                                                    // аномалия — одна, вдвое крупнее, с тёмным контуром
+        var ow = sp[0].length + 2, oh = sp.length + 2, oc = ODDC[st] || (ODDC[st] = (function () { var q = document.createElement("canvas"); q.width = ow; q.height = oh; return q; })()), og = oc.getContext("2d");
+        og.clearRect(0, 0, ow, oh); sprS(og, 1, oh - 2, sp, s, inf.dead);
+        var od = og.getImageData(0, 0, ow, oh), dd = od.data, ol = new Uint8ClampedArray(dd);
+        for (var yy = 0; yy < oh; yy++) for (var xx = 0; xx < ow; xx++) { var ii = (yy * ow + xx) * 4; if (dd[ii + 3]) continue;
+          var nb = (xx > 0 && dd[ii - 1]) || (xx < ow - 1 && dd[ii + 7]) || (yy > 0 && dd[ii - ow * 4 + 3]) || (yy < oh - 1 && dd[ii + ow * 4 + 3]);
+          if (nb) { ol[ii] = 20; ol[ii + 1] = 10; ol[ii + 2] = 28; ol[ii + 3] = 255; } }
+        og.putImageData(new ImageData(ol, ow, oh), 0, 0);
+        c.imageSmoothingEnabled = false; c.drawImage(oc, p[0] - ow + gl * 2, p[1] - oh * 2 + 4, ow * 2, oh * 2);
+        continue;
+      }
       sprS(c, p[0] - (sp[0].length >> 1), p[1], sp, s, inf.dead);
       if (st === 3 && (Math.floor(t / 350) + n * 5 + i * 3) % 9 === 0) {                    // созрело — по растениям бегают искорки
         var top = p[1] - sp.length - 2; px(c, p[0], top - 1, 1, 3, "#ffffff"); px(c, p[0] - 1, top, 3, 1, "#ffffff"); px(c, p[0], top, 1, 1, C.gold);
@@ -2440,6 +2457,11 @@
     }
     if (ready && own && (t / 400 | 0) % 2) { px(c, cx - 1, cy - 26, 3, 1, "#ffffff"); px(c, cx, cy - 27, 1, 3, "#ffffff"); }
   }
+  // ---------- ночная аномалия (его решение 2026-11-18) ----------
+  // Странное семя изредка ночью лежит в общей лавке среди семян игроков (продавец — неразборчивые символы, pub «~»);
+  // когда и сколько — решает сервер (anomalyMarket в farm.ts). Урожай — глаза, из них в печи «Странный отвар».
+  var ODDC = {};
+  var ODD = { id: "anomaly", name: "Странное семя", shape: "anomaly", color: "anomaly", cost: 30, base: true, odd: true, minutes: 480, dust: 60, vinyl: 0 };
   // ---------- ночные странности (его идея 2026-11-16) ----------
   // Только в настоящую ночь у игрока — с 00:00 до 04:00 по часам его телефона. Не каждую ночь (примерно через одну) и ненадолго:
   // из-за дома выглядывает тёмный силуэт; у амбара на миг меняется подпись. Ничего не дают, ничего не объясняют.
@@ -2888,13 +2910,14 @@
     mushroom: ["..3333..", ".343333.", "33333333", "5.2222.5", "..2222..", "..2222..", ".000000."],
     pumpkin:  ["....0...", "...00...", ".353535.", "35353535", "35453535", "35353535", ".555555."],
     cactus:   ["...44...", "..3333..", ".343333.", ".333343.", ".343333.", "..3333..", "...11..."],
+    anomaly:  ["..5555..", ".533335.", "53344335", "53455435", "53344335", ".513315.", "..5555.."],   // глаз странного растения
   };
   // продукты кухни — свои цвета, не по сорту
   var PP = { k: "#3a2414", W: "#fbf4e4", w: "#ddd0b6", x: "#b8ab90", m: "#7a4a26", y: "#ffd166",
              h: "#f2c27a", b: "#d99a52", B: "#9a6430", R: "#ff4f9a", r: "#a82868", p: "#ffd3e6",
              c: "#efe8d6", C: "#b8ad96", u: "#5b8fd6", g: "#7cc757", G: "#3f8f3a", e: "#b6ee88",
              o: "#ff9f43", O: "#c8661a", v: "#c4a3ff", V: "#7a52c8", n: "#a0683a", N: "#6e4425", s: "#f4f0ff",
-             a: "#24242c", A: "#45454f", z: "#6c6c78", f: "#ff7a2e", F: "#ffd166" };
+             a: "#24242c", A: "#45454f", z: "#6c6c78", f: "#ff7a2e", F: "#ffd166", Q: "#ff2a3a", q: "#8a1420" };
   var DISH = {
     "p:gem":     ["......kk......", ".....kssk.....", "....ksvvVk....", "...ksvvvvVk...", "..ksvsvvvVVk..", "..kvvvvvVVVk..", "...kVvvvVVk...", "....kVVVVk....", ".....kVVk.....", "......kk......"],
     "p:gemdust": ["...s......v...", ".v.....s....s.", "....kkkkkk....", "...kmVVVVmk...", "....kVVVVk....", "...kvvsvvvVk..", "..kvvvvvsvVVk.", "..kvsvvvvvVVk.", "..kvvvvvvVVVk.", "...kkkkkkkkk.."],
@@ -2907,6 +2930,8 @@
     "p:pumpkin": ["..............", "...kkkkkkkk...", ".kkhohohohokk.", "khohohohohohbk", "khhohohohohbbk", "kbhyhhyhhyhbBk", ".kBbbbbbbbbBk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],
     "p:stew":    ["...s.....s....", "....s.....s...", ".kkkkkkkkkkkk.", "knNcnRnNcnRnNk", "kNnnNnnNnnNnNk", ".kBBmBBBBmBBk.", ".kBBBBBBBBBBk.", "..kmmmmmmmmk..", "...kkkkkkkk..."],
     "p:tea":     ["....s..s......", ".....s..s.....", "...kkkkkkkk...", "...kvvVvvVk...", "...kcccccckkk.", "...kcuuuuck.k.", "...kccccccckk.", "....kcccCk....", ".kkkkkkkkkkkk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],
+    "p:eye":     ["..............", "....kkkkkk....", "..kkWWWWWWkk..", ".kWWWQsQQWWWk.", "kWWWQQaaQQWWWk", "kWqWQQaaQQWqWk", ".kWWWQQQQWWWk.", "..kkWWWWWWkk..", "....kkkkkk...."],   // странный глаз
+    "p:brew":    ["...v....v.....", "....v....v....", "...v....v.....", ".kkkkkkkkkkkk.", "kVvVvVWWWvVvVk", "kvVvWWQaQWWvVk", ".kvVvVWWWvVVk.", "..kAzzzzzzAk..", "...kkkkkkkk..."],   // странный отвар: в нём плавает глаз
     "p:jam":     ["....kkkkkk....", "....kmmmmk....", "...kkkkkkkk...", "...kWRRRRrk...", "...kRRpRRrk...", "...kRRRRRrk...", "...kRyyyyrk...", "...kRyyyyrk...", "...krRRRrrk...", "....kkkkkk...."],
   };
   // pal — палитра сорта колосьев: корочка и метка на мешке муки берут его цвет (пшеница — как есть)
@@ -3791,7 +3816,7 @@
       if (marksAt(pl.idx).indexOf(gkr.mark) >= 0) { haptic("error"); return toast("Эта пыль тут уже посыпана. Чтобы собрать, нажми «Отменить» внизу."); }
     }
     if (inf.ripe && F.sel !== "gem") {                                                                 // созрело — собрать сразу, без вопросов
-      var gain = s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1, hasB = hasBuild(s, "barn");   // есть амбар — урожай туда, нет — сразу в пыль
+      var gain = (inf.s.odd ? 2 : 1) * (s.rain_until > now ? (inf.s.bonus === "rain" ? 3 : 2) : 1), hasB = hasBuild(s, "barn");   // странное — пара глаз   // есть амбар — урожай туда, нет — сразу в пыль
       var mk = marksAt(pl.idx), starX = mk.indexOf("star") >= 0, mythX = !inf.s.myth && mk.indexOf("myth") >= 0 && mythNear(pl.idx);
       if (starX) gain *= 2;                                                         // грядка созвездия — урожай ×2
       var gemX = mk.indexOf("g2") >= 0; if (gemX) gain *= 2;                        // бирюзовая самоцветная пыль — ещё ×2
@@ -3799,7 +3824,7 @@
       s.marks = marksOf(s).filter(function (m) { return !(m.idx === pl.idx && (m.kind === "star" || m.kind === "myth" || m.kind === "g2" || m.kind === "gseed" || m.kind === "gcross")) && !(inf.s.myth && (m.kind === "myth" || m.kind === "mythripe")); });
       var pts = " · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков");
       haptic("success"); addFx("harvest", pl.idx, inf.s);
-      if (hasB) { floatText(pl.idx, "+" + gain + " в амбар" + pts); barnAdd(inf.s.id, gain); flyFruit(pl.idx, inf.s, gain); }
+      if (hasB) { floatText(pl.idx, "+" + gain + " в амбар" + pts); barnAdd(inf.s.odd ? "p:eye" : inf.s.id, gain); flyFruit(pl.idx, inf.s, gain); }
       else { floatText(pl.idx, "+" + gain * inf.s.dust + " ✦" + pts); s.dust += gain * inf.s.dust; flyDust(pl.idx); }
       if (gemX) setTimeout(function () { floatText(pl.idx, "самоцвет: урожай ×2!", "big"); }, starX ? 700 : 250);
       if (starX) setTimeout(function () { floatText(pl.idx, "созвездие: урожай ×2!", "big"); }, 250);
@@ -3817,7 +3842,8 @@
           (F.beamFx = F.beamFx || []).push({ i: r.sunbeam, t0: Date.now() }); farmAnim(); haptic("light");
           setTimeout(function () { haptic("success"); floatText(r.sunbeam, "луч солнца — созрело!", "big"); }, 440);
         }
-        if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в инвентарь", "seedf"); }, 450);
+        if (r.seeds && inf.s.odd) setTimeout(function () { floatText(pl.idx, r.seeds > 1 ? "…осталось два странных семени" : "…осталось странное семя", "big"); }, 450);
+        else if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в инвентарь", "seedf"); }, 450);
         if (r.vinyl) F.items = null;
         var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl); };
         if (r.hybrid) setTimeout(function () { showHybrid(r.hybrid, next); }, 500); else if (r.vinyl) setTimeout(next, 500);
@@ -3873,7 +3899,7 @@
   function barnAdd(id, n) { F.state.barn = F.state.barn || []; var it = barnOf(id); if (it) it.count += n; else F.state.barn.push({ strain: id, count: n }); }
   function toDust(strain, n, gain) {                           // урожай из амбара → звёздная пыль (сразу, сервер подтвердит)
     var cur = F.state; haptic("success");
-    if (strain === "*") cur.barn = (cur.barn || []).filter(function (it) { return gemOf(it.strain); }); else barnOf(strain).count -= n;   // самоцветы и их пыль «весь урожай» не трогает
+    if (strain === "*") cur.barn = (cur.barn || []).filter(function (it) { return gemOf(it.strain) || it.strain === "p:eye"; }); else barnOf(strain).count -= n;   // самоцветы и их пыль «весь урожай» не трогает
     cur.dust += gain; renderFarm(); toast("+✦ " + gain + " звёздной пыли");
     farmCall("/api/farm/sell", { strain: strain, n: n || 0 }).catch(function () {});
   }
@@ -3884,6 +3910,7 @@
     var s = F.state, ex = F.ext || { strains: {}, products: {} };
     if (id.indexOf("p:") !== 0) return s.strains[id] || ex.strains[id];
     var known = (s.products || {})[id] || ex.products[id]; if (known) return known;
+    if (id === "p:eye") return { name: "Странный глаз", dust: 60 };            // только что собран, сервер ещё не прислал
     var r = (s.recipes || {})[recKey(id)], g = s.strains[sortKey(id)] || ex.strains[sortKey(id)]; if (!r) return null;
     var fk = sortKey(id); if (fk.indexOf("g:") !== 0 && g && g.shape === "grain" && (recKey(id) === "flour" || r.needs["p:flour"])) fk = flourKey(g);
     if (fk.indexOf("g:") === 0) {                                                  // сорт муки (как на сервере): расцветка + сорт по цене колосьев
@@ -3896,7 +3923,7 @@
     var fd = g.dust + 2, nf = r.needs["p:flour"] || 0;
     return { name: r.name, dust: recKey(id) === "flour" ? fd : r.dust + nf * (fd - 7), sort: g.id, sort_name: g.name, color: g.color };
   }
-  var FLOUR_ADJ = { moss: "Лунная", berry: "Звёздная", crystal: "Кометная", sun: "Солнечная", nebula: "Туманная", ember: "Огненная", frost: "Ледяная", night: "Полуночная", aurora: "Сияющая" },
+  var FLOUR_ADJ = { moss: "Лунная", berry: "Звёздная", crystal: "Кометная", sun: "Солнечная", nebula: "Туманная", ember: "Огненная", frost: "Ледяная", night: "Полуночная", aurora: "Сияющая", anomaly: "Странная" },
       GRADE_NAMES = ["высший сорт", "первый сорт", "второй сорт"];
   function flourKey(g) { var d = g.myth ? g.dust / 3 : g.dust; return "g:" + g.color + ":" + (d <= 7 ? 2 : d <= 10 ? 1 : 0) + (g.myth ? ":m" : ""); }   // как на сервере
   var RAW_MAIN = { soup: "moss", stew: "mushroom", tea: "flower", jam: "cactus" }, RAW_REF = { moss: 4, mushroom: 8, flower: 8, cactus: 8 };   // как на сервере
@@ -4234,7 +4261,7 @@
       var page = el("div", "bpage"), nav = el("div", "bnav"), prev = el("button", "bbtn", "‹"), next = el("button", "bbtn", "›"), num = el("span", "bnum");
       prev.type = next.type = "button";
       var known = function () {                              // вид (форма+цвет) → лучший найденный сорт и сколько сортов
-        var m = {}; data.strains.forEach(function (st) { var k = st.shape + "/" + st.color, e = m[k] = m[k] || { best: null, n: 0, bon: [] }; e.n++; if (st.bonus && e.bon.indexOf(st.bonus) < 0) e.bon.push(st.bonus); if (!e.best || (st.price || 0) > (e.best.price || 0)) e.best = st; });
+        var m = {}; data.strains.forEach(function (st) { if (st.odd || st.color === "anomaly") return; var k = st.shape + "/" + st.color, e = m[k] = m[k] || { best: null, n: 0, bon: [] }; e.n++; if (st.bonus && e.bon.indexOf(st.bonus) < 0) e.bon.push(st.bonus); if (!e.best || (st.price || 0) > (e.best.price || 0)) e.best = st; });
         return m;
       };
       // страницы: как играть, гибриды, формы растений, погода, особые свойства, кухня, лавка и пыль, благодарности
@@ -4385,6 +4412,7 @@
           var rs = (F.state && F.state.recipes) || {}, NEEDW = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:gem": "лунный самоцвет", "p:gem-crop": "бирюзовый самоцвет", "p:gem-seed": "травяной самоцвет", "p:gem-dew": "золотой самоцвет", "p:gem-cross": "розовый самоцвет" };
           var rl = el("div", "recipes");
           Object.keys(rs).forEach(function (k) {
+            if (k === "brew") return;                              // странный отвар — не для справочника
             if (k.indexOf("gemdust") === 0) return;                // помол самоцветов — на странице «Самоцветы», не среди рецептов кухни
             var r = rs[k], row = el("div", "rrow"), cv = el("canvas", "pix"); itemIcon(cv, "p:" + k); row.appendChild(cv);
             var tx = el("div"); tx.appendChild(el("b", "", r.name + (r.kind === "mill" ? " · мельница" : "")));
@@ -4671,7 +4699,7 @@
         Object.keys(selSet).forEach(function (id) { var bo = barnOf(id); if (!bo || bo.count <= 0) delete selSet[id]; });
         barn.forEach(function (it) {
           var st = itemOf(it.strain), b = el("button", "slot" + (selSet[it.strain] ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
-          if (!gemOf(it.strain)) total += it.count * st.dust;                       // самоцветы в «весь урожай в пыль» не входят
+          if (!gemOf(it.strain) && it.strain !== "p:eye") total += it.count * st.dust;   // самоцветы и странные глаза в «весь урожай в пыль» не входят
           var cv = el("canvas", "pix"); itemIcon(cv, it.strain); fitIcon(cv, it.strain.indexOf("p:") === 0 ? 84 : 70); b.appendChild(cv);   b.appendChild(el("span", "n", it.count));   // в амбаре — крупно
           b.onclick = function () { haptic("light"); var was = selSet[it.strain]; if (!BARN_MULTI) Object.keys(selSet).forEach(function (k9) { delete selSet[k9]; });
             if (was) delete selSet[it.strain]; else selSet[it.strain] = 1; drawBarn(); };
@@ -4731,7 +4759,7 @@
     });
   }
   // мельница и печь: построить → выбрать рецепт → ждать → забрать в амбар
-  var NEED = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:gem": "лунный самоцвет", "p:gem-crop": "бирюзовый самоцвет", "p:gem-seed": "травяной самоцвет", "p:gem-dew": "золотой самоцвет", "p:gem-cross": "розовый самоцвет" };
+  var NEED = { "p:eye": "странный глаз", moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:gem": "лунный самоцвет", "p:gem-crop": "бирюзовый самоцвет", "p:gem-seed": "травяной самоцвет", "p:gem-dew": "золотой самоцвет", "p:gem-cross": "розовый самоцвет" };
   function fitsNeed(id, need, recipe, sort) {
     var s = F.state;
     if (need === "p:flour") return id === (sort ? "p:flour@" + sort : "p:flour");
@@ -4865,7 +4893,7 @@
   // печь и мельница (его схема 2026-11-15, ячейки и отмена — 2026-11-16): вверху ячейки готовки (одна, после прокачки — до трёх),
   // ниже категории — в каждой маленькие ячейки того, что можно сделать из своего сырья; выбрал → «Испечь» → готовится в свободной ячейке.
   // Пока не готово — можно отменить: сырьё вернётся в амбар.
-  var OVEN_CATS = [["Хлеб", ["bread"]], ["Булочки", ["bun"]], ["Похлёбка", ["soup", "stew"]], ["Пироги", ["pie", "pumpkin"]], ["Чай", ["tea"]], ["Джем", ["jam"]]];
+  var OVEN_CATS = [["Хлеб", ["bread"]], ["Булочки", ["bun"]], ["Похлёбка", ["soup", "stew"]], ["Пироги", ["pie", "pumpkin"]], ["Чай", ["tea"]], ["Джем", ["jam"]], ["Странное", ["brew"]]];
   var MILL_CATS = [["Мука", ["flour"]], ["Самоцветы", ["gemdust", "gemdust-crop", "gemdust-seed", "gemdust-dew", "gemdust-cross"]]];   // самоцветы странника → самоцветная пыль (2026-11-16)
   function kitchenBody(sh, close, b, kind) {
     var s = F.state, mill = kind === "mill", top = el("div"), body = el("div");
@@ -4933,6 +4961,7 @@
       body.innerHTML = "";
       var rows = kitchenRows(kind, b.max), slot = freeSlot(s, kind), sel = F.ovenSel;
       (mill ? MILL_CATS : OVEN_CATS).forEach(function (c) {
+        if (c[1][0] === "brew" && !((barnOf("p:eye") || {}).count > 0)) return;      // глаз нет — о странном отваре печь молчит
         if (c[1][0] === "gemdust" && !GEM_ORDER.some(function (k) { var b0 = barnOf(GEMK[k].gem); return b0 && b0.count > 0; })) return;          // самоцветов нет — категорию не показываем
         var pl = el("div", "order ovcat"); pl.appendChild(el("b", "", c[0]));
         var vs = rows.filter(function (v) { return c[1].indexOf(v.k) >= 0 && v.can >= 1; })
@@ -5089,7 +5118,7 @@
   // Разделы: семена · урожай · продукты (мука и еда). Цена урожая и продуктов у игроков — в 1,5 раза выше, чем дать пыль в амбаре.
   F.shopCat = "seed";
   function stallPrice(dust) { return Math.max(1, Math.ceil(dust * ((F.state && F.state.stall_markup) || 1.5))); }
-  function catOf(id) { return id.indexOf("p:") === 0 ? "food" : "crop"; }
+  function catOf(id) { return id.indexOf("p:") === 0 && id !== "p:eye" ? "food" : "crop"; }   // глаз — урожай, хоть и хранится как продукт
   function extend(r) {                                         // чужие сорта и продукты — чтобы рисовать и называть их товары
     F.ext = F.ext || { strains: {}, products: {} };
     Object.keys(r.strains || {}).forEach(function (k) { F.ext.strains[k] = r.strains[k]; });
@@ -5193,7 +5222,12 @@
           var key = "of:" + i + ":" + o.pub + ":" + o.strain;
           var op = o.price || st.price;
           wares.push({ key: key, icon: seedIconOf(st), tag: "✦ " + op, qty: "×" + o.count, seller: o.seller, have: ownSeeds(o.strain) });
-          act[key] = function () {
+          if (o.pub === "~") act[key] = function () {                                   // ночная аномалия: ни сорта, ни свойств — только цена
+            var d = infoBox(box, "???", ["Продаёт " + o.seller + ".", "Его здесь не было. Утром его здесь не будет."]);
+            var acts = el("div", "invacts"), b = btn("Купить за ✦ " + op, "", function () { buyWare(b, o.pub, "anomaly", "seed", op, "+1 семя", "Странное семя — в инвентаре"); });
+            acts.appendChild(b); d.appendChild(acts);
+          };
+          else act[key] = function () {
             var tier = SEEDTIER[st.tier] || SEEDTIER.common;
             var d = infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · продаёт " + o.seller, describe(st)]);
             var acts = el("div", "invacts"), b = btn("Купить за ✦ " + op, "", function () { buyWare(b, o.pub, st.id, "seed", op, "+1 семя", "Куплено: " + st.name + " — семя в инвентаре"); });
@@ -5232,7 +5266,7 @@
     // продать
     var mine = [], acts2 = {};
     if (cat === "seed") {
-      s.inv.filter(function (it) { return it.count > 0 && s.strains[it.strain] && !s.strains[it.strain].base; }).forEach(function (it) {
+      s.inv.filter(function (it) { return it.count > 0 && s.strains[it.strain] && (!s.strains[it.strain].base || s.strains[it.strain].odd); }).forEach(function (it) {
         var st = s.strains[it.strain], key = "inv:" + it.strain;
         var sp = priceFor("s:" + st.id, st.price);
         mine.push({ key: key, icon: seedIconOf(st), tag: "✦ " + sp, qty: it.listed ? "в продаже\n" + it.listed + " из " + it.count : "×" + it.count, sale: !!it.listed });
