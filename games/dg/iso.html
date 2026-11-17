@@ -57,9 +57,9 @@
   function P(u, v) { return [(u - v) * TW / 2, (u + v) * TH / 2]; }      // клетка мира → точка экрана комнаты
 
   // ---------- картинки из его листа ----------
-  var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "wall_r", "wall_l", "arch_r", "arch_l", "gate_r", "gate_l", "torch_r", "torch_l", "door_r", "door_l",
+  var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "floor6", "wall_r", "wall_l", "arch_r", "arch_l", "gate_r", "gate_l", "torch_r", "torch_l", "door_r", "door_l",
     "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag"], wait = NAMES.length + 1;
-  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=4"; IMG[n] = im; });
+  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=7"; IMG[n] = im; });
   var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png";
   var CW = 64, CH = 56, AX = 32, AY = 53;
   var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
@@ -127,7 +127,7 @@
       while (st.length) { var q = st.pop(); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (dd) { var x = q[0] + dd[0], y = q[1] + dd[1];
         if (x >= 0 && y >= 0 && x < rm.w && y < rm.h && rm.open[y][x] && !seen[y][x]) { seen[y][x] = 1; st.push([x, y]); } }); }
       for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (!seen[j][i]) rm.open[j][i] = 0;
-      rm.floor = grid(rm.w, rm.h, 0); for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) { var fq = rr(); rm.floor[j][i] = fq < .55 ? 0 : fq < .7 ? 1 : fq < .8 ? 4 : fq < .9 ? 5 : fq < .95 ? 2 : 3; }
+      rm.floor = grid(rm.w, rm.h, 0); for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) { var fq = rr(); rm.floor[j][i] = fq < .55 ? 0 : fq < .7 ? 1 : fq < .8 ? 4 : fq < .9 ? 3 : fq < .95 ? 2 : 5;   // floor5 — его плитка с провалом, реже прочих }
       // стены: задний край клетки пола, за которым пусто (или край комнаты)
       rm.walls = [];
       for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) {
@@ -144,6 +144,8 @@
       ["mu", "pu", "mv", "pv"].forEach(function (dk) { if (rm.door[dk] == null) return; var d0 = rm.door[dk];
         for (var t2 = 0; t2 < Math.max(rm.w, rm.h); t2++) { if (dk === "mu") mark(t2, d0); if (dk === "pu") mark(rm.w - 1 - t2, d0); if (dk === "mv") mark(d0, t2); if (dk === "pv") mark(d0, rm.h - 1 - t2); } });
       for (j = cj - 1; j <= cj + 1; j++) for (i = ci - 1; i <= ci + 1; i++) mark(i, j);
+      if (rr() < .5) { var hatch = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !lane[j][i]) hatch.push([i, j]);   // люк (его плитка 2026-11-17)
+        if (hatch.length) { var hc = hatch[Math.floor(rr() * hatch.length)]; rm.floor[hc[1]][hc[0]] = 6; } }
       rm.props = []; var kinds = ["crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "rocks", "rock_big", "brazier", "stalag", "mush", "mush2"];
       if (kind === "hall") { for (j = 2; j < rm.h - 1; j += 3) for (i = 2; i < rm.w - 1; i += 3) if (rm.open[j][i] && !lane[j][i]) rm.props.push({ i: i, j: j, k: rr() < .5 ? "stalag" : "crys_big" }); }
       else { var openCells = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !lane[j][i]) openCells.push([i, j]);
@@ -199,12 +201,12 @@
   stage.addEventListener("pointerdown", function (e) {
     if (e.target.closest("#over") || e.target.closest("#leave")) return;
     var p = pos(e);
-    if (p[0] < W * .55 && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.bx = JX; joy.by = JY; move(p); } else { wantHit = true; hitFlash = .15; }
+    if (p[0] < W * .55 && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.bx = Math.max(JR + 6, Math.min(W * .45, p[0])); joy.by = Math.max(H * .55, Math.min(H - JR - 6, p[1])); joy.dx = joy.dy = 0; move(p); }   // центр — под пальцем, но в пределах зоны слева внизу (его просьба, как в LoL) else { wantHit = true; hitFlash = .15; }
     e.preventDefault();
   });
-  function move(p) { var dx = p[0] - JX, dy = p[1] - JY, d = Math.hypot(dx, dy); if (d > JR) { dx *= JR / d; dy *= JR / d; } joy.dx = dx / JR; joy.dy = dy / JR; }
+  function move(p) { var dx = p[0] - joy.bx, dy = p[1] - joy.by, d = Math.hypot(dx, dy); if (d > JR) { dx *= JR / d; dy *= JR / d; } joy.dx = dx / JR; joy.dy = dy / JR; }
   stage.addEventListener("pointermove", function (e) { if (joy.on && e.pointerId === joy.id) move(pos(e)); });
-  function up(e) { if (joy.on && e.pointerId === joy.id) { joy.on = false; joy.dx = joy.dy = 0; } }
+  function up(e) { if (joy.on && e.pointerId === joy.id) { joy.on = false; joy.dx = joy.dy = 0; joy.bx = JX; joy.by = JY; } }   // отпустил — джойстик на обычное место
   stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
   addEventListener("keydown", function (e) { keys[e.code] = true; if (e.code === "Space") { wantHit = true; hitFlash = .15; e.preventDefault(); } });
   addEventListener("keyup", function (e) { keys[e.code] = false; });
@@ -356,9 +358,9 @@
       else if (f.k === "plus") { var yy = s[1] - 10 - f.t * 22; ctx.globalAlpha = 1 - f.t / .8; px(ctx, s[0] - 3, yy, 7, 1, "#efe8d6"); px(ctx, s[0], yy - 3, 1, 7, "#efe8d6"); ctx.drawImage(boneC, Math.round(s[0] + 6), Math.round(yy - 6)); ctx.globalAlpha = 1; }
     });
     // джойстик: основание и ручка
-    ctx.globalAlpha = joy.on ? .34 : .22; ctx.fillStyle = "#efe6d2"; ctx.beginPath(); ctx.arc(JX, JY, JR + 4, 0, 7); ctx.fill();
-    ctx.globalAlpha = .5; ctx.strokeStyle = "#efe6d2"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(JX, JY, JR + 4, 0, 7); ctx.stroke();
-    ctx.globalAlpha = joy.on ? .8 : .55; ctx.beginPath(); ctx.arc(JX + joy.dx * JR, JY + joy.dy * JR, 11, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.globalAlpha = joy.on ? .34 : .22; ctx.fillStyle = "#efe6d2"; ctx.beginPath(); ctx.arc(joy.bx, joy.by, JR + 4, 0, 7); ctx.fill();
+    ctx.globalAlpha = .5; ctx.strokeStyle = "#efe6d2"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(joy.bx, joy.by, JR + 4, 0, 7); ctx.stroke();
+    ctx.globalAlpha = joy.on ? .8 : .55; ctx.beginPath(); ctx.arc(joy.bx + joy.dx * JR, joy.by + joy.dy * JR, 11, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
     // кнопка удара: круг с мечом, вспыхивает при нажатии
     hitFlash = Math.max(0, hitFlash - 1 / 60);
     ctx.globalAlpha = hitFlash > 0 ? .75 : .45; ctx.fillStyle = hitFlash > 0 ? "#ffd27a" : "#3a2f45"; ctx.beginPath(); ctx.arc(BX, BY, BR, 0, 7); ctx.fill();
