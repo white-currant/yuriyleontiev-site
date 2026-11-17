@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611171639";
+    var BUILD = "202611171646";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -808,6 +808,7 @@
   .thanks .btn { width: 100%; min-height: 40px; padding: 8px 12px; font-size: 15px; }
   .nbig { position: relative; padding: 10px 0 8px; }
   .nbig b { display: block; font-size: 46px; line-height: 1; color: #ffd166; text-shadow: 0 0 18px rgba(255, 209, 102, .55), 0 3px 0 #9a6430; font-variant-numeric: tabular-nums; }
+  .ngift canvas { display: block; width: 72px; height: auto; margin: 0 auto; image-rendering: pixelated; }
   .nbig span { display: block; margin-top: 4px; font-size: 14px; color: #ffe7b0; }
   .nspark { position: absolute; font-style: normal; color: #fff3c4; text-shadow: 0 0 8px rgba(255, 214, 120, .9); pointer-events: none; opacity: 0; animation: nspark 1.8s ease-in-out infinite; }
   @keyframes nspark { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0deg); } 45% { opacity: 1; transform: scale(1.15) rotate(25deg); } }
@@ -3473,6 +3474,13 @@
       card.appendChild(big);
       var t0 = performance.now(), run = function (t) { var k = Math.min(1, (t - t0) / 1200); num.textContent = "+" + Math.round(n.points * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(run); };
       requestAnimationFrame(run);
+    }
+    if (n.gift) {                                                                  // подарок предметом: значок крупно в искорках, кладётся в амбар при закрытии
+      var gb = el("div", "nbig ngift"), gcv = el("canvas", "pix"); itemIcon(gcv, n.gift.item); gb.appendChild(gcv);
+      gb.appendChild(el("span", "", itemName(n.gift.item) + (n.gift.n > 1 ? " ×" + n.gift.n : "") + " — в амбар"));
+      for (var j = 0; j < 12; j++) { var sq = el("i", "nspark", j % 3 ? "✦" : "✧"); sq.style.left = (8 + (j * 61) % 84) + "%"; sq.style.top = (6 + (j * 37) % 60) + "%";
+        sq.style.animationDelay = (j * 0.17).toFixed(2) + "s"; sq.style.fontSize = (9 + (j * 5) % 10) + "px"; gb.appendChild(sq); }
+      card.appendChild(gb);
     }
     card.appendChild(el("p", "", n.text));
     var shut = function () { w.remove(); if (!document.querySelector(".sheet-wrap,.thanks-wrap")) document.documentElement.classList.remove("locked"); done(); };

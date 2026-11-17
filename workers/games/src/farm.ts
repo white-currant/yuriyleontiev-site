@@ -1627,18 +1627,24 @@ export async function gemDust(u: any, idx: number, kind = "moon") {
 }
 
 // ---------- личные объявления (разовые): показываются, пока игрок не закроет (его решение 2026-11-16) ----------
-const NOTICES: Record<number, { id: string; title: string; text: string; points?: number; until: number }> = {
+const NOTICES: Record<number, { id: string; title: string; text: string; points?: number; gift?: { item: string; n: number }; until: number }> = {
   5116432995: { id: "bug-moss", title: "Спасибо, что нашёл баг!", points: 223,
     text: "Ты нашёл дыру с диким мхом и лопатой и честно о ней рассказал. Мы её уже закрыли. В благодарность очки, которые ты успел набрать через этот баг, остаются у тебя.",
     until: Date.UTC(2026, 10, 23) / 1000 },
+  // Денис рассказал, что пыль на созревшей грядке не срабатывала (2026-11-17) — в подарок розовая пыль (его решение)
+  1990127853: { id: "gift-cross-dust", title: "Спасибо, что рассказал!", gift: { item: "p:gemdust-cross", n: 1 },
+    text: "Ты заметил, что самоцветная пыль не срабатывала на созревшей грядке. Мы это исправили: розовую, бирюзовую и травяную пыль теперь можно сыпать и на созревшее — она сработает при сборе. В благодарность — щепотка розовой пыли в амбар.",
+    until: Date.UTC(2026, 10, 24) / 1000 },
 };
 async function noticeFor(uid: number) {
   const n = NOTICES[uid]; if (!n || now() > n.until) return null;
   if ((await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?", [uid, "notice:" + n.id])).length) return null;
-  return { id: n.id, title: n.title, text: n.text, points: n.points || 0 };
+  return { id: n.id, title: n.title, text: n.text, points: n.points || 0, gift: n.gift || null };
 }
 export async function noticeSeen(u: any, id: string) {
   const n = NOTICES[u.id]; if (!n || n.id !== id) return { ok: true };
-  await q("INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?)", [u.id, "notice:" + id, now(), u.id, "notice:" + id]);
-  return { ok: true };
+  const first = (await q("INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?) RETURNING 1", [u.id, "notice:" + id, now(), u.id, "notice:" + id])).length;
+  if (!first || !n.gift || now() > n.until) return { ok: true };            // подарок — один раз: вторая отметка его не даёт
+  await q("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + ?", [u.id, n.gift.item, n.gift.n, n.gift.n]);
+  return { ok: true, farm: await farmState(u) };
 }
