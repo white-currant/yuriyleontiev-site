@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611172322";
+    var BUILD = "202611172327";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2717,11 +2717,6 @@
     c.drawImage(L.front, 0, 0);
     drawOven(c, t, kit, own, now);
     drawShop(c, t, kit, own, mossOn(kit, now));
-    if (own) marksOf(kit).forEach(function (m) {                                        // на грядке лежит самоцветная пыль — над ней мерцает искорка её цвета
-      var kk = m.kind === "g2" ? "crop" : m.kind === "gseed" ? "seed" : m.kind === "gcross" ? "cross" : "", q0 = BC[m.idx]; if (!kk || !q0) return;
-      var off = { crop: -7, seed: 0, cross: 7 }[kk], on = ((t / 320 | 0) + m.idx + off) % 3, x1 = q0[0] + off, y1 = q0[1] - 17 - (on === 0 ? 1 : 0), cc = GEMK[kk].col;
-      px(c, x1, y1 - 1, 1, 3, cc[2]); px(c, x1 - 1, y1, 3, 1, cc[2]); px(c, x1, y1, 1, 1, on ? cc[0] : "#ffffff");
-    });
     drawMossOver(c, kit, now, t, L, seed + roofKey(kit) + ["barn", "mill", "oven", "shop"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
     if (CHEST_ON) drawChest(c, own);
     if (own) drawFx(c, t);
@@ -3160,6 +3155,18 @@
     var millGem = [];                                                                   // мельница мелет самоцвет — какой (его просьба 2026-11-16)
     if (f && hasBuild(f, "mill")) jobsOf(f, "mill").forEach(function (j) { var rk = String(j.recipe).split("@")[0], gk0 = rk.indexOf("gemdust") === 0 && gemOf("p:" + rk);
       if (gk0 && j.ready > now && millGem.indexOf(gk0.k) < 0) millGem.push(gk0.k); });
+    // пыль на грядке (его просьба 2026-11-17): пока действует — грядка искрится цветом пыли, при сборе искры растворяются.
+    // Бирюзовая, травяная, розовая — отметки до сбора; золотая — долгое окно полива (больше суток), тоже до сбора
+    var gemLive = [], gemEnd = [];
+    if (cv.id === "scenecv" && f && f.plots) {
+      var MK = { g2: "crop", gseed: "seed", gcross: "cross" }, seen = {};
+      marksOf(f).forEach(function (m) { var kk = MK[m.kind]; if (kk && BC[m.idx]) gemLive.push({ i: m.idx, k: kk }); });
+      f.plots.forEach(function (p) { if (p && p.crop && BC[p.idx] && p.water_until - now > 86400) gemLive.push({ i: p.idx, k: "dew" }); });
+      gemLive.forEach(function (g) { seen[g.i + ":" + g.k] = 1; });
+      Object.keys(F.gemWas || {}).forEach(function (key) { if (!seen[key]) { var pp = key.split(":"); (F.gemEnds = F.gemEnds || []).push({ i: +pp[0], k: pp[1], t0: t }); } });
+      F.gemWas = seen;
+      gemEnd = F.gemEnds = (F.gemEnds || []).filter(function (g) { return t - g.t0 < 1400; });
+    }
     var gemSel = cv.id === "scenecv" && F.sel === "gem" && GEMK[F.gemKind] ? GEMK[F.gemKind] : null;   // пыль выбрана — по краям бегут её искры (его просьба 2026-11-17)
     // появление и растворение (его просьба 2026-11-17): рамка не включается и не гаснет рывком — плавно наплывает и тает
     if (cv.id === "scenecv") {
@@ -3169,7 +3176,7 @@
       if (!gemSel && F.gemA > 0 && F.gemLast) gemSel = F.gemLast;                          // гаснет — тем же цветом
     }
     var gA = gemSel ? (F.gemA || 0) : 0, gIn = !!(F.sel === "gem");
-    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !bfx.length && !efx.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !bfx.length && !efx.length && !gemLive.length && !gemEnd.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
     var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
     var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
@@ -3217,6 +3224,34 @@
               GCOL[(n + 1) % GCOL.length], (1 - sp) * 1.3, n * 3 + g.i);
       }
     });
+    // искорки действующей пыли: лёгкие, по всей грядке, мерцают и медленно всплывают
+    c.globalCompositeOperation = "lighter";
+    gemLive.forEach(function (g) {
+      var p = BC[g.i], GK = GEMK[g.k]; if (!p || !GK) return;
+      for (var n = 0; n < 11; n++) {
+        var sd = n * 7.3 + g.i * 13 + (g.k.length * 3), ph = ((t / 2200) + hash01(sd)) % 1;
+        var ox = (hash01(sd + 1) - .5) * 30, oy = (hash01(sd + 2) - .5) * 14;                     // точка на ромбе грядки
+        if (Math.abs(ox) / 30 + Math.abs(oy) / 14 > .5) { ox *= .6; oy *= .6; }
+        var x = (p[0] + ox) * kx, y = (p[1] - 2 + oy - ph * 18) * ky, a = Math.sin(ph * Math.PI) * 1.15;
+        spark(x, y, (.85 + hash01(sd + 3) * .75) * dpr, GK.col[n % GK.col.length], a, sd);
+      }
+      var gl = c.createRadialGradient(p[0] * kx, (p[1] - 2) * ky, 0, p[0] * kx, (p[1] - 2) * ky, 22 * kx);   // тихое свечение под ними
+      gl.addColorStop(0, "rgba(" + GK.glow.join(",") + "," + (.20 + .07 * Math.sin(t / 700 + g.i)) + ")"); gl.addColorStop(1, "rgba(" + GK.glow.join(",") + ",0)");
+      c.globalAlpha = 1; c.fillStyle = gl; c.beginPath(); c.ellipse(p[0] * kx, (p[1] - 2) * ky, 24 * kx, 13 * ky, 0, 0, 7); c.fill();
+    });
+    // растворение: искры взмывают и расходятся, свечение гаснет, напоследок — короткое кольцо
+    gemEnd.forEach(function (g) {
+      var p = BC[g.i], GK = GEMK[g.k]; if (!p || !GK) return;
+      var e = (t - g.t0) / 1400, bx = p[0] * kx, by = (p[1] - 2) * ky, n;
+      var gl = c.createRadialGradient(bx, by, 0, bx, by, 26 * kx); gl.addColorStop(0, "rgba(" + GK.glow.join(",") + "," + (.35 * (1 - e)) + ")"); gl.addColorStop(1, "rgba(" + GK.glow.join(",") + ",0)");
+      c.globalAlpha = 1; c.fillStyle = gl; c.beginPath(); c.ellipse(bx, by, 26 * kx, 15 * ky, 0, 0, 7); c.fill();
+      var rp = e / .5; if (rp < 1) { c.globalAlpha = (1 - rp) * .7; c.strokeStyle = GK.col[1]; c.lineWidth = (1.6 * (1 - rp) + .4) * dpr; c.beginPath(); c.ellipse(bx, by, (6 + rp * 22) * kx, (3 + rp * 12) * ky, 0, 0, 7); c.stroke(); c.globalAlpha = 1; }
+      for (n = 0; n < 18; n++) {
+        var sd = n * 5.1 + g.i * 11, ang = hash01(sd) * 6.283, rad = (4 + hash01(sd + 1) * 18) * (1 - Math.pow(1 - e, 2));
+        spark(bx + Math.cos(ang) * rad * kx, by + Math.sin(ang) * rad * .5 * ky - e * e * 30 * ky, (.6 + hash01(sd + 2) * .9) * dpr * (1 - e * .4), GK.col[n % GK.col.length], (1 - e) * 1.1, sd);
+      }
+    });
+    c.globalAlpha = 1;
     // луч солнца (2026-11-17: событие проходило незаметно — была только надпись): луч падает с неба наискосок,
     // раскрывается в столб света, на грядке вспышка с кольцом и лучиками по земле, в столбе поднимаются золотые пылинки
     bfx.forEach(function (b) {
