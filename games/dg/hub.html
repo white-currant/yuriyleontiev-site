@@ -12,6 +12,9 @@
   #stage { position: relative; width: min(100vw, calc(100vh * 144 / 256)); aspect-ratio: 144 / 256; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
   #scene, #herol { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; display: block; }
   #herol { pointer-events: none; }
+  /* убежище — его фон (2026-11-17), мой нарисованный выключен; герой стоит крупно в центре */
+  #stage { background: #07060a url(hub-bg.webp) center / 100% 100% no-repeat; }
+  #scene { opacity: 0; }
   canvas.ic { image-rendering: pixelated; display: block; flex: none; }
   /* панели интерфейса: тёмный сланец, рамка со срезанными углами */
   .pan { background: var(--slate); box-shadow: 0 0 0 var(--u) var(--edge2), inset 0 var(--u) 0 var(--edge), inset 0 calc(var(--u) * -1) 0 #16171d, inset var(--u) 0 0 #3a3e4b, inset calc(var(--u) * -1) 0 0 #16171d;
@@ -42,9 +45,9 @@
 <body>
 <div id="stage">
   <canvas id="scene" width="144" height="256"></canvas>
-  <canvas id="herol" width="288" height="512"></canvas>
-  <div class="tag" style="left:27.5%;top:19.5%">перегонный куб</div>
-  <div class="tag" style="left:75%;top:27%">кузница</div>
+  <canvas id="herol" width="941" height="1672"></canvas>
+  <div class="tag" style="left:27%;top:27%">перегонный куб</div>
+  <div class="tag" style="left:77%;top:32%">кузница</div>
   <div id="top">
     <div id="face" class="pan"><canvas class="ic" id="i-face" width="18" height="18"></canvas></div>
     <div id="bars">
@@ -272,8 +275,18 @@
     LIGHTS.forEach(function (L, k) { var f = L.map[i]; if (f) { f *= L.i * (1 + L.fl * noise(k + 1, t)); r += L.c[0] * f; g += L.c[1] * f; bl += L.c[2] * f; } });
     return [r, g, bl];
   }
+  // герой на его фоне: лицом к нам, в центре пола, родные пиксели ×8; стоит и дышит (два кадра стойки), никуда не ходит (его правка 2026-11-17)
+  var BIG = 8, BX = 470, BY = 1190;
+  function bigHero(t) {
+    hctx.clearRect(0, 0, hl.width, hl.height); if (!(HIMG.complete && HIMG.naturalWidth)) return;
+    hctx.fillStyle = "rgba(4,3,8,.5)"; hctx.beginPath(); hctx.ellipse(BX, BY - 4, 118, 26, 0, 0, 7); hctx.fill();   // тень под ногами
+    var fr = Math.floor(t * 1.4) % 2;
+    hctx.imageSmoothingEnabled = false;
+    hctx.drawImage(HIMG, fr * HCW, 0, HCW, HCH, BX - HAX * BIG, BY - HAY * BIG, HCW * BIG, HCH * BIG);
+  }
   function frame(ms) {
     var t = ms / 1000, i, x, y;
+    bigHero(t); return;
     // движение героя к точке
     var dx = hero.tx - hero.x, dy = hero.ty - hero.y, dist = Math.hypot(dx, dy), moving = dist > .8;
     if (moving) { hero.x += dx / dist * 1.1; hero.y += dy / dist * .8; hero.step += .35; if (Math.abs(dx) > .5) hero.face = dx > 0 ? 1 : -1; }
@@ -381,14 +394,13 @@
   // ---------- нажатия ----------
   var say = document.getElementById("say"), sayT = 0;
   function tell(text) { say.textContent = text; say.classList.add("on"); clearTimeout(sayT); sayT = setTimeout(function () { say.classList.remove("on"); }, 1800); }
-  document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation(); if (bn.classList.contains("go")) { location.href = "battle.html"; return; } tell(bn.dataset.say); }); });   // мечи — спуск в бой
+  document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation(); if (bn.classList.contains("go")) { location.href = "iso.html"; return; } tell(bn.dataset.say); }); });   // мечи — спуск в бой
   document.getElementById("gear").addEventListener("click", function (e) { e.stopPropagation(); tell("Настройки"); });
   cv.addEventListener("pointerdown", function (e) {
-    var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
-    if (x > 20 && x < 58 && y > 52 && y < 122) { hero.tx = 44; hero.ty = 134; return tell("Перегонный куб: кости монстров → удобрение"); }
-    if (x > 86 && x < 130 && y > 60 && y < 122) { hero.tx = 104; hero.ty = 134; return tell("Кузница: оружие и починка"); }
-    if (x > 60 && x < 84 && y > 58 && y < 122) { hero.tx = 72; hero.ty = 128; return tell("Спуск в подземелье"); }
-    hero.tx = Math.max(16, Math.min(128, x)); hero.ty = Math.max(130, Math.min(222, y));
+    var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;   // доли экрана — места на его фоне
+    if (x > .12 && x < .40 && y > .28 && y < .60) return tell("Перегонный куб: кости монстров → удобрение");
+    if (x > .63 && x < .92 && y > .33 && y < .62) return tell("Кузница: оружие и починка");
+    if (x > .40 && x < .63 && y > .32 && y < .59) return tell("Спуск в подземелье");
   });
 })();
 </script>

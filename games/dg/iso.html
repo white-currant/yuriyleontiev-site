@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Подземелье — изометрия</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: #07060a; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: -apple-system, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif; color: #efe6d2; }
+  #stage { --u: 1px; position: relative; width: min(100vw, calc(100vh * 216 / 384)); aspect-ratio: 216 / 384; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #cv { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+  .pan { background: #20222b; box-shadow: 0 0 0 calc(var(--u) * 2) #14151b, inset 0 calc(var(--u) * 2) 0 #565b6c, inset 0 calc(var(--u) * -2) 0 #16171d; }
+  #hud { position: absolute; left: calc(var(--u) * 10); right: calc(var(--u) * 10); top: calc(var(--u) * 10 + env(safe-area-inset-top)); display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
+  #hp { position: relative; width: calc(var(--u) * 120); height: calc(var(--u) * 20); }
+  #hp i { position: absolute; left: calc(var(--u) * 4); top: calc(var(--u) * 4); bottom: calc(var(--u) * 4); width: calc(100% - var(--u) * 8); background: linear-gradient(#e2574b 0 45%, #b8322c 45%); transform-origin: left; }
+  #hp b { position: absolute; inset: 0; display: grid; place-items: center; font-size: calc(var(--u) * 11); font-weight: 800; text-shadow: 0 var(--u) 0 rgba(0, 0, 0, .7); }
+  #bones { padding: 0 calc(var(--u) * 10); height: calc(var(--u) * 20); display: flex; align-items: center; gap: calc(var(--u) * 6); font-size: calc(var(--u) * 12); font-weight: 800; }
+  #bones canvas { width: calc(var(--u) * 12); height: calc(var(--u) * 11); image-rendering: pixelated; }
+  #over { position: absolute; inset: 0; display: none; place-items: center; background: rgba(6, 5, 9, .6); }
+  #over.on { display: grid; }
+  /* выход из подземелья (его правило 2026-11-17: найденное сохраняется, только если выйти вовремя или перебить всех) */
+  #leave { position: absolute; right: calc(var(--u) * 10); bottom: calc(var(--u) * 24 + env(safe-area-inset-bottom)); height: calc(var(--u) * 22); padding: 0 calc(var(--u) * 12);
+    font: inherit; font-size: calc(var(--u) * 11); font-weight: 800; color: #efe6d2; border: 0; cursor: pointer; }
+  #over button + button { margin-left: calc(var(--u) * 8); }
+  #over div { padding: calc(var(--u) * 16) calc(var(--u) * 20); text-align: center; font-size: calc(var(--u) * 15); font-weight: 800; line-height: 1.35; }
+  #over small { display: block; margin-top: calc(var(--u) * 4); font-size: calc(var(--u) * 12); font-weight: 600; opacity: .8; }
+  #over button { margin-top: calc(var(--u) * 14); padding: calc(var(--u) * 9) calc(var(--u) * 22); border: 0; background: #3f9e7c; color: #f2fff8; font: inherit; font-size: calc(var(--u) * 14);
+    box-shadow: 0 0 0 calc(var(--u) * 2) #14151b, inset 0 calc(var(--u) * -3) 0 #2a7058, inset 0 calc(var(--u) * 2) 0 #6fd0a8; }
+  /* карта комнат: пройденные — светлые, текущая — золотая (его просьба 2026-11-17: уровень из комнат-экранов) */
+  #map { position: absolute; left: calc(var(--u) * 10); bottom: calc(var(--u) * 24 + env(safe-area-inset-bottom)); width: calc(var(--u) * 60); height: calc(var(--u) * 60); image-rendering: pixelated; opacity: .85; pointer-events: none; }
+  #hint { position: absolute; left: 0; right: 0; bottom: calc(var(--u) * 6 + env(safe-area-inset-bottom)); text-align: center; font-size: calc(var(--u) * 10); font-weight: 600; opacity: .55; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="216" height="384"></canvas>
+  <canvas id="map" width="40" height="40"></canvas>
+  <div id="hud"><div id="hp" class="pan"><i></i><b>100</b></div><div id="bones" class="pan"><canvas id="boneic" width="12" height="11"></canvas><span id="bonen">0</span></div></div>
+  <div id="hint">слева — идти, справа — удар · на компьютере: стрелки и пробел</div>
+  <button id="leave" class="pan" type="button">выйти</button>
+  <div id="over"><div class="pan"><span id="overt"></span><small id="overs"></small><button id="again" type="button">Ещё раз</button><button id="home" type="button">В убежище</button></div></div>
+</div>
+<script>
+(function () {
+  // Изометрическое подземелье (его выбор 2026-11-17: «изометрия красивее»). Тайлы — из его листа (iso/*.png, нарезка исходники/нарезать_изометрию.py).
+  // Мир считается в клетках пола (u, v); на экран клетка ложится ромбом 48×24. Комната 9×9, камера ведёт героя по горизонтали.
+  var W = 216, H = 384, UW = 360, stage = document.getElementById("stage"), cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  function fit() { stage.style.setProperty("--u", stage.clientWidth / UW + "px"); } fit(); addEventListener("resize", fit);
+  function rng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function px(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), w, h); }
+  function sprite(c, x, y, rows, pal) { for (var j = 0; j < rows.length; j++) for (var i = 0; i < rows[j].length; i++) { var ch = rows[j][i]; if (ch !== "." && pal[ch]) px(c, x + i, y + j, 1, 1, pal[ch]); } }
+  function mk(w, h) { var c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+
+  var TW = 96, TH = 48;                                        // ромб клетки пола: тайлы вдвое крупнее относительно героя (его выбор 2026-11-17)
+  function P(u, v) { return [(u - v) * TW / 2, (u + v) * TH / 2]; }      // клетка мира → точка экрана комнаты
+
+  // ---------- картинки из его листа ----------
+  var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "wall_r", "wall_l", "arch_r", "arch_l", "gate_r", "gate_l", "torch_r", "torch_l", "door_r", "door_l",
+    "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag"], wait = NAMES.length + 1;
+  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png"; IMG[n] = im; });
+  var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png";
+  var CW = 64, CH = 56, AX = 32, AY = 53;
+  var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
+
+  // ---------- слизень, кость ----------
+  var SL = { k: "#10202c", a: "#2f8fc4", A: "#5cc0ee", h: "#c8f1ff", d: "#1d6a96", e: "#0b0a10" };
+  var slimeF = [
+    ["......kkkkkkkk......", "....kkAAAAAAAAkk....", "...kAAhhAAAAAAAAk...", "..kAAhhAAAAAAAAAAk..", ".kaAAAAAAAAAAAAAAak.", ".kaAAAeeAAAAeeAAAak.", "kaaAAAeeAAAAeeAAAaak", "kaaAAAAAAAAAAAAAAaak", "kaaaAAAAAAAAAAAAaaak", "kdaaaaaAAAAAAaaaaadk", "kddaaaaaaaaaaaaaaddk", ".kddddaaaaaaaadddk..", "..kkkkkkkkkkkkkkkk.."],
+    ["....................", "....................", ".....kkkkkkkkkk.....", "...kkAAAAAAAAAAkk...", "..kAAhhAAAAAAAAAAk..", ".kaAhhAAAAAAAAAAAak.", "kaaAAAeeAAAAeeAAAaak", "kaaAAAeeAAAAeeAAAaak", "kaaaAAAAAAAAAAAAaaak", "kdaaaaaAAAAAAaaaaadk", "kddaaaaaaaaaaaaaaddk", "kdddddaaaaaaaaddddk.", ".kkkkkkkkkkkkkkkkkk."]
+  ].map(function (rows) { var c = mk(20, 13); sprite(c.getContext("2d"), 0, 0, rows, SL); return c; });
+  var slimeHit = slimeF.map(function (src) { var c = mk(20, 13), g = c.getContext("2d"); g.drawImage(src, 0, 0); g.globalCompositeOperation = "source-atop"; g.fillStyle = "#ffffff"; g.fillRect(0, 0, 20, 13); return c; });
+  var BONE = ["........kk..", ".......kWWk.", "......kWWWWk", ".....kWWkWwk", "....kWWk.kk.", "...kWWk.....", ".kkWWk......", "kWWkwk......", "kWWWwk......", ".kWwk.......", "..kk........"], BP = { k: "#3c362d", W: "#efe8d6", w: "#b9b09a" };
+  var boneC = mk(12, 11); sprite(boneC.getContext("2d"), 0, 0, BONE, BP); sprite(document.getElementById("boneic").getContext("2d"), 0, 0, BONE, BP);
+
+  // ---------- уровень: комнаты разной формы (его просьба 2026-11-17: «сложные формы, разные комнаты») ----------
+  // Комната — сетка клеток w×h, open[j][i] — есть ли пол. Стены строятся сами: на каждом заднем крае пола, за которым пусто.
+  // Направления к соседним комнатам: mu — вверх-влево (край u = 0), mv — вверх-вправо (v = 0), pu — вниз-вправо (u = w), pv — вниз-влево (v = h).
+  var rooms, cur, hero, fx, bones, done, trans;
+  function grid(w, h, val) { var g = []; for (var j = 0; j < h; j++) { g.push([]); for (var i = 0; i < w; i++) g[j].push(val); } return g; }
+  function shape(rr, kind) {
+    var w, h, o, i, j, a, b;
+    if (kind === "corridor") { if (rr() < .5) { w = 2 + Math.floor(rr() * 2); h = 8 + Math.floor(rr() * 3); } else { w = 8 + Math.floor(rr() * 3); h = 2 + Math.floor(rr() * 2); } o = grid(w, h, 1); }
+    else if (kind === "L") { w = 6 + Math.floor(rr() * 3); h = 6 + Math.floor(rr() * 3); o = grid(w, h, 1); a = Math.floor(w * (.4 + rr() * .2)); b = Math.floor(h * (.4 + rr() * .2));
+      var cx = rr() < .5, cy = rr() < .5; for (j = 0; j < b; j++) for (i = 0; i < a; i++) o[cy ? j : h - 1 - j][cx ? i : w - 1 - i] = 0; }
+    else if (kind === "cross") { w = h = 7 + 2 * Math.floor(rr() * 2); o = grid(w, h, 0); a = 2 + Math.floor(rr() * 2); var m = Math.floor((w - a) / 2);
+      for (j = 0; j < h; j++) for (i = 0; i < w; i++) if ((i >= m && i < m + a) || (j >= m && j < m + a)) o[j][i] = 1; }
+    else if (kind === "ring") { w = 7 + Math.floor(rr() * 2); h = 7 + Math.floor(rr() * 2); o = grid(w, h, 1);
+      for (j = 2; j < h - 2; j++) for (i = 2; i < w - 2; i++) o[j][i] = 0; }
+    else if (kind === "cave") { w = 8 + Math.floor(rr() * 3); h = 8 + Math.floor(rr() * 3); o = grid(w, h, 0);
+      for (j = 1; j < h - 1; j++) for (i = 1; i < w - 1; i++) o[j][i] = rr() < .6 ? 1 : 0;
+      for (var it = 0; it < 4; it++) { var n2 = grid(w, h, 0);
+        for (j = 1; j < h - 1; j++) for (i = 1; i < w - 1; i++) { var c = 0; for (b = -1; b <= 1; b++) for (a = -1; a <= 1; a++) c += o[j + b][i + a]; n2[j][i] = c >= 5 ? 1 : 0; }
+        o = n2; } }
+    else { w = 5 + Math.floor(rr() * 4); h = 5 + Math.floor(rr() * 4); o = grid(w, h, 1); }
+    return { w: w, h: h, open: o };
+  }
+  function carve(rm, i0, j0, i1, j1) {                                    // проход «углом»: сначала по i, потом по j
+    var i = i0, j = j0; rm.open[j][i] = 1;
+    while (i !== i1) { i += i1 > i ? 1 : -1; rm.open[j][i] = 1; }
+    while (j !== j1) { j += j1 > j ? 1 : -1; rm.open[j][i] = 1; }
+  }
+  function makeLevel(seed) {
+    var r = rng(seed), map = {}, list = [], n = 6 + Math.floor(r() * 3);
+    function add(x, y) { var k = x + "," + y; if (!map[k]) { map[k] = { gx: x, gy: y, seed: Math.floor(r() * 1e9) }; list.push(map[k]); } return map[k]; }
+    add(0, 0);
+    while (list.length < n) {
+      var from = list[Math.floor(r() * list.length)], d = [[1, 0], [-1, 0], [0, -1], [0, 1]][Math.floor(r() * 4)], to = add(from.gx + d[0], from.gy + d[1]);
+      if (d[0] === 1) from.pu = to.mu = true; else if (d[0] === -1) from.mu = to.pu = true; else if (d[1] === 1) from.pv = to.mv = true; else from.mv = to.pv = true;
+    }
+    var KINDS = ["rect", "L", "cross", "corridor", "ring", "cave", "hall", "L", "cave"];
+    list.forEach(function (rm, k) {
+      var rr = rng(rm.seed), i, j, kind = k === 0 ? "rect" : KINDS[Math.floor(rr() * KINDS.length)];
+      var sh = shape(rr, kind === "hall" ? "rect" : kind); rm.w = sh.w; rm.h = sh.h; rm.open = sh.open; rm.kind = kind;
+      var ci = Math.floor(rm.w / 2), cj = Math.floor(rm.h / 2);
+      if (kind === "ring") { ci = 1; cj = 1; }                                  // у кольца середина — провал, «центр» — на самом кольце
+      rm.open[cj][ci] = 1; rm.ci = ci; rm.cj = cj;
+      // проходы к соседям — от середины края до центра, чтобы до любого выхода можно было дойти
+      rm.door = {};
+      if (rm.mu) { rm.door.mu = Math.floor(rm.h / 2); carve(rm, 0, rm.door.mu, ci, cj); }
+      if (rm.pu) { rm.door.pu = Math.floor(rm.h / 2); carve(rm, rm.w - 1, rm.door.pu, ci, cj); }
+      if (rm.mv) { rm.door.mv = Math.floor(rm.w / 2); carve(rm, rm.door.mv, 0, ci, cj); }
+      if (rm.pv) { rm.door.pv = Math.floor(rm.w / 2); carve(rm, rm.door.pv, rm.h - 1, ci, cj); }
+      // всё, куда от центра не дойти, — убрать
+      var seen = grid(rm.w, rm.h, 0), st = [[ci, cj]]; seen[cj][ci] = 1;
+      while (st.length) { var q = st.pop(); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (dd) { var x = q[0] + dd[0], y = q[1] + dd[1];
+        if (x >= 0 && y >= 0 && x < rm.w && y < rm.h && rm.open[y][x] && !seen[y][x]) { seen[y][x] = 1; st.push([x, y]); } }); }
+      for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (!seen[j][i]) rm.open[j][i] = 0;
+      rm.floor = grid(rm.w, rm.h, 0); for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) { var fq = rr(); rm.floor[j][i] = fq < .55 ? 0 : fq < .7 ? 1 : fq < .8 ? 4 : fq < .9 ? 5 : fq < .95 ? 2 : 3; }
+      // стены: задний край клетки пола, за которым пусто (или край комнаты)
+      rm.walls = [];
+      for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) {
+        if (!rm.open[j][i]) continue;
+        if (j === 0 || !rm.open[j - 1][i]) rm.walls.push({ side: "v", i: i, j: j, k: j === 0 && rm.mv && i === rm.door.mv ? "arch" : "wall" });
+        if (i === 0 || !rm.open[j][i - 1]) rm.walls.push({ side: "u", i: i, j: j, k: i === 0 && rm.mu && j === rm.door.mu ? "arch" : "wall" });
+      }
+      var plain = rm.walls.filter(function (wl) { return wl.k === "wall"; }), nt = Math.min(plain.length, 2 + Math.floor(rr() * 3));
+      for (var tt = 0; tt < nt; tt++) { var pk = plain.splice(Math.floor(rr() * plain.length), 1)[0]; pk.k = "torch"; }
+      plain.forEach(function (wl) { if (rr() < .08) wl.k = "gate"; });
+      // предметы: в зале — колоннада, в остальных — вразброс; не на проходах и не в центре
+      var lane = grid(rm.w, rm.h, 0);
+      function mark(i2, j2) { if (i2 >= 0 && j2 >= 0 && i2 < rm.w && j2 < rm.h) lane[j2][i2] = 1; }
+      ["mu", "pu", "mv", "pv"].forEach(function (dk) { if (rm.door[dk] == null) return; var d0 = rm.door[dk];
+        for (var t2 = 0; t2 < Math.max(rm.w, rm.h); t2++) { if (dk === "mu") mark(t2, d0); if (dk === "pu") mark(rm.w - 1 - t2, d0); if (dk === "mv") mark(d0, t2); if (dk === "pv") mark(d0, rm.h - 1 - t2); } });
+      for (j = cj - 1; j <= cj + 1; j++) for (i = ci - 1; i <= ci + 1; i++) mark(i, j);
+      rm.props = []; var kinds = ["crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "rocks", "rock_big", "brazier", "stalag", "mush", "mush2"];
+      if (kind === "hall") { for (j = 2; j < rm.h - 1; j += 3) for (i = 2; i < rm.w - 1; i += 3) if (rm.open[j][i] && !lane[j][i]) rm.props.push({ i: i, j: j, k: rr() < .5 ? "stalag" : "crys_big" }); }
+      else { var openCells = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !lane[j][i]) openCells.push([i, j]);
+        var np = Math.min(openCells.length, Math.floor(openCells.length / 9) + 1);
+        for (tt = 0; tt < np; tt++) { var cc = openCells.splice(Math.floor(rr() * openCells.length), 1)[0]; rm.props.push({ i: cc[0], j: cc[1], k: kinds[Math.floor(rr() * kinds.length)] }); } }
+      rm.decor = []; for (tt = 0; tt < 4; tt++) { var di = Math.floor(rr() * rm.w), dj = Math.floor(rr() * rm.h); if (rm.open[dj][di]) rm.decor.push({ u: di + .2 + rr() * .6, v: dj + .2 + rr() * .6, k: rr() < .5 ? "bones" : "skull" }); }
+      if (kind === "rect" && rr() < .5) rm.decor.push({ u: ci + .5, v: cj + .5, k: "circle", flat: true });
+      // слизни — на свободных клетках, не у входа
+      rm.mobs = []; var nm = k === 0 ? 1 : 2 + Math.floor(rr() * 3), free = [];
+      for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !rm.props.some(function (p) { return p.i === i && p.j === j; }) && Math.hypot(i - ci, j - cj) > 1.5) free.push([i, j]);
+      for (tt = 0; tt < nm && free.length; tt++) { var f2 = free.splice(Math.floor(rr() * free.length), 1)[0]; rm.mobs.push({ u: f2[0] + .5, v: f2[1] + .5, hp: 3, t: rr() * 10, hit: 0, vu: 0, vv: 0, wu: 0, wv: 0, wt: 0 }); }
+      rm.drops = []; rm.seen = k === 0;
+    });
+    return list;
+  }
+  function room(gx, gy) { for (var i = 0; i < rooms.length; i++) if (rooms[i].gx === gx && rooms[i].gy === gy) return rooms[i]; return null; }
+  function cellOpen(i, j) {                                                     // клетка проходима: пол без предмета, или выход за край в проходе
+    var rm = cur;
+    if (i < 0) return !!rm.mu && j === rm.door.mu; if (i >= rm.w) return !!rm.pu && j === rm.door.pu;
+    if (j < 0) return !!rm.mv && i === rm.door.mv; if (j >= rm.h) return !!rm.pv && i === rm.door.pv;
+    return !!rm.open[j][i] && !rm.props.some(function (p) { return p.i === i && p.j === j; });
+  }
+  function blocked(u, v) { var r = .13; return !cellOpen(Math.floor(u - r), Math.floor(v - r)) || !cellOpen(Math.floor(u + r), Math.floor(v - r)) || !cellOpen(Math.floor(u - r), Math.floor(v + r)) || !cellOpen(Math.floor(u + r), Math.floor(v + r)); }
+  function reset() {
+    rooms = makeLevel(Date.now() & 0xffffff); cur = rooms[0];
+    hero = { u: cur.ci + .5, v: cur.cj + .5, dir: "front", flip: 1, st: "idle", t: 0, hp: 100, inv: 0, hitDone: false };
+    fx = []; bones = 0; done = false; trans = null; var p0 = P(hero.u, hero.v); camX = p0[0]; camY = p0[1];
+    document.getElementById("over").classList.remove("on"); hud(); drawMap();
+  }
+  function hud() {
+    document.querySelector("#hp i").style.transform = "scaleX(" + Math.max(0, hero.hp) / 100 + ")"; document.querySelector("#hp b").textContent = Math.max(0, Math.round(hero.hp));
+    document.getElementById("bonen").textContent = bones;
+  }
+  var mapC = document.getElementById("map"), mg = mapC.getContext("2d");
+  function drawMap() {
+    var xs = rooms.map(function (r2) { return r2.gx; }), ys = rooms.map(function (r2) { return r2.gy; }), mnx = Math.min.apply(0, xs), mny = Math.min.apply(0, ys);
+    mg.clearRect(0, 0, 40, 40);
+    rooms.forEach(function (r2) { if (!r2.seen) return; var x = 2 + (r2.gx - mnx) * 8, y = 2 + (r2.gy - mny) * 8;
+      var clear = !r2.mobs.some(function (m) { return m.hp > 0; }) && !r2.drops.length;
+      mg.fillStyle = r2 === cur ? "#ffc469" : clear ? "#6f6a86" : "#b7b0d6"; mg.fillRect(x, y, 6, 6);
+      mg.fillStyle = "#4b4560"; if (r2.pu) mg.fillRect(x + 6, y + 2, 2, 2); if (r2.pv) mg.fillRect(x + 2, y + 6, 2, 2);
+    });
+  }
+  function finish(title, sub) { done = true; document.getElementById("overt").textContent = title; document.getElementById("overs").textContent = sub; setTimeout(function () { document.getElementById("over").classList.add("on"); }, 700); }
+  document.getElementById("again").onclick = reset;
+  document.getElementById("home").onclick = function () { location.href = "hub.html"; };
+  document.getElementById("leave").onclick = function () { location.href = "hub.html"; };
+
+  // ---------- управление: джойстик по экрану, мир — по диагоналям ----------
+  var JR = 22, joy = { on: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 }, keys = {}, wantHit = false;
+  function pos(e) { var r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
+  stage.addEventListener("pointerdown", function (e) {
+    if (e.target.closest("#over") || e.target.closest("#leave")) return;
+    var p = pos(e);
+    if (p[0] < W * .55 && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.bx = p[0]; joy.by = p[1]; joy.dx = joy.dy = 0; } else wantHit = true;
+    e.preventDefault();
+  });
+  stage.addEventListener("pointermove", function (e) {
+    if (!joy.on || e.pointerId !== joy.id) return;
+    var p = pos(e), dx = p[0] - joy.bx, dy = p[1] - joy.by, d = Math.hypot(dx, dy);
+    if (d > JR) { dx *= JR / d; dy *= JR / d; } joy.dx = dx / JR; joy.dy = dy / JR;
+  });
+  function up(e) { if (joy.on && e.pointerId === joy.id) { joy.on = false; joy.dx = joy.dy = 0; } }
+  stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
+  addEventListener("keydown", function (e) { keys[e.code] = true; if (e.code === "Space") { wantHit = true; e.preventDefault(); } });
+  addEventListener("keyup", function (e) { keys[e.code] = false; });
+
+  var camX = 0, camY = 0;
+  function S(u, v) { var p = P(u, v); return [p[0] - camX + W / 2, p[1] - camY + H * .56]; }   // мир → экран; герой чуть ниже середины
+  function nearest(maxPx) { var best = null, bd = maxPx, hs = S(hero.u, hero.v); cur.mobs.forEach(function (m) { if (m.hp <= 0) return; var s2 = S(m.u, m.v), d = Math.hypot(s2[0] - hs[0], s2[1] - hs[1]); if (d < bd) { bd = d; best = m; } }); return best; }
+
+  function go(du, dv) { var nx = room(cur.gx + du, cur.gy + dv); if (!nx || trans) return; trans = { t: 0, to: nx, du: du, dv: dv }; }
+  function enter(tr) {
+    cur = tr.to; cur.seen = true;
+    if (tr.du === 1) { hero.u = .5; hero.v = cur.door.mu + .5; } else if (tr.du === -1) { hero.u = cur.w - .5; hero.v = cur.door.pu + .5; }
+    if (tr.dv === 1) { hero.v = .5; hero.u = cur.door.mv + .5; } else if (tr.dv === -1) { hero.v = cur.h - .5; hero.u = cur.door.pv + .5; }
+    cur.mobs.forEach(function (m) { if (Math.hypot(m.u - hero.u, m.v - hero.v) < 1.5) { m.u = cur.ci + .5; m.v = cur.cj + .5; } });
+    var p1 = P(hero.u, hero.v); camX = p1[0]; camY = p1[1]; drawMap();
+  }
+
+  // ---------- шаг игры ----------
+  var SPEED = 1.3;
+  function update(dt) {
+    if (trans) { trans.t += dt; if (trans.t >= .16 && !trans.done) { trans.done = true; enter(trans); } if (trans.t >= .32) trans = null; return; }
+    var mobs = cur.mobs, i;
+    if (hero.st !== "dead") {
+      var jx = joy.dx + ((keys.ArrowRight || keys.KeyD) ? 1 : 0) - ((keys.ArrowLeft || keys.KeyA) ? 1 : 0), jy = joy.dy + ((keys.ArrowDown || keys.KeyS) ? 1 : 0) - ((keys.ArrowUp || keys.KeyW) ? 1 : 0), jl = Math.hypot(jx, jy);
+      if (jl > 1) { jx /= jl; jy /= jl; jl = 1; }
+      var du = jx / TW * 2 + jy / TH * 2, dv = jy / TH * 2 - jx / TW * 2, dl = Math.hypot(du, dv) || 1;      // экранное направление → направление по клеткам
+      du = du / dl * jl; dv = dv / dl * jl;
+      hero.inv = Math.max(0, hero.inv - dt);
+      if (hero.st === "hit") {
+        hero.t += dt;
+        if (hero.t > .09 && !hero.hitDone) { hero.hitDone = true; var hs = S(hero.u, hero.v);
+          mobs.forEach(function (m) { if (m.hp <= 0) return; var s2 = S(m.u, m.v), dx = (s2[0] - hs[0]) * hero.flip, dy = s2[1] - hs[1];
+            if (dx > -10 && dx < 44 && Math.abs(dy) < 24) { m.hp--; m.hit = .18; var kd = Math.hypot(m.u - hero.u, m.v - hero.v) || 1; m.vu = (m.u - hero.u) / kd * 2; m.vv = (m.v - hero.v) / kd * 2;
+              fx.push({ k: "spark", u: m.u, v: m.v, t: 0 });
+              if (m.hp <= 0) { fx.push({ k: "poof", u: m.u, v: m.v, t: 0 }); cur.drops.push({ u: m.u, v: m.v, t: 0 }); drawMap(); } } });
+        }
+        if (hero.t > .3) { hero.st = "idle"; hero.t = 0; }
+      } else if (hero.st === "hurt") { hero.t += dt; if (hero.t > .28) { hero.st = "idle"; hero.t = 0; } }
+      else {
+        if (wantHit) { var tg = nearest(80); if (tg) hero.flip = S(tg.u, tg.v)[0] >= S(hero.u, hero.v)[0] ? 1 : -1; hero.dir = "side"; hero.st = "hit"; hero.t = 0; hero.hitDone = false; }
+        else if (jl > .15) {
+          var nu = hero.u + du * SPEED * dt, nv = hero.v + dv * SPEED * dt;
+          if (!blocked(nu, hero.v)) hero.u = nu; if (!blocked(hero.u, nv)) hero.v = nv;
+          hero.st = "walk"; hero.t += dt;
+          if (Math.abs(jx) > Math.abs(jy) * .9) { hero.dir = "side"; hero.flip = jx > 0 ? 1 : -1; } else hero.dir = jy > 0 ? "front" : "back";
+        } else { if (hero.st !== "idle") hero.t = 0; hero.st = "idle"; hero.t += dt; }
+      }
+      wantHit = false;
+      // края: в проходе (средняя клетка края) можно выйти — это переход в соседнюю комнату
+      if (hero.u < -.25) go(-1, 0); else if (hero.u > cur.w + .25) go(1, 0); else if (hero.v < -.25) go(0, -1); else if (hero.v > cur.h + .25) go(0, 1);
+    } else hero.t += dt;
+
+    mobs.forEach(function (m) {
+      if (m.hp <= 0) return;
+      m.t += dt; m.hit = Math.max(0, m.hit - dt);
+      var du2 = hero.u - m.u, dv2 = hero.v - m.v, d = Math.hypot(du2, dv2) || 1, hop = Math.max(0, Math.sin(m.t * 5.5)), mu = 0, mv = 0;
+      if (hero.st !== "dead" && d < 3) { mu = du2 / d * .55 * hop * dt; mv = dv2 / d * .55 * hop * dt; }
+      else { m.wt -= dt; if (m.wt <= 0) { m.wt = 1 + Math.random() * 2; var a = Math.random() * 6.28; m.wu = Math.cos(a); m.wv = Math.sin(a); } mu = m.wu * .22 * hop * dt; mv = m.wv * .22 * hop * dt; }
+      mu += m.vu * dt; mv += m.vv * dt; m.vu *= Math.pow(.002, dt); m.vv *= Math.pow(.002, dt);
+      if (!blocked(m.u + mu, m.v)) m.u += mu; if (!blocked(m.u, m.v + mv)) m.v += mv;
+      m.u = Math.max(.2, Math.min(cur.w - .2, m.u)); m.v = Math.max(.2, Math.min(cur.h - .2, m.v));
+      if (hero.st !== "dead" && d < .3 && hero.inv <= 0) {
+        hero.hp -= 12; hero.inv = .9; hero.st = "hurt"; hero.t = 0; hero.dir = "side"; hero.flip = S(m.u, m.v)[0] > S(hero.u, hero.v)[0] ? 1 : -1;
+        var nu2 = hero.u - du2 / d * .18, nv2 = hero.v - dv2 / d * .18; if (!blocked(nu2, nv2)) { hero.u = nu2; hero.v = nv2; } hud();
+        if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", "Всё найденное потеряно"); }
+      }
+    });
+    for (i = 0; i < mobs.length; i++) for (var j = i + 1; j < mobs.length; j++) {
+      var a2 = mobs[i], b2 = mobs[j]; if (a2.hp <= 0 || b2.hp <= 0) continue; var eu = b2.u - a2.u, ev = b2.v - a2.v, ed = Math.hypot(eu, ev) || 1;
+      if (ed < .32) { var push = (.32 - ed) / 2; a2.u -= eu / ed * push; a2.v -= ev / ed * push; b2.u += eu / ed * push; b2.v += ev / ed * push; }
+    }
+    cur.drops = cur.drops.filter(function (d2) { d2.t += dt; if (hero.st !== "dead" && d2.t > .3 && Math.hypot(d2.u - hero.u, d2.v - hero.v) < .3) { bones++; hud(); fx.push({ k: "plus", u: d2.u, v: d2.v, t: 0 }); drawMap(); return false; } return true; });
+    fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : .32); });
+    var left = rooms.some(function (r2) { return r2.mobs.some(function (m) { return m.hp > 0; }) || r2.drops.length; });
+    if (!done && hero.st !== "dead" && !left) finish("Подземелье зачищено", "Добыча: костей " + bones);
+    // камера: плавно за героем по горизонтали, в пределах комнаты
+    var hp2 = P(hero.u, hero.v); camX += (hp2[0] - camX) * Math.min(1, dt * 6); camY += (hp2[1] - camY) * Math.min(1, dt * 6);
+  }
+
+  // ---------- рисование ----------
+  var lightC = mk(W / 4, H / 4), L = lightC.getContext("2d");
+  function glow(x, y, r, col, k) { var g = L.createRadialGradient(x / 4, y / 4, 0, x / 4, y / 4, r / 4); g.addColorStop(0, col.replace("A", k)); g.addColorStop(1, col.replace("A", 0)); L.fillStyle = g; L.fillRect(0, 0, W / 4, H / 4); }
+  function heroFrame() {
+    var name, i;
+    if (hero.st === "dead") { name = "die"; i = Math.min(2, Math.floor(hero.t / .22)); }
+    else if (hero.st === "hit") { name = "hit_side"; i = hero.t < .09 ? 0 : hero.t < .2 ? 1 : 2; }
+    else if (hero.st === "hurt") { name = "hurt_side"; i = Math.min(2, Math.floor(hero.t / .1)); }
+    else if (hero.st === "walk") { name = "walk_" + hero.dir; i = Math.floor(hero.t / .13) % 4; }
+    else { name = "idle_" + hero.dir; i = Math.floor(hero.t / .55) % 2; }
+    return [ROW[name][0], i];
+  }
+  var GLOWS = { crys_blue: "rgba(90,160,255,A)", crys_teal: "rgba(80,230,210,A)", crys_violet: "rgba(170,110,255,A)", crys_green: "rgba(90,240,120,A)", crys_big: "rgba(90,160,255,A)", brazier: "rgba(90,170,255,A)", mush: "rgba(80,160,255,A)", mush2: "rgba(80,160,255,A)" };
+  function img(name, x, y) { var im = IMG[name]; ctx.drawImage(im, Math.round(x), Math.round(y)); }
+  function draw(ts) {
+    var t = ts / 1000, i, j;
+    ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#0b0912"; ctx.fillRect(0, 0, W, H);
+    // пол по форме комнаты; проходы на передних краях — клетка пола за краем
+    var tiles = [];
+    for (j = 0; j < cur.h; j++) for (i = 0; i < cur.w; i++) if (cur.open[j][i]) tiles.push([i, j, cur.floor[j][i]]);
+    if (cur.pu) tiles.push([cur.w, cur.door.pu, 0]); if (cur.pv) tiles.push([cur.door.pv, cur.h, 0]);
+    tiles.sort(function (p, q) { return (p[0] + p[1]) - (q[0] + q[1]); }).forEach(function (q) { var s = S(q[0], q[1]); if (s[0] < -TW || s[0] > W + TW || s[1] < -TH * 2 || s[1] > H + TH) return; img("floor" + q[2], s[0] - TW / 2, s[1]); });
+    cur.decor.forEach(function (d) { if (!d.flat) return; var s = S(d.u, d.v), im = IMG[d.k]; img(d.k, s[0] - im.width / 2, s[1] - im.height / 2); });
+    // стены, предметы, герой и слизни — по глубине (стена за клеткой: глубина середины её края)
+    var list = [];
+    var WW = TW / 2 + 1;
+    cur.walls.forEach(function (wl) {
+      if (wl.side === "v") list.push({ z: wl.i + wl.j + .5, f: function () { var a = S(wl.i + 1, wl.j), im = IMG[wl.k + "_r"]; ctx.drawImage(im, Math.round(a[0] - WW), Math.round(a[1] - im.height + 2), WW, im.height); } });
+      else list.push({ z: wl.i + wl.j + .5, f: function () { var b = S(wl.i, wl.j + 1), im = IMG[wl.k + "_l"]; ctx.drawImage(im, Math.round(b[0]), Math.round(b[1] - im.height + 2), WW, im.height); } });
+    });
+    cur.decor.forEach(function (d) { if (d.flat) return; list.push({ z: d.u + d.v - .5, f: function () { var s = S(d.u, d.v), im = IMG[d.k]; img(d.k, s[0] - im.width / 2, s[1] - im.height + 6); } }); });
+    cur.props.forEach(function (p) { list.push({ z: p.i + p.j + 1, f: function () { var s = S(p.i + .5, p.j + .5), im = IMG[p.k]; img(p.k, s[0] - im.width / 2, s[1] - im.height + 16); } }); });
+    cur.drops.forEach(function (d) { list.push({ z: d.u + d.v, f: function () { var s = S(d.u, d.v), bob = Math.round(Math.sin(d.t * 5) * 2); px(ctx, s[0] - 5, s[1], 10, 2, "rgba(8,6,10,.4)"); ctx.drawImage(boneC, Math.round(s[0] - 6), Math.round(s[1] - 12 + bob)); } }); });
+    cur.mobs.forEach(function (m) { if (m.hp <= 0) return; list.push({ z: m.u + m.v, f: function () {
+      var s = S(m.u, m.v), fr = Math.sin(m.t * 5.5) > 0 ? 0 : 1, jump = Math.round(Math.max(0, Math.sin(m.t * 5.5)) * 4);
+      px(ctx, s[0] - 8, s[1] - 1, 16, 3, "rgba(8,6,10,.45)");
+      ctx.drawImage((m.hit > 0 ? slimeHit : slimeF)[fr], Math.round(s[0] - 10), Math.round(s[1] - 12 - jump));
+      if (m.hp < 3) { px(ctx, s[0] - 8, s[1] - 20 - jump, 16, 4, "#14151b"); px(ctx, s[0] - 7, s[1] - 19 - jump, 14 * m.hp / 3, 2, "#e2574b"); }
+    } }); });
+    list.push({ z: hero.u + hero.v, f: function () {
+      var s = S(hero.u, hero.v), fr = heroFrame(), blink = hero.inv > 0 && hero.st !== "dead" && Math.floor(t * 16) % 2;
+      px(ctx, s[0] - 10, s[1] - 2, 20, 4, "rgba(8,6,10,.5)"); px(ctx, s[0] - 7, s[1] - 3, 14, 6, "rgba(8,6,10,.35)");
+      if (blink) return;
+      ctx.save(); ctx.translate(Math.round(s[0]), Math.round(s[1])); ctx.scale(hero.flip < 0 && (hero.dir === "side" || hero.st === "dead") ? -1 : 1, 1);
+      ctx.drawImage(HERO, fr[1] * CW, fr[0] * CH, CW, CH, -AX, -AY + 2, CW, CH); ctx.restore();
+    } });
+    list.sort(function (p, q) { return p.z - q.z; }).forEach(function (o) { o.f(); });
+
+    // свет
+    L.globalCompositeOperation = "source-over"; L.fillStyle = "#8a84aa"; L.fillRect(0, 0, W / 4, H / 4); L.globalCompositeOperation = "lighter";
+    cur.walls.forEach(function (wl, n3) { if (wl.k !== "torch") return; var s = wl.side === "v" ? S(wl.i + .5, wl.j) : S(wl.i, wl.j + .5); glow(s[0], s[1] - 52, 150, "rgba(255,160,80,A)", .65 * (.9 + Math.sin(t * 9 + n3) * .08)); });
+    cur.props.forEach(function (p) { var c2 = GLOWS[p.k]; if (!c2) return; var s = S(p.i + .5, p.j + .5); glow(s[0], s[1] - 20, 100, c2, .55 * (.9 + Math.sin(t * 2 + p.i) * .1)); });
+    var hs = S(hero.u, hero.v); glow(hs[0], hs[1] - 18, 90, "rgba(225,215,255,A)", .7);
+    cur.drops.forEach(function (d) { var s = S(d.u, d.v); glow(s[0], s[1] - 6, 20, "rgba(255,240,200,A)", .35); });
+    ctx.globalCompositeOperation = "multiply"; ctx.drawImage(lightC, 0, 0, W, H); ctx.globalCompositeOperation = "source-over";
+
+    var tg = hero.st !== "dead" ? nearest(100) : null;
+    if (tg) { var ts2 = S(tg.u, tg.v), jx = Math.round(ts2[0]), jy = Math.round(ts2[1] - 7), sz = 13 + Math.round(Math.sin(t * 6)), c3 = "#f4ead0";
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) { px(ctx, jx + q[0] * sz - (q[0] > 0 ? 3 : 0), jy + q[1] * sz, 4, 1, c3); px(ctx, jx + q[0] * sz, jy + q[1] * sz - (q[1] > 0 ? 3 : 0), 1, 4, c3); }); }
+    fx.forEach(function (f) {
+      var k = f.t / .32, s = S(f.u, f.v);
+      if (f.k === "spark") { for (i = 0; i < 6; i++) { var a3 = i * 1.05, d3 = 4 + k * 14; px(ctx, s[0] + Math.cos(a3) * d3, s[1] - 8 + Math.sin(a3) * d3, 2, 2, k < .5 ? "#ffffff" : "#bfeeff"); } }
+      else if (f.k === "poof") { for (i = 0; i < 8; i++) { var a4 = i * .785, d4 = 3 + k * 12; px(ctx, s[0] + Math.cos(a4) * d4 - 1, s[1] - 6 + Math.sin(a4) * d4 - 1 - k * 6, 3 - Math.floor(k * 2), 3 - Math.floor(k * 2), k < .5 ? "#bfeeff" : "#5cc0ee"); } }
+      else if (f.k === "plus") { var yy = s[1] - 10 - f.t * 22; ctx.globalAlpha = 1 - f.t / .8; px(ctx, s[0] - 3, yy, 7, 1, "#efe8d6"); px(ctx, s[0], yy - 3, 1, 7, "#efe8d6"); ctx.drawImage(boneC, Math.round(s[0] + 6), Math.round(yy - 6)); ctx.globalAlpha = 1; }
+    });
+    if (joy.on) { ctx.globalAlpha = .28; ctx.fillStyle = "#efe6d2"; ctx.beginPath(); ctx.arc(joy.bx, joy.by, JR, 0, 7); ctx.fill(); ctx.globalAlpha = .55; ctx.beginPath(); ctx.arc(joy.bx + joy.dx * JR, joy.by + joy.dy * JR, 9, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+    if (trans) { ctx.fillStyle = "rgba(6,5,9," + Math.min(1, 1 - Math.abs(trans.t - .16) / .16) + ")"; ctx.fillRect(0, 0, W, H); }
+  }
+
+  var last = 0; function loop(ts) { requestAnimationFrame(loop); var dt = Math.min(.05, (ts - last) / 1000 || 0); last = ts; update(dt); draw(ts); }
+  function start() { reset(); requestAnimationFrame(loop); }
+  window.__game = { hero: function () { return hero; }, room: function () { return cur; }, rooms: function () { return rooms; }, keys: keys, hit: function () { wantHit = true; }, joy: function (x, y) { joy.dx = x; joy.dy = y; }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; var p2 = P(hero.u, hero.v); camX = p2[0]; camY = p2[1]; drawMap(); }, step: function (dt) { update(dt); draw(performance.now()); } };
+})();
+</script>
+</body>
+</html>
