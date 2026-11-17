@@ -1034,9 +1034,9 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
 // по рецептам (сорт муки неважен); платит пылью в 1,5 / 1,7 / 2 раза больше, чем стоят эти блюда. Срок — от суток до трёх
 // (простой — сутки, сложный — двое, особый — трое; его правка 2026-11-15);
 // выполнил — новый заказ через полчаса, срок вышел — сразу новый. Раз в сутки можно заменить неудобный заказ.
-// после сдачи новый заказ — не сразу (его правка 2026-11-16: «слишком часто»): простой — через 12 ч (пара в день),
-// сложный — через сутки, особый — через двое суток
-const ORDER_FOR = [DAY, 2 * DAY, 3 * DAY], ORDER_NEXT = [DAY / 2, DAY, 2 * DAY], ORDER_X = [1.5, 1.5, 2], ORDER_TIER = ["Простой", "Сложный", "Особый"];   // названия вернул по его просьбе
+// общий ритм (его решение 2026-11-17): простой и сложный заказы меняются раз в сутки, особый — раз в двое. Заказ висит свой срок;
+// сдал — новый придёт, когда этот срок закончится; не сдал — в конце срока сменится на другой. Замена «Другой заказ» срок не сдвигает.
+const ORDER_FOR = [DAY, DAY, 2 * DAY], ORDER_X = [1.5, 1.5, 2], ORDER_TIER = ["Простой", "Сложный", "Особый"];   // названия вернул по его просьбе
 // сложный — ×1,5 цены блюд, особый (дорогие блюда) — ×2
 // простой заказ (его правка 2026-11-15): категория — «Хлеб», «Пироги», «Похлёбка»… («~pie»); подходит любое блюдо категории любого сорта,
 // какие именно отдать — выбирает игрок. Награда — ×1,5 от самого дешёвого блюда категории: дешёвое отдать выгодно, дорогое — в убыток.
@@ -1168,19 +1168,21 @@ export async function fulfil(u: any, slot: number, pick?: Record<string, number>
     return { error: "Не хватает блюд в амбаре" };
   }
   await DB.batch([DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(Number(row[1]), u.id),
-                  DB.prepare("INSERT INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, '[]', 0, 0, ?)").bind(u.id, slot, t + ORDER_NEXT[slot])]);
+                  DB.prepare("INSERT INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, '[]', 0, 0, ?)").bind(u.id, slot, Math.min(Number(row[2]), t + ORDER_FOR[slot]))]);   // новый — в конце срока сданного (старые длинные сроки — не дольше нового ритма)
   await logFeed("order", u.id, null, null, Number(row[1]));
   return { dust: Number(row[1]), farm: await farmState(u) };
 }
 export async function skipOrder(u: any, slot: number) {
   await ensureFarm(u);
   const t = now(), day = Math.floor((t + TZ) / DAY);
+  const [cur] = await q("SELECT items, until, ready FROM f_orders WHERE user = ? AND slot = ?", [u.id, slot]);
+  if (cur && String(cur[0]) === "[]" && Number(cur[2]) > t) return { error: "Заказа пока нет — новый придёт позже" };   // ждём следующий по ритму: заменой его не поторопить
+  const live = cur && String(cur[0]) !== "[]" && Number(cur[1]) > t;   // заменяем живой заказ — срок остаётся прежним, ритм не сбивается
   if (!(await q("INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?) RETURNING 1", [u.id, "ordskip:" + day, t, u.id, "ordskip:" + day])).length)
     return { error: "Заменить заказ можно раз в сутки" };
-  const [cur] = await q("SELECT items FROM f_orders WHERE user = ? AND slot = ?", [u.id, slot]);
   const { builds } = await kitchenOf(u.id), g = genOrder(slot, builds, cur ? String(cur[0]) : undefined, await canCook(u.id));
   if (!g) return { error: "Нет блюд для заказа" };
-  await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [u.id, slot, JSON.stringify(g.items), g.reward, t + ORDER_FOR[slot], t]);
+  await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [u.id, slot, JSON.stringify(g.items), g.reward, live ? Math.min(Number(cur[1]), t + ORDER_FOR[slot]) : t + ORDER_FOR[slot], t]);
   return { farm: await farmState(u) };
 }
 // звёздный уголь в печь (его идея 2026-11-15): один уголь из амбара — всё, что сейчас печётся, готово сразу
