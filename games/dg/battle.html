@@ -153,8 +153,8 @@
   }
   function finish(title, sub) { done = true; document.getElementById("overt").textContent = title; document.getElementById("overs").textContent = sub; setTimeout(function () { document.getElementById("over").classList.add("on"); }, 700); }
   document.getElementById("again").onclick = reset;
-  document.getElementById("home").onclick = function () { location.href = "hub.html"; };
-  document.getElementById("leave").onclick = function () { location.href = "hub.html"; };
+  document.getElementById("home").onclick = function () { location.href = "hub.html?v=" + Date.now(); };
+  document.getElementById("leave").onclick = function () { location.href = "hub.html?v=" + Date.now(); };
 
   // ---------- управление ----------
   var JR = 20, joy = { on: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 }, keys = {}, wantHit = false;

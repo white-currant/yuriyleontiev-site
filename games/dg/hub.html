@@ -394,7 +394,7 @@
   // ---------- нажатия ----------
   var say = document.getElementById("say"), sayT = 0;
   function tell(text) { say.textContent = text; say.classList.add("on"); clearTimeout(sayT); sayT = setTimeout(function () { say.classList.remove("on"); }, 1800); }
-  document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation(); if (bn.classList.contains("go")) { location.href = "iso.html"; return; } tell(bn.dataset.say); }); });   // мечи — спуск в бой
+  document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation(); if (bn.classList.contains("go")) { location.href = "iso.html?v=" + Date.now(); return; } tell(bn.dataset.say); }); });   // мечи — спуск в бой
   document.getElementById("gear").addEventListener("click", function (e) { e.stopPropagation(); tell("Настройки"); });
   cv.addEventListener("pointerdown", function (e) {
     var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;   // доли экрана — места на его фоне

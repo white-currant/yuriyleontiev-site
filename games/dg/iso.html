@@ -59,7 +59,7 @@
   // ---------- картинки из его листа ----------
   var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "wall_r", "wall_l", "arch_r", "arch_l", "gate_r", "gate_l", "torch_r", "torch_l", "door_r", "door_l",
     "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag"], wait = NAMES.length + 1;
-  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png"; IMG[n] = im; });
+  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=2"; IMG[n] = im; });
   var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png";
   var CW = 64, CH = 56, AX = 32, AY = 53;
   var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
@@ -189,8 +189,8 @@
   }
   function finish(title, sub) { done = true; document.getElementById("overt").textContent = title; document.getElementById("overs").textContent = sub; setTimeout(function () { document.getElementById("over").classList.add("on"); }, 700); }
   document.getElementById("again").onclick = reset;
-  document.getElementById("home").onclick = function () { location.href = "hub.html"; };
-  document.getElementById("leave").onclick = function () { location.href = "hub.html"; };
+  document.getElementById("home").onclick = function () { location.href = "hub.html?v=" + Date.now(); };
+  document.getElementById("leave").onclick = function () { location.href = "hub.html?v=" + Date.now(); };
 
   // ---------- управление: джойстик по экрану, мир — по диагоналям ----------
   var JR = 22, joy = { on: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 }, keys = {}, wantHit = false;
@@ -319,8 +319,8 @@
     var list = [];
     var WW = TW / 2 + 1;
     cur.walls.forEach(function (wl) {
-      if (wl.side === "v") list.push({ z: wl.i + wl.j + .5, f: function () { var a = S(wl.i + 1, wl.j), im = IMG[wl.k + "_r"]; ctx.drawImage(im, Math.round(a[0] - WW), Math.round(a[1] - im.height + 2), WW, im.height); } });
-      else list.push({ z: wl.i + wl.j + .5, f: function () { var b = S(wl.i, wl.j + 1), im = IMG[wl.k + "_l"]; ctx.drawImage(im, Math.round(b[0]), Math.round(b[1] - im.height + 2), WW, im.height); } });
+      if (wl.side === "v") list.push({ z: wl.i + wl.j - .01, f: function () { var a = S(wl.i + 1, wl.j), im = IMG[wl.k + "_r"]; ctx.drawImage(im, Math.round(a[0] - WW), Math.round(a[1] - im.height + 2), WW, im.height); } });
+      else list.push({ z: wl.i + wl.j - .01, f: function () { var b = S(wl.i, wl.j + 1), im = IMG[wl.k + "_l"]; ctx.drawImage(im, Math.round(b[0]), Math.round(b[1] - im.height + 2), WW, im.height); } });
     });
     cur.decor.forEach(function (d) { if (d.flat) return; list.push({ z: d.u + d.v - .5, f: function () { var s = S(d.u, d.v), im = IMG[d.k]; img(d.k, s[0] - im.width / 2, s[1] - im.height + 6); } }); });
     cur.props.forEach(function (p) { list.push({ z: p.i + p.j + 1, f: function () { var s = S(p.i + .5, p.j + .5), im = IMG[p.k]; img(p.k, s[0] - im.width / 2, s[1] - im.height + 16); } }); });
