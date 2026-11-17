@@ -127,7 +127,7 @@
       while (st.length) { var q = st.pop(); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (dd) { var x = q[0] + dd[0], y = q[1] + dd[1];
         if (x >= 0 && y >= 0 && x < rm.w && y < rm.h && rm.open[y][x] && !seen[y][x]) { seen[y][x] = 1; st.push([x, y]); } }); }
       for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (!seen[j][i]) rm.open[j][i] = 0;
-      rm.floor = grid(rm.w, rm.h, 0); for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) { var fq = rr(); rm.floor[j][i] = fq < .55 ? 0 : fq < .7 ? 1 : fq < .8 ? 4 : fq < .9 ? 3 : fq < .95 ? 2 : 5;   // floor5 — его плитка с провалом, реже прочих }
+      rm.floor = grid(rm.w, rm.h, 0); for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) { var fq = rr(); rm.floor[j][i] = fq < .55 ? 0 : fq < .7 ? 1 : fq < .8 ? 4 : fq < .9 ? 3 : fq < .95 ? 2 : 5; }   // floor5 — его плитка с провалом, реже прочих
       // стены: задний край клетки пола, за которым пусто (или край комнаты)
       rm.walls = [];
       for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) {
