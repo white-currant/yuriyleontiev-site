@@ -57,9 +57,9 @@
   function P(u, v) { return [(u - v) * TW / 2, (u + v) * TH / 2]; }      // клетка мира → точка экрана комнаты
 
   // ---------- картинки из его листа ----------
-  var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "floor6", "wall_r", "wall_l", "arch_r", "arch_l", "gate_r", "gate_l", "torch_r", "torch_l", "door_r", "door_l",
+  var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "floor6", "floor7", "wall_r", "wall_l", "arch_r", "arch_l", "gate_r", "gate_l", "torch_r", "torch_l", "door_r", "door_l",
     "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag"], wait = NAMES.length + 1;
-  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=7"; IMG[n] = im; });
+  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=8"; IMG[n] = im; });
   var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png";
   var CW = 64, CH = 56, AX = 32, AY = 53;
   var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
@@ -146,6 +146,8 @@
       for (j = cj - 1; j <= cj + 1; j++) for (i = ci - 1; i <= ci + 1; i++) mark(i, j);
       if (rr() < .5) { var hatch = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !lane[j][i]) hatch.push([i, j]);   // люк (его плитка 2026-11-17)
         if (hatch.length) { var hc = hatch[Math.floor(rr() * hatch.length)]; rm.floor[hc[1]][hc[0]] = 6; } }
+      if (rr() < .28) { var rn = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !lane[j][i] && rm.floor[j][i] !== 6) rn.push([i, j]);   // руна (его плитка), светится
+        if (rn.length) { var rc = rn[Math.floor(rr() * rn.length)]; rm.floor[rc[1]][rc[0]] = 7; } }
       rm.props = []; var kinds = ["crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "rocks", "rock_big", "brazier", "stalag", "mush", "mush2"];
       if (kind === "hall") { for (j = 2; j < rm.h - 1; j += 3) for (i = 2; i < rm.w - 1; i += 3) if (rm.open[j][i] && !lane[j][i]) rm.props.push({ i: i, j: j, k: rr() < .5 ? "stalag" : "crys_big" }); }
       else { var openCells = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !lane[j][i]) openCells.push([i, j]);
@@ -201,7 +203,9 @@
   stage.addEventListener("pointerdown", function (e) {
     if (e.target.closest("#over") || e.target.closest("#leave")) return;
     var p = pos(e);
-    if (p[0] < W * .55 && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.bx = Math.max(JR + 6, Math.min(W * .45, p[0])); joy.by = Math.max(H * .55, Math.min(H - JR - 6, p[1])); joy.dx = joy.dy = 0; move(p); }   // центр — под пальцем, но в пределах зоны слева внизу (его просьба, как в LoL) else { wantHit = true; hitFlash = .15; }
+    // центр джойстика — под пальцем, но в пределах зоны слева внизу (его просьба, как в LoL); справа — удар
+    if (p[0] < W * .55 && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.bx = Math.max(JR + 6, Math.min(W * .45, p[0])); joy.by = Math.max(H * .55, Math.min(H - JR - 6, p[1])); joy.dx = joy.dy = 0; move(p); }
+    else { wantHit = true; hitFlash = .15; }
     e.preventDefault();
   });
   function move(p) { var dx = p[0] - joy.bx, dy = p[1] - joy.by, d = Math.hypot(dx, dy); if (d > JR) { dx *= JR / d; dy *= JR / d; } joy.dx = dx / JR; joy.dy = dy / JR; }
@@ -344,6 +348,7 @@
     L.globalCompositeOperation = "source-over"; L.fillStyle = "#8a84aa"; L.fillRect(0, 0, W / 4, H / 4); L.globalCompositeOperation = "lighter";
     cur.walls.forEach(function (wl, n3) { if (wl.k !== "torch") return; var s = wl.side === "v" ? S(wl.i + .5, wl.j) : S(wl.i, wl.j + .5); glow(s[0], s[1] - 52, 150, "rgba(255,160,80,A)", .65 * (.9 + Math.sin(t * 9 + n3) * .08)); });
     cur.props.forEach(function (p) { var c2 = GLOWS[p.k]; if (!c2) return; var s = S(p.i + .5, p.j + .5); glow(s[0], s[1] - 20, 100, c2, .55 * (.9 + Math.sin(t * 2 + p.i) * .1)); });
+    for (j = 0; j < cur.h; j++) for (i = 0; i < cur.w; i++) if (cur.floor[j][i] === 7 && cur.open[j][i]) { var rs2 = S(i + .5, j + .5); glow(rs2[0], rs2[1], 80, "rgba(120,180,255,A)", .55 + .2 * Math.sin(t * 2.2 + i)); }   // руна светится
     var hs = S(hero.u, hero.v); glow(hs[0], hs[1] - 18, 90, "rgba(225,215,255,A)", .7);
     cur.drops.forEach(function (d) { var s = S(d.u, d.v); glow(s[0], s[1] - 6, 20, "rgba(255,240,200,A)", .35); });
     ctx.globalCompositeOperation = "multiply"; ctx.drawImage(lightC, 0, 0, W, H); ctx.globalCompositeOperation = "source-over";
