@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611172029";
+    var BUILD = "202611172051";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -84,6 +84,11 @@
     box-shadow: 0 0 26px rgba(255, 196, 105, .45), inset 0 0 12px rgba(255, 255, 255, .3); color: #2a1406;
     font-size: 24px; font-weight: 700; }
   .sigil.photo { background-size: cover; background-position: center; color: transparent; }
+  /* рамка звания вокруг аватарки (его рамки, 2026-11-17): место под аватарку — по размеру рамки, остальное раздвигается */
+  .fav { position: relative; flex: none; display: block; justify-self: center; }
+  .fav > .sigil, .fav > .av { position: absolute; margin: 0; }
+  .fav > img { position: absolute; left: 0; top: 0; max-width: none; pointer-events: none; }
+  .who .sigil { width: 72px; height: 72px; font-size: 28px; }
   .who h1 { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
   .who .name { color: var(--dim); font-size: 14px; margin-top: 3px; }
   .bar { margin-top: 18px; height: 8px; border-radius: 99px; background: var(--faint); overflow: hidden; }
@@ -133,9 +138,10 @@
   .seg button[aria-pressed="true"] { background: rgba(255, 196, 105, .18); color: var(--white); }
   .list { margin-top: 10px; list-style: none; border-top: 1px solid var(--card-line); border-radius: 14px; background: rgba(22, 11, 4, .5);
     -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); padding: 0 12px; }
+  .list li > .av { justify-self: center; }                                         /* аватарка без рамки — по центру колонки, как с рамкой */
   .list .av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 650;
     background: radial-gradient(circle at 35% 30%, #fff1d2, var(--gold) 35%, #8a4a14); color: #2a1406; background-size: cover; background-position: center; }
-  .list li { display: grid; grid-template-columns: 22px 30px 1fr auto; gap: 10px; align-items: center; padding: 11px 2px;
+  .list li { display: grid; grid-template-columns: 22px var(--avw, 30px) 1fr auto; gap: 10px; align-items: center; padding: 11px 2px;
     border-bottom: 1px solid var(--card-line); font-size: 15px; }
   .list .n { font-family: var(--mono); font-size: 12px; color: var(--dim); }
   .list li:nth-child(1) .n { color: var(--gold); }
@@ -1046,11 +1052,30 @@
 
   // ---------- профиль ----------
   var me = null, topData = null, topKey = "all";
+  // рамки званий: [звание, ширина, высота, центр отверстия x, y, радиус отверстия] — в пикселях картинки ramki/zNN.webp (номер = место звания)
+  var RANK_FRAMES = [["Ученик звёзд", 295, 312, 146.7, 148.8, 104.0], ["Ловец комет", 338, 321, 167.9, 159.1, 101.9], ["Чтец созвездий", 312, 328, 155.8, 173.0, 104.0],
+    ["Заклинатель", 333, 346, 165.1, 167.8, 100.8], ["Звездочёт", 342, 345, 157.1, 174.7, 103.7], ["Маг туманностей", 364, 313, 172.0, 157.3, 104.2],
+    ["Хранитель сфер", 365, 363, 188.2, 188.1, 99.8], ["Верховный маг", 334, 337, 179.7, 169.7, 91.5], ["Звёздный оракул", 343, 360, 171.5, 184.8, 92.4],
+    ["Хранитель галактики", 371, 356, 165.9, 180.4, 76.1], ["Творец звёзд", 429, 413, 204.2, 209.3, 81.0]];
+  // надевает рамку звания на аватарку (кружок размером 2R): аватарка ложится в отверстие и чуть заходит под кольцо;
+  // вокруг — обёртка по размеру рамки, поэтому соседний текст сам отодвигается. Звание без рамки — аватарка как была.
+  function rankFrame(av, title, R) {
+    var w = av.parentNode && av.parentNode.classList.contains("fav") ? av.parentNode : null, n = -1;
+    RANK_FRAMES.forEach(function (f, i) { if (f[0] === title) n = i; });
+    if (n < 0) { if (w) { w.parentNode.insertBefore(av, w); w.remove(); av.style.left = av.style.top = ""; } return { w: 2 * R, el: av }; }
+    var f = RANK_FRAMES[n], k = R / (f[5] * 1.064), W = Math.round(f[1] * k), H = Math.round(f[2] * k);
+    if (!w) { w = el("span", "fav"); av.parentNode.insertBefore(w, av); w.appendChild(av); w.appendChild(el("img")); }
+    var img = w.querySelector("img"), src = "ramki/z" + (n < 9 ? "0" : "") + (n + 1) + ".webp";
+    if (img.getAttribute("src") !== src) { img.src = src; img.alt = ""; }
+    w.style.width = W + "px"; w.style.height = H + "px"; img.style.width = W + "px";
+    av.style.left = (f[3] * k - R) + "px"; av.style.top = (f[4] * k - R) + "px";
+    return { w: W, el: w };
+  }
   function renderMe(p) {
     me = p;
     $("title").textContent = p.title; $("name").textContent = p.name;
     $("sigil").textContent = initial(p.name);
-    setPhoto($("sigil"), p.avatar);
+    setPhoto($("sigil"), p.avatar); rankFrame($("sigil"), p.title, 36);
     $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
     $("karma").textContent = p.karma; $("place").textContent = p.place || "—";
     var lad = [0, 30, 100, 250, 500, 1000, 2000, 5000, 12000, 25000, 50000], prev = 0;
@@ -1140,15 +1165,17 @@
     var rows = topData ? topData[topKey] : [], list = $("list");
     list.innerHTML = "";
     if (!rows.length) { list.innerHTML = '<li class="empty" style="display:block">' + (topKey === "today" ? "Сегодня ещё никто не играл" : "Пока пусто — стань первым") + "</li>"; return; }
+    var avw = 30;                                                  // колонка аватарок — по самой широкой рамке звания в списке, чтобы имена стояли ровно
     rows.forEach(function (r, i) {
       var li = document.createElement("li");
       li.innerHTML = '<span class="n">' + (i + 1) + '</span><span class="av"></span><span><span class="nm"></span><span class="t"></span></span><span class="p">' + r.points + "</span>";
       li.querySelector(".nm").textContent = r.name; li.querySelector(".t").textContent = r.title || "";
       li.querySelector(".av").textContent = initial(r.name);
-      setPhoto(li.querySelector(".av"), r.avatar);
+      setPhoto(li.querySelector(".av"), r.avatar); avw = Math.max(avw, rankFrame(li.querySelector(".av"), r.title, 15).w);
       if (r.ref) { li.className = "tappable"; li.onclick = function () { haptic("light"); playerSheet(r); }; }
       list.appendChild(li);
     });
+    list.style.setProperty("--avw", avw + "px");
   }
   // профиль игрока из «Звёздного зала»: звание, очки, ферма и коллекция
   function playerSheet(r) {
@@ -1156,6 +1183,7 @@
       sh.classList.add("pcard");
       var head = el("div", "phead"), av = el("div", "sigil"); av.textContent = initial(r.name); setPhoto(av, r.avatar);
       var t = el("div"); t.appendChild(el("h3", "", r.name)); t.appendChild(el("div", "sub", r.title || "")); head.appendChild(av); head.appendChild(t); sh.appendChild(head);
+      rankFrame(av, r.title, 28);
       var body = el("div", "pbody", "Загружаю…"); sh.appendChild(body);
       Promise.all([call("/api/player", { ref: r.ref }), loadReleases()]).then(function (res) {
         var p = res[0]; body.innerHTML = "";
