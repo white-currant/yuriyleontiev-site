@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611180204";
+    var BUILD = "202611180247";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1997,7 +1997,7 @@
   }
   function strainCode(s) { return s.base ? "" : "сорт " + s.id.slice(1, 5).toUpperCase(); }
   function describe(s) {
-    if (s.odd) return "Растёт долго. Что из него вырастет — неизвестно.";                                    // коротко, значками: рост · пыль · полив · шанс артефакта (коллекционного предмета; сейчас это пластинки)
+    if (s.odd) return "";                                                                                   // о странном — ни слова (его правка 2026-11-18)                                    // коротко, значками: рост · пыль · полив · шанс артефакта (коллекционного предмета; сейчас это пластинки)
     return "⏱ " + fmtLeft(s.minutes * 60) + "  ✦ " + s.dust + "  💧 " + fmtLeft(thirstOf(s) * 60) + "  🏺 " + Math.round(s.vinyl * 100) + "%";
   }
   function factGrid(s) {                                    // то же, но с подписями — для справочника
@@ -2459,9 +2459,10 @@
   }
   // ---------- ночная аномалия (его решение 2026-11-18) ----------
   // Странное семя изредка ночью лежит в общей лавке среди семян игроков (продавец — неразборчивые символы, pub «~»);
-  // когда и сколько — решает сервер (anomalyMarket в farm.ts). Урожай — глаза, из них в печи «Странный отвар».
+  // когда и сколько — решает сервер (anomalyMarket в farm.ts). Урожай — глаза, из них в печи чёрная «Странная похлёбка».
   var ODDC = {};
-  var ODD = { id: "anomaly", name: "Странное семя", shape: "anomaly", color: "anomaly", cost: 30, base: true, odd: true, minutes: 480, dust: 60, vinyl: 0 };
+  var BREW_SAYS = "Съешь перед спуском в подземелье — увидишь странную дверь. За ней тайник: оберег для фермы и вещь для героя.";
+  var ODD = { id: "anomaly", name: "Странное семя", shape: "anomaly", color: "anomaly", cost: 30, base: true, odd: true, minutes: 2880, dust: 60, vinyl: 0 };
   // ---------- ночные странности (его идея 2026-11-16) ----------
   // Только в настоящую ночь у игрока — с 00:00 до 04:00 по часам его телефона. Не каждую ночь (примерно через одну) и ненадолго:
   // из-за дома выглядывает тёмный силуэт; у амбара на миг меняется подпись. Ничего не дают, ничего не объясняют.
@@ -2931,7 +2932,7 @@
     "p:stew":    ["...s.....s....", "....s.....s...", ".kkkkkkkkkkkk.", "knNcnRnNcnRnNk", "kNnnNnnNnnNnNk", ".kBBmBBBBmBBk.", ".kBBBBBBBBBBk.", "..kmmmmmmmmk..", "...kkkkkkkk..."],
     "p:tea":     ["....s..s......", ".....s..s.....", "...kkkkkkkk...", "...kvvVvvVk...", "...kcccccckkk.", "...kcuuuuck.k.", "...kccccccckk.", "....kcccCk....", ".kkkkkkkkkkkk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],
     "p:eye":     ["..............", "....kkkkkk....", "..kkWWWWWWkk..", ".kWWWQsQQWWWk.", "kWWWQQaaQQWWWk", "kWqWQQaaQQWqWk", ".kWWWQQQQWWWk.", "..kkWWWWWWkk..", "....kkkkkk...."],   // странный глаз
-    "p:brew":    ["...v....v.....", "....v....v....", "...v....v.....", ".kkkkkkkkkkkk.", "kVvVvVWWWvVvVk", "kvVvWWQaQWWvVk", ".kvVvVWWWvVVk.", "..kAzzzzzzAk..", "...kkkkkkkk..."],   // странный отвар: в нём плавает глаз
+    "p:brew":    ["...z.....z....", "....z.....z...", ".kkkkkkkkkkkk.", "kaAaaaWWWaAaAk", "kAaaWWQaQWWaak", "kaaAaaWWWaaAak", ".kAAaAAAAaAAk.", ".kAAAAAAAAAAk.", "..kaaaaaaaak..", "...kkkkkkkk..."],   // странная похлёбка: чёрная, в ней плавает глаз
     "p:jam":     ["....kkkkkk....", "....kmmmmk....", "...kkkkkkkk...", "...kWRRRRrk...", "...kRRpRRrk...", "...kRRRRRrk...", "...kRyyyyrk...", "...kRyyyyrk...", "...krRRRrrk...", "....kkkkkk...."],
   };
   // pal — палитра сорта колосьев: корочка и метка на мешке муки берут его цвет (пшеница — как есть)
@@ -3831,7 +3832,7 @@
       else if (mossX) setTimeout(function () { floatText(pl.idx, "мох разросся: ×2!", "big"); }, 250);
       if (mythX) { var md = gain * inf.s.dust * 2; s.dust += md; setTimeout(function () { floatText(pl.idx, "мифическая пыль +" + md + " ✦", "big"); flyDust(pl.idx); }, 300); }
       s.plots[pl.idx] = { idx: pl.idx, crop: null }; renderFarm();   // сразу, не дожидаясь сервера
-      if (!inf.s.myth) setTimeout(function () { flySeeds(pl.idx, inf.s); }, 260);
+      if (!inf.s.myth && !inf.s.odd) setTimeout(function () { flySeeds(pl.idx, inf.s); }, 260);   // странное — семя может и не остаться: летит после ответа
       return farmCall("/api/farm/harvest", { idx: pl.idx }).then(function (r) {
         if (r.error) return;
         if (r.double) { evFx("double", pl.idx); floatText(pl.idx, "×2 щедрый урожай!", "big"); }
@@ -3842,7 +3843,7 @@
           (F.beamFx = F.beamFx || []).push({ i: r.sunbeam, t0: Date.now() }); farmAnim(); haptic("light");
           setTimeout(function () { haptic("success"); floatText(r.sunbeam, "луч солнца — созрело!", "big"); }, 440);
         }
-        if (r.seeds && inf.s.odd) setTimeout(function () { floatText(pl.idx, r.seeds > 1 ? "…осталось два странных семени" : "…осталось странное семя", "big"); }, 450);
+        if (inf.s.odd) { if (r.seeds) flySeeds(pl.idx, inf.s); setTimeout(function () { floatText(pl.idx, !r.seeds ? "…семени не осталось" : "…осталось странное семя", "big"); }, 450); }
         else if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в инвентарь", "seedf"); }, 450);
         if (r.vinyl) F.items = null;
         var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl); };
@@ -3853,6 +3854,7 @@
       var kind = F.gemKind, gk = GEMK[kind], gd2 = gk && barnOf(gk.dust);
       if (!gd2 || gd2.count < 1) { F.sel = "can"; renderHotbar(); return toast("Самоцветная пыль кончилась"); }
       if ((gk.mark && marksAt(pl.idx).indexOf(gk.mark) >= 0) || (kind === "dew" && pl.water_until - now > 86400)) { haptic("error"); return toast("Эта пыль тут уже посыпана"); }
+      if (kind === "moon" && inf.s.odd) { haptic("error"); return toast("Странное растение не торопится — эта пыль на него не действует"); }
       haptic("light"); gd2.count--; (F.gemFx = F.gemFx || []).push({ i: pl.idx, t0: Date.now(), k: kind }); farmAnim(); renderHotbar();
       var crop0 = pl.crop, mins = inf.s.minutes, g0 = inf.g;
       setTimeout(function () {                                                       // на вспышке пыль срабатывает
@@ -3881,6 +3883,7 @@
       floatText(pl.idx, "+1 очко", "pts");
       return farmCall("/api/farm/water", { idx: pl.idx }).catch(function () {});
     }
+    if (inf.s.odd) return toast(inf.wetLeft < inf.left ? "Воды хватит на " + fmtLeft(inf.wetLeft) : "…");   // когда созреет странное — не говорим
     toast(inf.s.name + ": созреет через " + fmtLeft(inf.left) + (inf.wetLeft < inf.left ? " · воды хватит на " + fmtLeft(inf.wetLeft) : ""));
   }
 
@@ -3978,7 +3981,7 @@
       sh.appendChild(el("h3", "", st.name));
       var tier = SEEDTIER[st.tier] || SEEDTIER.common, sub = el("div", "sub"), tb = el("b", "", st.base ? "Сорт станции" : tier[0]);
       if (!st.base) tb.style.color = tier[1];
-      sub.appendChild(tb); if (!st.base) sub.append(" · " + strainCode(st) + " · поколение " + st.gen); sh.appendChild(sub);
+      sub.appendChild(tb); if (!st.base) sub.append(" · " + strainCode(st) + " · поколение " + st.gen); if (!st.odd) sh.appendChild(sub);
       var props = el("div", "variants");
       var line = function (k, v) { var r = el("div"); r.appendChild(el("b", "", k)); r.appendChild(el("span", "", v)); props.appendChild(r); };
       line("Растёт", fmtLeft(st.minutes * 60) + " под поливом");
@@ -3989,7 +3992,7 @@
       line("Семена с урожая", (st.bonus === "seedy" ? "3–4 (плодовитый)" : "2–3") + " за грядку");
       if (st.bonus) line("Особое свойство", bonuses[st.bonus] || "");
       line(st.base ? "Цена у станции" : "Цена в лавке", "✦ " + (st.base ? st.cost : st.price) + " за семя");
-      sh.appendChild(props);
+      if (!st.odd) sh.appendChild(props);                                       // странное семя — без свойств
       var mine = s && !opt.foreign ? bagOf(st.id) : null;
       var hv = null, lavDraw = null, dq = null;
       if (mine) { hv = el("div", "sub", "У тебя: " + mine.count); sh.appendChild(hv); }
@@ -4412,7 +4415,7 @@
           var rs = (F.state && F.state.recipes) || {}, NEEDW = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:gem": "лунный самоцвет", "p:gem-crop": "бирюзовый самоцвет", "p:gem-seed": "травяной самоцвет", "p:gem-dew": "золотой самоцвет", "p:gem-cross": "розовый самоцвет" };
           var rl = el("div", "recipes");
           Object.keys(rs).forEach(function (k) {
-            if (k === "brew") return;                              // странный отвар — не для справочника
+            if (k === "brew") return;                              // странная похлёбка — не для справочника
             if (k.indexOf("gemdust") === 0) return;                // помол самоцветов — на странице «Самоцветы», не среди рецептов кухни
             var r = rs[k], row = el("div", "rrow"), cv = el("canvas", "pix"); itemIcon(cv, "p:" + k); row.appendChild(cv);
             var tx = el("div"); tx.appendChild(el("b", "", r.name + (r.kind === "mill" ? " · мельница" : "")));
@@ -4734,6 +4737,7 @@
         if (picked.length === 1) {
           var sel = picked[0], st = itemOf(sel.strain);
           footInfo.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли." + (BARN_MULTI ? " Можно выделить ещё ячейки." : "")));
+          if (recKey(sel.strain) === "brew") footInfo.appendChild(el("div", "sub", BREW_SAYS));   // у странной похлёбки — её свойство
           var bsel = sel;
           qtyBox(footInfo, { key: "barn:" + bsel.strain, max: function () { return (barnOf(bsel.strain) || { count: 0 }).count; },
             acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + st.dust * n; }, run: function (n) { toDust(bsel.strain, n, st.dust * n); drawBarn(); } },
@@ -4893,7 +4897,7 @@
   // печь и мельница (его схема 2026-11-15, ячейки и отмена — 2026-11-16): вверху ячейки готовки (одна, после прокачки — до трёх),
   // ниже категории — в каждой маленькие ячейки того, что можно сделать из своего сырья; выбрал → «Испечь» → готовится в свободной ячейке.
   // Пока не готово — можно отменить: сырьё вернётся в амбар.
-  var OVEN_CATS = [["Хлеб", ["bread"]], ["Булочки", ["bun"]], ["Похлёбка", ["soup", "stew"]], ["Пироги", ["pie", "pumpkin"]], ["Чай", ["tea"]], ["Джем", ["jam"]], ["Странное", ["brew"]]];
+  var OVEN_CATS = [["Хлеб", ["bread"]], ["Булочки", ["bun"]], ["Похлёбка", ["soup", "stew", "brew"]], ["Пироги", ["pie", "pumpkin"]], ["Чай", ["tea"]], ["Джем", ["jam"]]];
   var MILL_CATS = [["Мука", ["flour"]], ["Самоцветы", ["gemdust", "gemdust-crop", "gemdust-seed", "gemdust-dew", "gemdust-cross"]]];   // самоцветы странника → самоцветная пыль (2026-11-16)
   function kitchenBody(sh, close, b, kind) {
     var s = F.state, mill = kind === "mill", top = el("div"), body = el("div");
@@ -4961,14 +4965,14 @@
       body.innerHTML = "";
       var rows = kitchenRows(kind, b.max), slot = freeSlot(s, kind), sel = F.ovenSel;
       (mill ? MILL_CATS : OVEN_CATS).forEach(function (c) {
-        if (c[1][0] === "brew" && !((barnOf("p:eye") || {}).count > 0)) return;      // глаз нет — о странном отваре печь молчит
         if (c[1][0] === "gemdust" && !GEM_ORDER.some(function (k) { var b0 = barnOf(GEMK[k].gem); return b0 && b0.count > 0; })) return;          // самоцветов нет — категорию не показываем
         var pl = el("div", "order ovcat"); pl.appendChild(el("b", "", c[0]));
-        var vs = rows.filter(function (v) { return c[1].indexOf(v.k) >= 0 && v.can >= 1; })
+        var eyes = (barnOf("p:eye") || {}).count > 0, cr = c[1].filter(function (k) { return k !== "brew" || eyes; });   // глаз нет — о странной похлёбке печь молчит
+        var vs = rows.filter(function (v) { return cr.indexOf(v.k) >= 0 && v.can >= 1; })
           .sort(function (a, z) { return (a.info.dust || 0) - (z.info.dust || 0); });
         var needOf = function (k) { var r = s.recipes[k]; return r ? r.name.toLowerCase() + ": " + Object.keys(r.needs).map(function (nd) { return NEED[nd] + " ×" + r.needs[nd]; }).join(" + ") : ""; };
         if (!vs.length) {
-          var need = c[1].map(needOf);
+          var need = cr.map(needOf);
           pl.appendChild(el("div", "sub", (mill ? "Не из чего смолоть" : "Не из чего испечь") + ". Нужно — " + need.join("; ") + "."));
           body.appendChild(pl); return;
         }
@@ -4984,13 +4988,13 @@
         });
         pl.appendChild(g);
         // в разделе два блюда, одно испечь можно, другое нет — рецепт второго не пропадает (баг 2026-11-17: у Егора исчез суп из мха — была похлёбка)
-        var miss = c[1].filter(function (k) { return s.recipes[k] && !vs.some(function (v) { return v.k === k; }); });
+        var miss = cr.filter(function (k) { return s.recipes[k] && !vs.some(function (v) { return v.k === k; }); });
         if (miss.length) { var ms = el("div", "sub", (mill ? "Пока не из чего смолоть" : "Пока не из чего испечь") + " " + miss.map(needOf).join("; ") + "."); ms.style.marginTop = "8px"; pl.appendChild(ms); }
         if (picked) {
           var v = picked, r = v.r, d = el("div", "ovpick");
           d.appendChild(el("b", "", itemName(v.pid) || r.name));
           var s1 = el("small", "", v.parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + v.info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : ""));
-          d.appendChild(s1); d.appendChild(s2); pl.appendChild(d);
+          d.appendChild(s1); d.appendChild(s2); if (v.k === "brew") d.appendChild(el("small", "", BREW_SAYS)); pl.appendChild(d);
           if (!slot) { var no = btn("Все ячейки заняты", "ghost", function () {}); no.disabled = true; pl.appendChild(no); }
           else qtyBox(pl, { key: "cook:" + v.k + ":" + v.sort, max: function () { return v.can; },
             acts: [{ t: function (n) { return verb + n + " · ⏱ " + fmtLeft(r.min * 60 * n); }, run: function (n) {
@@ -5223,15 +5227,15 @@
           var op = o.price || st.price;
           wares.push({ key: key, icon: seedIconOf(st), tag: "✦ " + op, qty: "×" + o.count, seller: o.seller, have: ownSeeds(o.strain) });
           if (o.pub === "~") act[key] = function () {                                   // ночная аномалия: ни сорта, ни свойств — только цена
-            var d = infoBox(box, "???", ["Продаёт " + o.seller + ".", "Его здесь не было. Утром его здесь не будет."]);
+            var d = infoBox(box, "???", ["Продаёт " + o.seller + "."]);
             var acts = el("div", "invacts"), b = btn("Купить за ✦ " + op, "", function () { buyWare(b, o.pub, "anomaly", "seed", op, "+1 семя", "Странное семя — в инвентаре"); });
             acts.appendChild(b); d.appendChild(acts);
           };
           else act[key] = function () {
             var tier = SEEDTIER[st.tier] || SEEDTIER.common;
-            var d = infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · продаёт " + o.seller, describe(st)]);
+            var d = st.odd ? infoBox(box, st.name, ["Продаёт " + o.seller + "."]) : infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · продаёт " + o.seller, describe(st)]);
             var acts = el("div", "invacts"), b = btn("Купить за ✦ " + op, "", function () { buyWare(b, o.pub, st.id, "seed", op, "+1 семя", "Куплено: " + st.name + " — семя в инвентаре"); });
-            acts.appendChild(b); acts.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: m.bonuses, buy: function () { b.click(); } }); }));
+            acts.appendChild(b); if (!st.odd) acts.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: m.bonuses, buy: function () { b.click(); } }); }));
             d.appendChild(acts);
           };
         });
@@ -5273,9 +5277,10 @@
         acts2[key] = function () {
           // как в инвентаре: номер варианта, код сорта и все свойства — таблицей вместе с одноимёнными вариантами (его правка 2026-11-17)
           var vl = varLabel(st.id), tier = SEEDTIER[st.tier] || SEEDTIER.common;
-          var d = infoBox(box, st.name + (vl ? " " + vl : "") + " · " + strainCode(st), [tier[0] + ", поколение " + st.gen + ". Выставленные семена не посадить, пока не уберёшь их с продажи."]);
+          var d = st.odd ? infoBox(box, st.name, ["Выставленные семена не посадить, пока не уберёшь их с продажи."])
+            : infoBox(box, st.name + (vl ? " " + vl : "") + " · " + strainCode(st), [tier[0] + ", поколение " + st.gen + ". Выставленные семена не посадить, пока не уберёшь их с продажи."]);
           var vids = varIds(st.name);
-          d.appendChild(variantTable(vids, st.id, vids.length > 1 ? function (id) { F.shopSel = "inv:" + id; renderShopTab(); } : null, function (id) { return bagOf(id).count; }));
+          if (!st.odd) d.appendChild(variantTable(vids, st.id, vids.length > 1 ? function (id) { F.shopSel = "inv:" + id; renderShopTab(); } : null, function (id) { return bagOf(id).count; }));
           if (st.bonus) d.appendChild(el("div", "sub bonus", "★ " + ((s.bonuses || {})[st.bonus] || "")));
           saleBox(d, { key: "sale:s:" + st.id, listed: function () { return it.listed; }, total: function () { return it.count; },
             step: function (dl) { haptic("light"); it.listed += dl; renderFarm(); farmCall("/api/farm/list", { strain: st.id, delta: dl }).catch(function () {}); },
@@ -5473,9 +5478,9 @@
       var vp = it.price || st.price;
       wares.push({ key: "s:" + it.strain, icon: seedIconOf(st), tag: "✦ " + vp, qty: "×" + it.count });
       act["s:" + it.strain] = function () {
-        var tier = SEEDTIER[st.tier] || SEEDTIER.common, d = infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · семена", describe(st)]);
+        var tier = SEEDTIER[st.tier] || SEEDTIER.common, d = st.odd ? infoBox(box, st.name, []) : infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · семена", describe(st)]);
         var a = el("div", "invacts"), b = btn("Купить за ✦ " + vp, "", function () { buyHere(b, st.id, "seed", vp, "Куплено: " + st.name + " — семя в инвентаре"); });
-        a.appendChild(b); a.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: v.bonuses, buy: function () { b.click(); } }); })); d.appendChild(a);
+        a.appendChild(b); if (!st.odd) a.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: v.bonuses, buy: function () { b.click(); } }); })); d.appendChild(a);
       };
     });
     (v.stall || []).forEach(function (x) {
