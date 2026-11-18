@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611181318";
+    var BUILD = "202611181335";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -4083,7 +4083,7 @@
   function varIds(name) { var s = F.state; return s.inv.filter(function (it) { return it.count > 0 && s.strains[it.strain] && s.strains[it.strain].name === name; }).map(function (it) { return it.strain; }).sort(); }
   function varLabel(id) { var st = F.state.strains[id]; if (!st) return ""; var ids = varIds(st.name), i = ids.indexOf(id); return ids.length > 1 && i >= 0 ? ROMAN[i] || String(i + 1) : ""; }
   // таблица сравнения вариантов одного названия: лучшее в столбце подсвечено, худшее приглушено; cnt(id) — число в последнем столбце
-  function variantTable(ids, selId, onPick, cnt) {
+  function variantTable(ids, selId, onPick, cnt, onAgain) {   // onAgain — тап по уже выбранной строке
     var s = F.state, cols = [["minutes", -1, function (v) { return fmtLeft(v * 60); }], ["dust", 1, function (v) { return v; }],
                 ["thirst", 1, function (v) { return fmtLeft(v * 60); }], ["vinyl", 1, function (v) { return Math.round(v * 100) + "%"; }]];
     var t = el("div", "vtable"), hd = el("div", "vrow head");
@@ -4100,6 +4100,7 @@
       var ls = (bagOf(id) || { listed: 0 }).listed; if (ls > 0) { r.classList.add("sold"); r.appendChild(el("span", "vsale", "в продаже " + ls)); }
       r.onclick = function () {
         if (!onPick) return; haptic("light");
+        if (onAgain && r.classList.contains("on")) return onAgain(id);
         t.querySelectorAll(".vrow.on").forEach(function (x) { x.classList.remove("on"); }); r.classList.add("on"); onPick(id);
       };
       t.appendChild(r);
@@ -4579,6 +4580,10 @@
       var box = el("div"); sh.appendChild(box);
       var foot = el("div", "sheetfoot"); sh.appendChild(foot);
       var confirmAll = false;
+      var more = function (st) {                                     // окно сортов остаётся под «Подробнее»: крестик возвращает сюда (его правка 2026-11-18)
+        var w2 = seedSheet(st, { leave: close }), tk = setInterval(function () {
+          if (w2.isConnected) return; clearInterval(tk); if (sh.isConnected) draw(); }, 150);                    // вернулись — пересчитать: семена могли уйти в пыль
+      };
       var draw = function (footOnly) {
         var s = F.state, g = groupItems().filter(function (x) { return x.name === name; })[0];
         if (!footOnly) box.innerHTML = ""; foot.innerHTML = "";
@@ -4588,7 +4593,7 @@
         box.appendChild(el("h3", "", name));
         box.appendChild(el("div", "sub", g.ids.length > 1 ? "Сортов: " + g.ids.length + ", семян всего " + g.total + ". У гибридов одного названия свойства немного разные — сравни и оставь лучшие." : "Семян: " + g.total + "."));
         box.appendChild(variantTable(g.ids, F.vsel, function (id) { F.vsel = id; confirmAll = false; draw(true); },   // выбор — сразу, на месте: без перестройки таблицы
-          function (id) { return freeOf(bagOf(id)); }));
+          function (id) { return freeOf(bagOf(id)); }, function (id) { more(F.state.strains[id]); }));   // второй тап по выбранному — «Подробнее» (его просьба 2026-11-18)
         var bon = s.strains[g.ids[0]].bonus; if (bon) box.appendChild(el("div", "sub bonus", "★ " + ((s.bonuses || {})[bon] || "")));
         }
         // действия с выбранным
@@ -4596,10 +4601,7 @@
         foot.appendChild(el("div", "sub", name + lbl + (st.base ? "" : " · " + strainCode(st)) + ": " + fr + " " + plural(fr, "семя", "семени", "семян") + (it.listed ? ", на продаже " + it.listed : "")));
         var a = el("div", "invacts");
         a.appendChild(btn("Сажать этот", "", function () { haptic("success"); F.sel = id; F.pick[name] = id; close(); renderFarm(); if (F.invRedraw) F.invRedraw(); }));
-        a.appendChild(btn("Подробнее", "ghost", function () {            // окно сортов остаётся под «Подробнее»: крестик возвращает сюда (его правка 2026-11-18)
-          var w2 = seedSheet(st, { leave: close }), tk = setInterval(function () {
-            if (w2.isConnected) return; clearInterval(tk); if (sh.isConnected) draw(); }, 150);                  // вернулись — пересчитать: семена могли уйти в пыль
-        }));
+        a.appendChild(btn("Подробнее", "ghost", function () { more(st); }));
         foot.appendChild(a);
         // продажа — одна, в лавке: там своя цена, номер варианта и все свойства (его правка 2026-11-17: «В лавку» терялась среди кнопок, и цену было не назначить)
         if (!st.base) {
