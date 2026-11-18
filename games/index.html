@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611181305";
+    var BUILD = "202611181318";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -4001,7 +4001,7 @@
   function seedSheet(st, opt) {
     opt = opt || {};
     var s = F.state, bonuses = (s && s.bonuses) || opt.bonuses || {};
-    sheet(function (sh, close) {
+    return sheet(function (sh, close) {
       var cv = el("canvas", "pix bigseed"); cropIcon(cv, st); sh.appendChild(cv);
       sh.appendChild(el("h3", "", st.name));
       var tier = SEEDTIER[st.tier] || SEEDTIER.common, sub = el("div", "sub"), tb = el("b", "", st.base ? "Сорт станции" : tier[0]);
@@ -4024,7 +4024,7 @@
       if (mine && !st.base) {                                    // «В лавку» — над пылью, как в окне сортов
         var sa0 = el("div", "invacts");
         sa0.appendChild(btn(mine.listed ? "В лавку · на продаже " + mine.listed : "В лавку", "sell", function () {
-          haptic("light"); close(); F.shopCat = "seed"; F.shopSel = "inv:" + st.id; F.shopScroll = true; openShop("sell"); }));
+          haptic("light"); close(); if (opt.leave) opt.leave(); F.shopCat = "seed"; F.shopSel = "inv:" + st.id; F.shopScroll = true; openShop("sell"); }));
         sh.appendChild(sa0);
       }
       if (mine) {                                                // лишние семена — в пыль, сколько выберешь; окно остаётся открытым
@@ -4596,7 +4596,10 @@
         foot.appendChild(el("div", "sub", name + lbl + (st.base ? "" : " · " + strainCode(st)) + ": " + fr + " " + plural(fr, "семя", "семени", "семян") + (it.listed ? ", на продаже " + it.listed : "")));
         var a = el("div", "invacts");
         a.appendChild(btn("Сажать этот", "", function () { haptic("success"); F.sel = id; F.pick[name] = id; close(); renderFarm(); if (F.invRedraw) F.invRedraw(); }));
-        a.appendChild(btn("Подробнее", "ghost", function () { close(); seedSheet(st); }));
+        a.appendChild(btn("Подробнее", "ghost", function () {            // окно сортов остаётся под «Подробнее»: крестик возвращает сюда (его правка 2026-11-18)
+          var w2 = seedSheet(st, { leave: close }), tk = setInterval(function () {
+            if (w2.isConnected) return; clearInterval(tk); if (sh.isConnected) draw(); }, 150);                  // вернулись — пересчитать: семена могли уйти в пыль
+        }));
         foot.appendChild(a);
         // продажа — одна, в лавке: там своя цена, номер варианта и все свойства (его правка 2026-11-17: «В лавку» терялась среди кнопок, и цену было не назначить)
         if (!st.base) {
