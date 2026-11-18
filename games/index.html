@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611181335";
+    var BUILD = "202611181549";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -4515,7 +4515,7 @@
     box.appendChild(wrap); draw(); return { draw: draw };
   }
   // сундук у домика: лишние семена. Убрал — в инвентаре их нет (не посадить и не продать), достал — вернулись
-  function seedDustOf(st) { var k = (F.state && F.state.seed_dust) || .4; return Math.max(1, Math.floor((st.base ? st.cost || 1 : st.price || 1) * k)); }
+  function seedDustOf(st) { var k = (F.state && F.state.seed_dust) || .4; return Math.max(1, Math.floor((st.base ? st.cost || 1 : (st.price || 1) - (st.gen || 0) * 2) * k)); }   // поколение в распыл не идёт — как на сервере
   function seedsDust(id, n, from) {                              // семена → пыль сразу, сервер подтвердит
     var s = F.state, st = s.strains[id], got = n * seedDustOf(st);
     if (from === "chest") chestOf(id).count -= n; else bagOf(id).count -= n;

@@ -1442,7 +1442,9 @@ export async function chestMove(u: any, strain: string, delta: number) {
 
 // семена → звёздная пыль (его просьба 2026-11-14): 40% цены семени — базовые дешевле, чем у станции (купить и распылить невыгодно)
 export const SEED_DUST = 0.4;
-export const seedDust = (st: Strain) => Math.max(1, Math.floor((st.base ? st.cost || 1 : st.price || 1) * SEED_DUST));
+// поколение в распыл не идёт (его решение 2026-11-18): оно растёт без предела, и семена быстрых гибридов стоили в пыли вдвое дороже урожая.
+// В лавках между игроками цена семени прежняя, с поколением.
+export const seedDust = (st: Strain) => Math.max(1, Math.floor((st.base ? st.cost || 1 : (st.price || 1) - (st.gen || 0) * 2) * SEED_DUST));
 export async function seedsToDust(u: any, strain: string, n: number, from = "inv") {
   await ensureFarm(u);
   const st = (await strains([strain]))[strain];
