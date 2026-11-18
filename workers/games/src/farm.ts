@@ -75,7 +75,8 @@ const SITE = "https://yuriyleontiev.music";
 let q: (sql: string, args?: any[]) => Promise<any[][]>;
 let DB: any;
 let now: () => number, today: () => string, nameOf: (u: any) => string;
-export function setup(deps: any) { ({ q, DB, now, today, nameOf } = deps); }
+let prefetch: (list: [string, any[]][]) => Promise<any[][][]>, preClear: () => void;
+export function setup(deps: any) { ({ q, DB, now, today, nameOf, prefetch, preClear } = deps); }
 
 // ---------- пластинки: одна пластинка — один трек (каталог games/vinyls.json сайта, кэш на час) ----------
 // У любого трека есть все варианты: редкость и отделка выпадают при каждой находке, а не закреплены за треком.
@@ -512,9 +513,12 @@ async function boostOf(uid: number): Promise<[number, number][]> {
 }
 async function monoView(uid: number) {
   const t = now();
-  await q("DELETE FROM f_monomark WHERE user = ? AND until > 0 AND until <= ? AND kind != 'mythripe'", [uid, t]);
+  // просроченные отметки: сначала читаем, удаляем — только если такие есть (раньше удаление шло при каждой загрузке фермы)
+  const all = await q("SELECT idx, kind, n, until FROM f_monomark WHERE user = ? ORDER BY n", [uid]);
+  const gone = (r: any[]) => Number(r[3]) > 0 && Number(r[3]) <= t && String(r[1]) !== "mythripe";
+  if (all.some(gone)) await q("DELETE FROM f_monomark WHERE user = ? AND until > 0 AND until <= ? AND kind != 'mythripe'", [uid, t]);
   const [m] = await q("SELECT kind, started, until FROM f_mono WHERE user = ? AND until > ? ORDER BY started DESC LIMIT 1", [uid, t]);
-  const marks = (await q("SELECT idx, kind, n, until FROM f_monomark WHERE user = ? ORDER BY n", [uid]))
+  const marks = all.filter((r) => !gone(r))
     .map(([idx, kind, n, until]) => ({ idx: Number(idx), kind: String(kind), n: Number(n), until: Number(until) }));
   return { mono: m ? { kind: String(m[0]), started: Number(m[1]), until: Number(m[2]) } : null, marks, boost: await boostOf(uid) };
 }
@@ -623,8 +627,48 @@ async function normFlour(uid: number) {
                                            DB.prepare("DELETE FROM f_prices WHERE user = ? AND item = ?").bind(uid, id)]);
   }
 }
+// Всё, что загрузка фермы читает наверняка, — одним пакетом (см. prefetch в index.ts). Тексты запросов здесь должны слово в слово
+// совпадать с теми, что ниже по ходу; разойдутся — ничего не сломается, просто этот запрос пойдёт в базу отдельно.
+function farmReads(uid: number, t: number): [string, any[]][] {
+  return [
+    ["SELECT started, until FROM f_mono WHERE user = ? AND kind = 'solstice'", [uid]],
+    [`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [uid]],
+    ["SELECT started FROM f_mono WHERE user = ? AND kind = 'moss' AND until <= ?", [uid, t]],
+    ["SELECT idx, kind, at, until FROM f_plotev WHERE user = ?", [uid]],
+    ["SELECT dust, unlocked, pub, water FROM f_farms WHERE user = ?", [uid]],
+    ["SELECT item, tier, finish, count FROM g_items WHERE user = ? AND game = 'farm' AND kind = 'vinyl'", [uid]],
+    ["SELECT strain, count, listed FROM f_inv WHERE user = ? AND count > 0", [uid]],
+    ["SELECT from_name, dust FROM f_gifts WHERE to_user = ? AND opened = 0 ORDER BY id LIMIT 20", [uid]],
+    ["SELECT buyer_name, strain, price FROM f_sales WHERE seller = ? AND seen = 0 ORDER BY id LIMIT 20", [uid]],
+    ["SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [uid]],
+    ["SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [uid]],
+    ["SELECT strain, count FROM f_chest WHERE user = ? AND count > 0", [uid]],
+    ["SELECT kind FROM f_builds WHERE user = ?", [uid]],
+    ["SELECT j.kind, j.recipe, j.n, j.started, j.ready, EXISTS(SELECT 1 FROM f_jobtake t WHERE t.user = j.user AND t.slot = j.kind) FROM f_jobs j WHERE j.user = ?", [uid]],
+    ["SELECT kind, level FROM f_levels WHERE user = ?", [uid]],
+    ["SELECT DISTINCT kind FROM f_evlog WHERE user = ? AND kind NOT LIKE '%:%'", [uid]],
+    ["SELECT id, x, y, dust FROM f_stars WHERE user = ?", [uid]],
+    ["SELECT id, x, y, dust FROM f_clumps WHERE user = ?", [uid]],
+    ["SELECT item FROM f_decor WHERE user = ? AND kind = 'roof'", [uid]],
+    ["SELECT roof FROM f_style WHERE user = ?", [uid]],
+    ["SELECT item, price FROM f_prices WHERE user = ?", [uid]],
+    ["SELECT idx, kind, n, until FROM f_monomark WHERE user = ? ORDER BY n", [uid]],
+    ["SELECT kind, started, until FROM f_mono WHERE user = ? AND until > ? ORDER BY started DESC LIMIT 1", [uid, t]],
+    ["SELECT MAX(id) FROM f_feed WHERE actor != ? AND at > ?", [uid, t - 3 * DAY]],
+    ["SELECT slot, items, reward, until, ready FROM f_orders WHERE user = ?", [uid]],
+    ["SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?", [uid, "ordskip:" + Math.floor((t + TZ) / DAY)]],
+  ];
+}
 export async function farmState(u: any) {
-  await ensureFarm(u);
+  // первым в пакете — «завести ферму, если её нет» (то же, что ensureFarm); новичку следом — стартовый мешок
+  const pub0 = [...crypto.getRandomValues(new Uint8Array(9))].map((b) => b.toString(16).padStart(2, "0")).join(""), t0 = now();
+  let pre: any[][][] | null = null;
+  try { pre = await prefetch([["INSERT OR IGNORE INTO f_farms (user, pub, created, unlocked) VALUES (?, ?, ?, 3) RETURNING 1", [u.id, pub0, t0]], ...farmReads(u.id, t0)]); }
+  catch (e) { console.error("prefetch", e); preClear(); await ensureFarm(u); }      // пакет не прошёл — грузим по-старому, по одному запросу
+  if (pre && pre[0].length) await DB.batch(STARTER.map(([k, n]) => DB.prepare("INSERT OR IGNORE INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)").bind(u.id, k, n)));
+  try { return await farmState1(u); } finally { preClear(); }
+}
+async function farmState1(u: any) {
   await normFlour(u.id);
   await mythTick(u.id); await mossEnd(u.id);
   const EVS = await plotEvents(u.id);

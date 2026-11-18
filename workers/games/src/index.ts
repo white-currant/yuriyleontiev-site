@@ -48,7 +48,27 @@ let ENV: any = {};      // секреты (env.GAMES_KEY)
 function rows(r: any): any[][] {
   return (r.rows || []).map((x: any) => Array.isArray(x) ? x : r.columns.map((c: string) => x[c]));
 }
-const q = async (sql: string, args: any[] = []): Promise<any[][]> => (await DB.prepare(sql).bind(...args).raw()) as any[][];
+// Объединение запросов (2026-11-18): загрузка фермы делала полсотни обращений к базе подряд. Теперь farmState одним пакетом
+// (prefetch) читает всё, что ему наверняка понадобится, а q отдаёт заранее прочитанное по точному совпадению текста запроса
+// и параметров. Запас живёт только внутри одной загрузки фермы: любая запись в базу, начало нового запроса к серверу
+// и конец farmState его сбрасывают — тогда q, как раньше, идёт в базу. Не совпал текст — тоже просто обычный запрос.
+let RAW: any = null;    // сама D1; DB — обёртка над ней, которая при пакетной записи сбрасывает запас
+const PRE = new Map<string, any[][]>();
+const preKey = (sql: string, args: any[]) => sql + "\u0001" + JSON.stringify(args);
+const isRead = (sql: string) => /^\s*SELECT\b/i.test(sql);
+const q = async (sql: string, args: any[] = []): Promise<any[][]> => {
+  if (isRead(sql)) { const h = PRE.get(preKey(sql, args)); if (h) return h.map((r) => r.slice()); }
+  else PRE.clear();
+  return (await RAW.prepare(sql).bind(...args).raw()) as any[][];
+};
+// пакет запросов одним обращением; чтения кладутся в запас. Возвращает строки каждого запроса по порядку.
+async function prefetch(list: [string, any[]][]): Promise<any[][][]> {
+  const res = await RAW.batch(list.map(([s, a]) => RAW.prepare(s).bind(...a)));
+  PRE.clear();
+  return list.map(([s, a], i) => { const rows = ((res[i] && res[i].results) || []).map((o: any) => Object.values(o));
+    if (isRead(s)) PRE.set(preKey(s, a), rows); return rows; });
+}
+const preClear = () => PRE.clear();
 const now = () => Math.floor(Date.now() / 1000);
 const today = () => new Date((now() + TZ_SHIFT) * 1000).toISOString().slice(0, 10);
 
@@ -277,8 +297,9 @@ async function items(u: any) {
 
 export default {
   async fetch(req: Request, env: any): Promise<Response> {
-    DB = env.DB; ENV = env;
-    farm.setup({ q, DB, now, today, nameOf });
+    RAW = env.DB; ENV = env; PRE.clear();
+    DB = { prepare: (sql: string) => RAW.prepare(sql), batch: (st: any[]) => { PRE.clear(); return RAW.batch(st); } };
+    farm.setup({ q, DB, now, today, nameOf, prefetch, preClear });
     try {
       return await handle(req);
     } catch (e) {
