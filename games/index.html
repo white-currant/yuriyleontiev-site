@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611181848";
+    var BUILD = "202611181909";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3093,8 +3093,25 @@
   }
   var BEAM_MS = 2600;
   // события грядок (его просьба 2026-11-17 «везде срочно нужны красивые анимации»): рисуются в плавном слое поверх фермы
-  var EVFX_MS = { frost: 2000, thaw: 2000, double: 1600, douse: 1900, comet: 2800, ignite: 2200 };
+  var EVFX_MS = { frost: 2000, thaw: 2000, double: 1600, douse: 1900, comet: 2800, ignite: 2200, sunrise: 2000, starfall: 2000, mossgrow: 2200, mist: 2400 };
   function evFx(k, i, delay) { if (!BC[i]) return; (F.evFx = F.evFx || []).push({ k: k, i: i, t0: Date.now() + (delay || 0) }); farmAnim(); }
+  // начало большого события фермы (2026-11-18): раньше событие объявляло только окно; теперь сначала видно, как оно приходит.
+  // Возвращает, сколько длится вступление, — окно «Событие фермы!» открывается после него
+  function monoIntro(m) {
+    var open = [], un = (F.state && F.state.unlocked) || 0; for (var oi = 0; oi < un && BC[oi]; oi++) open.push(oi);
+    if (!open.length || !m) return 450;
+    var far = function (i) { return Math.abs(i % 3 - 1) + Math.abs(Math.floor(i / 3) - 1); }, each = function (k, step, by) { open.forEach(function (i, n) { evFx(k, i, 150 + (by ? by(i, n) : n) * step); }); };
+    if (m.kind === "solstice") { each("sunrise", 110); setTimeout(function () { haptic("medium"); }, 300); return 2700; }
+    if (m.kind === "moss") { each("mossgrow", 260, far); setTimeout(function () { haptic("medium"); }, 300); return 2800; }
+    if (m.kind === "myth") { each("mist", 90); setTimeout(function () { haptic("medium"); }, 900); return 2800; }
+    if (m.kind === "constellation") { var ps = (m.plots || []).filter(function (i) { return BC[i]; });
+      ps.forEach(function (i, n) { evFx("starfall", i, 200 + n * 420); setTimeout(function () { haptic("light"); }, 200 + n * 420 + 840); }); return 700 + ps.length * 420 + 1500; }
+    if (m.kind === "comet") { var hits = open.slice().sort(function (a, b) { return hash01(a * 7 + 1) - hash01(b * 7 + 1); }).slice(0, 6);   // кометы бьют по ферме одна за другой
+      hits.forEach(function (i, n) { evFx("comet", i, 150 + n * 330); setTimeout(function () { sceneShake(n === hits.length - 1 ? 520 : 300); haptic("medium"); }, 150 + n * 330 + 840); });
+      return 150 + hits.length * 330 + 2300; }
+    return 450;                                                                             // Огненная ночь: грядки вспыхивают сами (evSpot)
+  }
+  if (local) window.__monoIntro = function (m) { return monoIntro(m); };                    // проверка у себя: показать вступление события
   function sceneShake(ms) { var b = $("scenecv") && $("scenecv").parentNode; if (!b || !b.animate) return;
     b.animate([0, 1, 2, 3, 4, 5, 6].map(function (k) { var a = (6 - k) / 6 * 3; return { transform: "translate(" + (k % 2 ? a : -a) + "px," + (k % 3 - 1) * a * .6 + "px)" }; }), { duration: ms }); }
   function drawEvFx(c, ev, t, kx, ky, dpr, spark) {
@@ -3199,6 +3216,49 @@
       for (k = 0; k < 26; k++) { q = ((e * 2.2 + hash01(k + 15)) % 1); if (e < hash01(k) * .2) continue;   // языки и искры летят вверх, мерцают
         var fx0 = gx + (hash01(k * 3 + ev.i) - .5) * 30 * kx + Math.sin(q * 6 + k) * 2.5 * kx, fy0 = gy - q * (18 + hash01(k + 4) * 22) * ky;
         spark(fx0, fy0, (.8 + hash01(k + 6) * 1.2) * dpr * (1 - q * .5), q < .4 ? "#fff1a8" : q < .7 ? "#ffb347" : "#ff6a3a", Math.sin(q * Math.PI) * (1 - Math.max(0, (e - .7) / .3)) * 1.2, k + ev.i); }
+    } else if (ev.k === "sunrise") {                                                        // Солнцестояние: грядка наливается золотым светом, вверх идут пылинки
+      c.globalCompositeOperation = "lighter";
+      var sb = Math.sin(Math.min(1, e / .75) * Math.PI);
+      glow(gx, gy - 4 * ky, (8 + ez(e / .4) * 26) * kx, (6 + ez(e / .4) * 17) * ky, ["255,252,220", "255,214,120", "255,170,60"], .7 * sb);
+      ring(e / .5, 34, 18, "#ffd978", 2.6); ring((e - .12) / .5, 22, 12, "#fff3c4", 1.8);
+      for (k = 0; k < 8; k++) { q = (e * 1.5 + hash01(k + ev.i * 3)) % 1;
+        spark(gx + (hash01(k * 5 + ev.i) - .5) * 28 * kx + Math.sin(q * 5 + k) * 2 * kx, gy - q * (18 + hash01(k + 4) * 16) * ky, (.8 + hash01(k + 2)) * dpr,
+              k % 2 ? "#ffe9a8" : "#fff6d8", Math.sin(q * Math.PI) * Math.min(1, e / .15) * (1 - Math.max(0, (e - .6) / .4)) * 1.25, k + ev.i); }
+    } else if (ev.k === "starfall") {                                                       // Созвездие: звезда опускается на грядку и зажигается
+      c.globalCompositeOperation = "lighter";
+      var sh = .42;
+      if (e < sh) { var h2 = ez(e / sh); x = gx + (1 - h2) * 16 * kx; y = gy - 4 * ky - (1 - h2) * 96 * ky;
+        var tg = c.createLinearGradient(x, y, x + 5 * kx, y - 34 * ky); tg.addColorStop(0, "rgba(255,255,255,.9)"); tg.addColorStop(.4, "rgba(255,233,168,.5)"); tg.addColorStop(1, "rgba(160,200,255,0)");
+        c.strokeStyle = tg; c.lineWidth = 2.2 * dpr; c.beginPath(); c.moveTo(x, y); c.lineTo(x + 5 * kx * (1 - h2), y - 34 * ky * (1 - h2 * .6)); c.stroke();
+        glow(x, y, 9 * kx, 9 * kx, ["255,255,255", "255,236,170", "150,190,255"], .8);
+        spark(x, y, 2.2 * dpr, "#ffffff", 1.2, ev.i);
+      } else { q = (e - sh) / (1 - sh);
+        glow(gx, gy - 4 * ky, 30 * kx, 18 * ky, ["255,255,255", "255,236,170", "150,190,255"], .7 * (1 - q));
+        ring(q / .55, 34, 18, "#ffe9a8", 3); ring((q - .1) / .55, 22, 12, "#cfe2ff", 2);
+        for (k = 0; k < 14; k++) { var ta = hash01(k * 3 + ev.i) * 6.283, td = (6 + hash01(k + 9) * 24) * ez(q / .7);
+          spark(gx + Math.cos(ta) * td * kx, gy - 4 * ky + Math.sin(ta) * td * .5 * ky - Math.sin(Math.min(1, q / .7) * Math.PI) * 8 * ky, (.7 + hash01(k + 2)) * dpr, k % 3 ? "#ffe9a8" : "#dbe8ff", (1 - q) * 1.2, k * 2 + ev.i); }
+        spark(gx, gy - 5 * ky, (2.6 - q) * dpr, "#ffffff", 1.2 * (1 - q * q), ev.i);
+      }
+    } else if (ev.k === "mossgrow") {                                                       // Мох: зелёная волна расходится от грядки, вверх летят споры
+      var mg = Math.sin(Math.min(1, e / .8) * Math.PI);
+      c.globalCompositeOperation = "lighter";
+      glow(gx, gy, (8 + ez(e / .5) * 28) * kx, (5 + ez(e / .5) * 16) * ky, ["215,255,180", "120,205,95", "50,130,60"], .5 * mg);
+      ring(e / .55, 38, 20, "#a6e07a", 3); ring((e - .15) / .55, 26, 14, "#d6f5a8", 2);
+      for (k = 0; k < 6; k++) { q = (e * 1.3 + hash01(k + ev.i * 5)) % 1;
+        spark(gx + (hash01(k * 7 + ev.i) - .5) * 30 * kx + Math.sin(q * 4 + k) * 3 * kx, gy - q * (10 + hash01(k + 3) * 16) * ky, (.6 + hash01(k + 1) * .7) * dpr, k % 2 ? "#c8f08f" : "#eaffc8", Math.sin(q * Math.PI) * mg * 1.1, k + ev.i); }
+      c.globalCompositeOperation = "source-over";
+      for (k = 0; k < 20; k++) { var ma = hash01(k * 11 + ev.i) * 6.283, md = (5 + hash01(k + 31) * 24) * ez(e / .55), ms = (1 + hash01(k + 5) * 1.4) * dpr;   // побеги стелются по земле
+        c.globalAlpha = Math.min(1, e / .1) * (1 - Math.max(0, (e - .7) / .3)); c.fillStyle = k % 3 === 0 ? "#b5e07c" : k % 3 === 1 ? "#6fae4a" : "#4f8a3c";
+        c.fillRect(gx + Math.cos(ma) * md * kx, gy + Math.sin(ma) * md * .5 * ky, ms, ms); }
+      c.globalAlpha = 1;
+    } else if (ev.k === "mist") {                                                           // Мифическое семя: фиолетовый туман стягивается к грядке и уходит вверх
+      c.globalCompositeOperation = "lighter";
+      var mi = Math.sin(Math.min(1, e / .85) * Math.PI), up = Math.max(0, (e - .55) / .45);
+      for (k = 0; k < 4; k++) { var na = hash01(k * 3 + ev.i) * 6.283 + e * 2.4, nd = 26 * (1 - ez(e / .6)) + 3;
+        blob(gx + Math.cos(na) * nd * kx, gy - 3 * ky + Math.sin(na) * nd * .5 * ky - up * up * 30 * ky, (10 + hash01(k + 7) * 8) * kx, k % 2 ? "170,110,255" : "120,90,240", .3 * mi); }
+      for (k = 0; k < 9; k++) { var pa = hash01(k * 5 + ev.i) * 6.283 + e * 4, pd = (24 + hash01(k + 2) * 10) * (1 - ez(e / .65)) + 1.5;
+        spark(gx + Math.cos(pa) * pd * kx, gy - 3 * ky + Math.sin(pa) * pd * .5 * ky - up * up * (26 + hash01(k) * 22) * ky, (.7 + hash01(k + 4) * .9) * dpr, k % 3 ? "#d9b8ff" : "#f3e6ff", mi * 1.2, k + ev.i); }
+      if (e > .5) ring((e - .5) / .4, 26, 14, "#c9a0ff", 2.4);
     }
     c.restore();
   }
@@ -4019,7 +4079,7 @@
     else it.count--;
     s.plots[pl.idx] = { idx: pl.idx, crop: st.id, planted: t0, grown: 0, wet_from: t0, water_until: t0 }; renderFarm();
     farmCall("/api/farm/plant", { idx: pl.idx, crop: seedId }).then(function (r) {
-      if (r && r.mono) { haptic("success"); setTimeout(function () { monoSheet(r.mono.kind, true); }, 450); }
+      if (r && r.mono) { haptic("success"); var mk0 = r.mono.kind; setTimeout(function () { monoSheet(mk0, true); }, monoIntro(r.mono)); }
       (r && r.thawed || []).forEach(function (ti, n) { evFx("thaw", ti, 100 + n * 180); setTimeout(function () { haptic("light"); floatText(ti, "лёд растаял", "big"); }, 550 + n * 180); });   // огненное рядом растопило лёд   // вся ферма одной расцветки — событие
     }).catch(function () {});
   }
