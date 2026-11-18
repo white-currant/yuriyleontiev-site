@@ -389,6 +389,7 @@ function plotView(p: any[] | undefined, idx: number, unlocked: number, ev?: any)
 const STAR_SPOTS: [number, number][] = [[24, 118], [58, 102], [150, 108], [170, 128], [118, 172], [72, 178], [152, 168], [96, 92], [16, 146], [176, 150], [132, 88], [40, 186]];
 const EV_BURN = 0.04, EV_COMET = 0.012, EV_FROST = 0.05, EV_SUN = 0.06, FROST_FOR = 86400, COMET_DUST_X = 3;
 export const COAL_DUST = 120;
+const BURN_PER_DAY = 3;                                      // вспышек на ферму за сутки (без Огненной ночи)
 const near4 = (i: number) => [i - 3, i + 3, i % 3 ? i - 1 : -1, i % 3 < 2 ? i + 1 : -1].filter((x) => x >= 0 && x < PLOTS_MAX);
 // наступившие события: уголь и комета появляются к своему времени; просроченный иней тает. Возвращает события по грядкам.
 async function plotEvents(uid: number) {
@@ -716,8 +717,13 @@ export async function plant(u: any, idx: number, crop: string) {
     const ice = near4(idx);
     const del = await q(`DELETE FROM f_plotev WHERE user = ? AND kind = 'frost' AND idx IN (${ice.map(() => "?").join(",")}) RETURNING idx`, [u.id, ...ice]);
     thawed = del.map((r) => Number(r[0]));
-    if (Math.random() < EV_BURN)                                     // вспыхнет где-то посреди роста
-      await q("INSERT OR REPLACE INTO f_plotev (user, idx, kind, at) VALUES (?, ?, 'burn_due', ?)", [u.id, idx, t + Math.round(s.minutes * 60 * (0.3 + Math.random() * 0.6))]);
+    if (Math.random() < EV_BURN) {                                   // вспыхнет где-то посреди роста
+      // не больше BURN_PER_DAY вспышек за сутки на ферму (его решение 2026-11-18: навар на быстрых огненных сортах — да, но небольшой);
+      // считаем случившиеся за сутки и уже назначенные. Огненная ночь сюда не входит.
+      const [[had]] = await q("SELECT (SELECT COUNT(*) FROM f_evlog WHERE user = ?1 AND kind = 'burn' AND at > ?2) + (SELECT COUNT(*) FROM f_plotev WHERE user = ?1 AND kind = 'burn_due')", [u.id, t - DAY]);
+      if (Number(had) < BURN_PER_DAY)
+        await q("INSERT OR REPLACE INTO f_plotev (user, idx, kind, at) VALUES (?, ?, 'burn_due', ?)", [u.id, idx, t + Math.round(s.minutes * 60 * (0.3 + Math.random() * 0.6))]);
+    }
   }
   if (s && s.color === "crystal" && Math.random() < EV_COMET) {      // комета — не чаще раза в сутки на ферму
     const recent = await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = 'comet' AND at > ?", [u.id, t - 86400]);
