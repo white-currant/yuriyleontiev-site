@@ -104,3 +104,5 @@ CREATE TABLE IF NOT EXISTS g_playtime (user INTEGER PRIMARY KEY, sec INTEGER NOT
 -- улей (2026-11-18): таймер мёда созревшего растения (planted — какая посадка, got — баночка уже в улье) и мёд, ждущий в улье
 CREATE TABLE IF NOT EXISTS f_honey (user INTEGER NOT NULL, idx INTEGER NOT NULL, planted INTEGER NOT NULL, item TEXT NOT NULL, until INTEGER NOT NULL, got INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, idx));
 CREATE TABLE IF NOT EXISTS f_hive (user INTEGER NOT NULL, item TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, item));
+-- мокрые колосья (2026-11-19): собранные в лунный ливень сохнут в амбаре до dry_at, мельница их до того не мелет
+CREATE TABLE IF NOT EXISTS f_wet (user INTEGER NOT NULL, strain TEXT NOT NULL, n INTEGER NOT NULL, dry_at INTEGER NOT NULL);

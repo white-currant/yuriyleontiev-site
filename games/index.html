@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611182324";
+    var BUILD = "202611190037";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -502,6 +502,10 @@
   .credit .cwhat { font-size: 16px; }
   /* варианты одного сорта: ячейка с пометкой и окно сравнения (его идея 2026-11-14 — как выбор оттенка эмодзи) */
   .slot .vars { position: absolute; left: 5px; top: 3px; font-size: 10px; font-weight: 800; color: #ffe2a8; text-shadow: 0 1px 2px rgba(0, 0, 0, .9); letter-spacing: .02em; }
+  .slot .wetfill { position: absolute; left: 0; right: 0; bottom: 0; height: var(--h); background: linear-gradient(#5aa0e6cc, #3b78c4d9); box-shadow: inset 0 2px 0 #9fd0ffaa; pointer-events: none;
+    animation: wetdry linear forwards; }   /* мокрые колосья: вода в ячейке, опускается до нуля к моменту, когда просохнут */
+  @keyframes wetdry { from { height: var(--h); } to { height: 0; } }
+  .slot > canvas { position: relative; z-index: 1; } .slot > .n { z-index: 1; }
   .vtable { margin-top: 12px; display: grid; gap: 4px; }
   .vrow { display: grid; grid-template-columns: 40px 26px 1fr 1fr 1fr 1fr 34px; align-items: center; gap: 4px; padding: 6px 4px; border-radius: 6px; background: none; border: 0; color: inherit; text-align: center; font: inherit; }
   .vrow.head { padding-top: 0; padding-bottom: 0; font-size: 11px; color: var(--cream2); }
@@ -2026,8 +2030,9 @@
       if (s1 > s0) { if (s1 > b0) parts.push([b0, s1]); lastWet = Math.max(lastWet, s1); }
       if (iv[0] <= t && t < iv[1]) raining = true;
     });
-    var bo = boosts();                                      // Солнцестояние: политое время внутри него считается дважды (рост ×2)
-    parts.forEach(function (x) { wetT += x[1] - x[0]; bo.forEach(function (b) { wetT += Math.max(0, Math.min(x[1], b[1], t) - Math.max(x[0], b[0])); }); });
+    var bo = boosts(), slow = s.color === "sun" || s.color === "ember" ? .25 : 0;   // Солнцестояние: политое время внутри него считается дважды (рост ×2); огненные и солнечные в ливень — на четверть медленнее (как на сервере)
+    parts.forEach(function (x) { wetT += x[1] - x[0]; bo.forEach(function (b) { wetT += Math.max(0, Math.min(x[1], b[1], t) - Math.max(x[0], b[0])); });
+      if (slow) showers().forEach(function (iv) { wetT -= slow * Math.max(0, Math.min(x[1], iv[1], t) - Math.max(x[0], iv[0])); }); });
     // Рядом со странным растением (и «странным» гибридом) созревает раньше — до 12% срока (odd_near с сервера). Доля — та часть жизни
     // растения, которую странный сосед простоял рядом и ещё ускорял (как fastAt на сервере). Странное растение ускоряет только первые
     // сутки от первой посадки (odd_win, odd_for); «странный» гибрид — пока стоит.
@@ -2263,7 +2268,33 @@
   // ---------- мельница и печь (2026-11-14): рисуются поверх сцены, т.к. зависят от того, построены ли и работают ли ----------
   var SHOP = [151, 177];                                                                // низ переднего угла магазина                                                                // магазин станции: правый нижний угол луга (его выбор 2026-11-15)
   var MILL = [138, 62], OVEN = [40, 160], CHEST = [17, 95], CHEST_ON = true;
-  var HIVE = [72, 66];                                                                  // улей — на поляне между домиком и амбаром (его выбор 2026-11-18)   // сундук включён со спрайтом художника (2026-11-14)
+  var HIVE = [72, 66];
+  // лужи в ливень (его правка 2026-11-19: «слишком ровные и как объекты — должны быть частью декорации, как мох»): неровное пятно из
+  // нескольких овалов, вокруг — потемневшая мокрая земля, вода темнее к краю, редкие блики неба. Картинка лужи считается один раз на размер.
+  var PUD_CACHE = {};
+  function puddleGrow(now) { var w = weatherNow(); return w && w.until ? Math.max(.6, Math.min(1, (now - (w.until - 86400)) / 5400)) : 1; }
+  function puddleSprite(k, w) {
+    var key = k + ":" + w; if (PUD_CACHE[key]) return PUD_CACHE[key];
+    var W = w * 2 + 8, H = Math.round(w * .9) + 8, cv = document.createElement("canvas"); cv.width = W; cv.height = H; var c = cv.getContext("2d");
+    var cx = W / 2, cy = H / 2, el2 = [];
+    for (var j = 0; j < 4; j++) { var rx = w * (.45 + hash01(k * 31 + j * 7) * .45); el2.push([cx + (hash01(k * 13 + j) - .5) * w * .9, cy + (hash01(k * 17 + j * 3) - .5) * w * .3, rx, rx * (.34 + hash01(k * 19 + j) * .12)]); }
+    var at = function (x, y, grow2) { var m = 9; el2.forEach(function (e) { var dx = (x - e[0]) / (e[2] * grow2), dy = (y - e[1]) / (e[3] * grow2); m = Math.min(m, dx * dx + dy * dy); }); return m; };
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var m = at(x + .5, y + .5, 1), n = hash01(k * 101 + x * 13 + y * 57);
+      if (m <= 1) {                                                                // вода: к краю темнее, сверху — отражение неба
+        var col = m > .7 ? "rgba(44,54,72,.7)" : y < cy - 1 ? "rgba(112,130,160,.62)" : y < cy + 1 ? "rgba(92,110,140,.64)" : "rgba(74,90,118,.66)";   // небо отражается: сверху светлее
+        if (m < .55 && n > .9) col = "rgba(178,196,222,.7)";                         // блики
+        px(c, x, y, 1, 1, col);
+      } else if (at(x + .5, y + .5, 1.45) <= 1 && n > .25) px(c, x, y, 1, 1, "rgba(28,22,14," + (.16 + n * .1).toFixed(2) + ")");   // мокрая земля вокруг, с рваным краем
+    }
+    PUD_CACHE[key] = cv; return cv;
+  }
+  function drawPuddles(c, now) {
+    var g = puddleGrow(now);
+    PUDDLES.forEach(function (pd, k) { var w = Math.max(3, Math.round(pd[2] * g)), sp = puddleSprite(k, w); c.drawImage(sp, Math.round(pd[0] - sp.width / 2), Math.round(pd[1] - sp.height / 2)); });
+  }
+  var PUDDLES = [[20, 116, 11], [97, 80, 10], [60, 176, 13], [118, 162, 11], [90, 147, 9], [12, 181, 10],
+                 [150, 76, 9], [122, 52, 7], [70, 77, 8], [178, 94, 6]];   // верхняя часть карты (его просьба 2026-11-19): между мельницей и колодцем, у мельницы, у улья, под колодцем   // две правые убраны — налезали на дерево у магазина   // лужи в ливень: x, y, полуширина (картинка 184×190)                                                                  // улей — на поляне между домиком и амбаром (его выбор 2026-11-18)   // сундук включён со спрайтом художника (2026-11-14)
   function jobOf(kit, kind) { var j = null; ((kit && kit.jobs) || []).forEach(function (x) { if (x.kind === kind) j = x; }); return j; }
   // ячейки мельницы и печи (2026-11-16): первая — «oven», вторая и третья — «oven:1», «oven:2»; уровень = число ячеек
   function jobsOf(kit, kind) { return ((kit && kit.jobs) || []).filter(function (x) { return x.kind === kind || String(x.kind).indexOf(kind + ":") === 0; }); }
@@ -2399,7 +2430,7 @@
   // пчёлы: пара кружит у улья; над грядкой, где собирают мёд, — две вокруг растения и одна носит мёд к улью и обратно.
   // Пиксель-другой на пчелу, рисуются вместе с фермой (8 кадров в секунду) — телефону не тяжело.
   function drawBees(c, t, kit, plots, now) {
-    if (!hasBuild(kit, "hive")) return;
+    if (!hasBuild(kit, "hive") || ((weatherNow() || {}).id === "shower")) return;   // в ливень пчёлы сидят в улье
     var hx = HIVE[0] - 2, hy = HIVE[1] - 5, wing = (t / 90 | 0) % 2;
     var bee = function (bx, by, k) { var X = Math.round(bx), Y = Math.round(by);
       px(c, X, Y, 2, 1, "#ffd23f"); px(c, X + 1, Y, 1, 1, "#3a2414"); if ((wing + k) % 2) px(c, X, Y - 1, 1, 1, "rgba(255,255,255,.9)"); };
@@ -2820,6 +2851,7 @@
     c.drawImage(L.back, 0, 0); drawStars(c, t);
     if (hasBuild(kit, "barn")) c.drawImage(L.shed, 0, 0); else drawLot(c, LOTS.barn, own, lotPrice(kit, "barn"));
     c.drawImage(L.back2, 0, 0);
+    if ((weatherNow() || {}).id === "shower") drawPuddles(c, now);                // лужи — на земле двора и луга, под заборами и постройками
     if (own) drawPeek(c);                                                          // ночью из-за правого угла дома иногда выглядывает силуэт
     drawMill(c, t, kit, own, now);
     drawHive(c, t, kit, own, now);
@@ -2865,9 +2897,30 @@
     }
     var wid = (weatherNow() || {}).id;
     if (own) F.lit = wid === "fullmoon" ? farmLights(c, L, kit, now) : null;
-    if (wid === "shower") {                                                        // лунный ливень: косые голубые струи
-      c.fillStyle = "rgba(60,90,160,.10)"; c.fillRect(0, 0, FW, FH);
-      for (i = 0; i < 70; i++) { var sy = ((t / 9 + i * 53) % (FH + 16)) - 16, sx = (i * 29 + sy * .25) % FW; seg(c, sx, sy, sx + 1, sy + 4, i % 4 ? "rgba(160,205,255,.75)" : "#ffffff"); }
+    if (wid === "shower") {                                                        // лунный ливень (его правки 2026-11-19: приглушённо, но с глубиной; тучи; капли чуть ярче)
+      c.save(); c.globalCompositeOperation = "saturation"; c.fillStyle = "rgba(128,128,128,.35)"; c.fillRect(0, 0, FW, FH); c.restore();   // краски блёкнут, но не в серость
+      var fog = c.createLinearGradient(0, 20, 0, FH);                              // глубина: даль тонет в дымке, передний план яснее
+      fog.addColorStop(0, "rgba(46,58,82,.42)"); fog.addColorStop(.45, "rgba(40,52,76,.2)"); fog.addColorStop(1, "rgba(30,40,60,.06)");
+      c.fillStyle = fog; c.fillRect(0, 20, FW, FH - 20);
+      // небо — как в первом варианте (его выбор 2026-11-19), облаков чуть больше: 8 вместо 5
+      c.fillStyle = "rgba(30,36,52,.35)"; c.fillRect(0, 0, FW, 24);
+      for (i = 0; i < 8; i++) { var cx0 = ((t / 260 + i * 31) % (FW + 60)) - 30, cy0 = 6 + (i % 3) * 5;   // облака медленно плывут
+        disc(c, Math.round(cx0), cy0, 9, "rgba(70,78,96,.55)"); disc(c, Math.round(cx0 + 9), cy0 + 2, 7, "rgba(80,88,106,.5)"); disc(c, Math.round(cx0 - 8), cy0 + 3, 6, "rgba(62,70,88,.5)"); }
+      // круги от капель по лужам (сами лужи — часть земли: drawPuddles)
+      PUDDLES.forEach(function (pd, k) {
+        var w = Math.max(2, Math.round(pd[2] * puddleGrow(now)));
+        var rp = (t / 900 + k * .29) % 1, rr = Math.round(1 + rp * Math.min(w - 2, 3));
+        if (rp < .8) { var ra = (.26 * (1 - rp / .8)).toFixed(2); px(c, pd[0] - rr, pd[1], 1, 1, "rgba(200,214,232," + ra + ")"); px(c, pd[0] + rr, pd[1], 1, 1, "rgba(200,214,232," + ra + ")");
+          if (rr > 1) { px(c, pd[0], pd[1] - 1, 1, 1, "rgba(200,214,232," + ra + ")"); px(c, pd[0], pd[1] + 1, 1, 1, "rgba(200,214,232," + ra + ")"); } }
+      });
+      for (i = 0; i < 40; i++) { var fy = ((t / 14 + i * 41) % (FH + 10)) - 10, fx = (i * 37 + fy * .3) % FW; seg(c, fx, fy, fx + 1, fy + 3, "rgba(170,186,208,.2)"); }   // дальний слой
+      for (i = 0; i < 22; i++) { var sy = ((t / 7 + i * 59) % (FH + 16)) - 16, sx = (i * 31 + sy * .3) % FW; seg(c, sx, sy, sx + 1.6, sy + 6, "rgba(200,214,234,.38)"); }   // ближний
+      for (i = 0; i < 9; i++) {                                                    // брызги: капля ударяет в землю — точка, потом расходится
+        var ph = (t / 520 + i * .37) % 1, cyc = Math.floor(t / 520 + i * .37), rx = Math.round(hash01(i * 7 + cyc * 13) * (FW - 8)) + 4, ry = Math.round(70 + hash01(i * 11 + cyc * 17) * (FH - 80));
+        var al = (.5 * (1 - ph)).toFixed(2);
+        if (ph < .3) px(c, rx, ry, 1, 1, "rgba(214,226,242," + al + ")");
+        else { var w2 = ph < .65 ? 1 : 2; px(c, rx - w2 - 1, ry, 1, 1, "rgba(204,218,236," + al + ")"); px(c, rx + w2 + 1, ry, 1, 1, "rgba(204,218,236," + al + ")"); }
+      }
     } else if (wid === "drought") {                                                // засуха: тёплое марево
       c.fillStyle = "rgba(255,170,60,.10)"; c.fillRect(0, 0, FW, FH);
       for (i = 0; i < 6; i++) { var hy = 60 + i * 22 + Math.round(Math.sin(t / 700 + i) * 2); px(c, 0, hy, FW, 1, "rgba(255,220,150,.10)"); }
@@ -3692,7 +3745,35 @@
       e.preventDefault();
     }, { passive: false });
     document.documentElement.classList.add("locked");
-    document.body.appendChild(w); return w;
+    document.body.appendChild(w); rainOnSheet(w, sh); return w;
+  }
+  // лунный ливень: капли бьют в верхний край открытого окна и отскакивают брызгами (его идея 2026-11-19).
+  // Маленький холст над кромкой окна, пиксели ×3 (как ферма), 15 кадров в секунду и только пока окно открыто — телефону не тяжело.
+  function rainOnSheet(w, sh) {
+    var scr = document.body.dataset.screen; if ((scr !== "farm" && scr !== "farm-visit") || (weatherNow() || {}).id !== "shower") return;
+    var S = 3, H = 16, cv = document.createElement("canvas"), c = cv.getContext("2d"), drops = [], bits = [], W = 0;
+    cv.className = "sheetrain"; cv.style.cssText = "position:fixed;pointer-events:none;z-index:5;image-rendering:pixelated;"; w.appendChild(cv);
+    var tick = setInterval(function () {
+      if (!sh.isConnected) { clearInterval(tick); return; }
+      var r = sh.getBoundingClientRect(), nw = Math.max(1, Math.round(r.width / S));
+      if (nw !== W) { W = nw; cv.width = W; cv.height = H; cv.style.width = W * S + "px"; cv.style.height = H * S + "px"; }
+      cv.style.left = r.left + "px"; cv.style.top = (r.top - H * S + S) + "px";
+      if (drops.length < 7 && Math.random() < .55) drops.push({ x: Math.random() * W, y: -2, v: 2.2 + Math.random() * 1.2 });
+      c.clearRect(0, 0, W, H);
+      drops = drops.filter(function (d) {
+        d.y += d.v; d.x += d.v * .3;
+        if (d.y >= H - 1) {                                                        // удар о кромку окна: 2–3 брызги вверх и в стороны
+          for (var k = 0, n = 2 + (Math.random() < .5 ? 1 : 0); k < n; k++) bits.push({ x: d.x, y: H - 2, vx: (Math.random() - .5) * 1.6, vy: -(0.9 + Math.random() * 1.1), life: 6 + Math.random() * 4 });
+          return false;
+        }
+        c.fillStyle = "rgba(200,214,234,.55)"; c.fillRect(Math.round(d.x), Math.round(d.y), 1, 2); return true;
+      });
+      bits = bits.filter(function (b) {
+        b.x += b.vx; b.y += b.vy; b.vy += .35; b.life--;
+        if (b.life <= 0 || b.y > H - 1) return false;
+        c.fillStyle = "rgba(225,236,250," + Math.min(.75, b.life / 8).toFixed(2) + ")"; c.fillRect(Math.round(b.x), Math.round(b.y), 1, 1); return true;
+      });
+    }, 66);
   }
 
   // прозрачные кнопки поверх грядок (и колодца) + подписи на дорожке под ними
@@ -3724,8 +3805,7 @@
       else if (inf.ripe && pl.honey && !pl.honey.got && pl.honey.until > now && !pl.comet) {   // пчёлы собирают мёд — оранжевый таймер под «собрать!»
         // одна строка и тонкая шкала под ней (его правка 2026-11-18: «текст сильно закрывает растения»); точное время — в окне улья
         lbl.classList.add("ready"); lbl.textContent = own ? "собрать!" : "созрело";   // галочку пробовали — вернул «собрать!» (его выбор 2026-11-18)
-        var hg = ss && ss[pl.crop], hfrom = pl.honey.until - Math.max(600, Math.min(7200, Math.round(((hg && hg.minutes) || 20) * 30)));
-        var hb = el("span", "hbar"), hi = el("i"); hi.style.width = Math.round(100 * Math.max(0, Math.min(1, (now - hfrom) / Math.max(1, pl.honey.until - hfrom)))) + "%"; hb.appendChild(hi);
+        var hb = el("span", "hbar"), hi = el("i"); hi.style.width = Math.round(100 * honeyProg(pl, now)) + "%"; hb.appendChild(hi);
         // полоска и время — строкой ниже, на земле грядки; отдельным элементом поверх: кнопка грядки вырезана ромбом и обрезала бы её
         var hrow = el("div", "hrow"); hrow.appendChild(hb);   // только полоска, без времени (его выбор 2026-11-18); точное время — в окне улья
         hrow.style.left = BC[i][0] / FW * 100 + "%"; hrow.style.top = (BC[i][1] - HH - 8 + (HH * 2 + 11) * .74) / FH * 100 + "%"; honRows.push(hrow);
@@ -4018,7 +4098,8 @@
       s.marks = marksOf(s).filter(function (m) { return !(m.idx === pl.idx && (m.kind === "star" || m.kind === "myth" || m.kind === "g2" || m.kind === "gseed" || m.kind === "gcross")) && !(inf.s.myth && (m.kind === "myth" || m.kind === "mythripe")); });
       var pts = " · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков");
       haptic("success"); addFx("harvest", pl.idx, inf.s);
-      if (hasB) { floatText(pl.idx, "+" + gain + " в амбар" + pts); barnAdd(inf.s.odd ? "p:eye" : inf.s.id, gain); flyFruit(pl.idx, inf.s, gain); }
+      if (hasB) { floatText(pl.idx, "+" + gain + " в амбар" + pts); barnAdd(inf.s.odd ? "p:eye" : inf.s.id, gain); flyFruit(pl.idx, inf.s, gain);
+        if (inf.s.shape === "grain" && showerNow(now)) { (s.wet = s.wet || []).push({ strain: inf.s.id, n: gain, dry_at: now + 3600 }); setTimeout(function () { floatText(pl.idx, "колосья мокрые — час сохнут", "big"); }, 700); } }
       else { floatText(pl.idx, "+" + gain * inf.s.dust + " ✦" + pts); s.dust += gain * inf.s.dust; flyDust(pl.idx); }
       if (gemX) setTimeout(function () { floatText(pl.idx, "самоцвет: урожай ×2!", "big"); }, starX ? 700 : 250);
       if (starX) setTimeout(function () { floatText(pl.idx, "созвездие: урожай ×2!", "big"); }, 250);
@@ -4136,6 +4217,13 @@
     return out;
   }
   function hiveCount() { return hiveJars().reduce(function (a, h) { return a + h.count; }, 0); }
+  // доля собранного мёда: время ливня не считается — пчёлы его пережидают (как на сервере, его решение 2026-11-19)
+  function showerNow(tn) { return showers().some(function (iv) { return iv[0] <= tn && tn < iv[1]; }); }
+  function honeyProg(pl, tn) {
+    var h = pl.honey; if (!h.from || !h.dur) { var g = F.state.strains[pl.crop], d0 = Math.max(600, Math.min(7200, Math.round(((g && g.minutes) || 20) * 30))); return Math.max(0, Math.min(1, (tn - (h.until - d0)) / d0)); }
+    var el0 = Math.max(0, tn - h.from); showers().forEach(function (iv) { el0 -= Math.max(0, Math.min(iv[1], tn) - Math.max(iv[0], h.from)); });
+    return Math.max(0, Math.min(1, el0 / h.dur));
+  }
   function hiveAdd(id, n) { var s = F.state; s.hive = s.hive || []; var it = null; s.hive.forEach(function (h) { if (h.item === id) it = h; }); if (it) it.count += n; else s.hive.push({ item: id, count: n }); }
   function flourKey(g) { var d = g.myth ? g.dust / 3 : g.dust; return "g:" + g.color + ":" + (d <= 7 ? 2 : d <= 10 ? 1 : 0) + (g.myth ? ":m" : ""); }   // как на сервере
   var RAW_MAIN = { soup: "moss", stew: "mushroom", tea: "flower", jam: "cactus" }, RAW_REF = { moss: 4, mushroom: 8, flower: 8, cactus: 8 };   // как на сервере
@@ -4553,7 +4641,7 @@
           page.appendChild(el("div", "bsub", wv.today ? "Сегодня: " + wv.today.icon + " " + wv.today.name + " · завтра: " + wv.tomorrow.icon + " " + wv.tomorrow.name : "Каждый день — своя погода"));
           var tb = el("div", "wtable"), today = wv.today && wv.today.id;          // таблица погоды: как часто и что делает
           [["clear", "☾", "Ясная ночь", "40%", "обычный день"], ["stardust", "✨", "Звёздный дождь", "15%", "урожай ×2"],
-           ["shower", "🌧", "Лунный ливень", "15%", "поливать не нужно"], ["drought", "☀", "Засуха", "12%", "полива хватает вдвое меньше"],
+           ["shower", "🌧", "Лунный ливень", "15%", "поливать не нужно; пчёлы не летают, мёд ждёт; колосья час сохнут; огненные не вспыхивают, огненные и солнечные растут на четверть медленнее"], ["drought", "☀", "Засуха", "12%", "полива хватает вдвое меньше"],
            ["wind", "🌬", "Солнечный ветер", "10%", "гибриды вдвое чаще"], ["fullmoon", "🌕", "Полнолуние", "8%", "артефакты вдвое чаще"]]
             .forEach(function (x) {
               var r = el("div", "wrow" + (x[0] === today ? " now" : "")), n = el("div", "wname");
@@ -4941,6 +5029,9 @@
           var st = itemOf(it.strain), b = el("button", "slot" + (selSet[it.strain] ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
           if (!gemOf(it.strain) && it.strain !== "p:eye") total += it.count * st.dust;   // самоцветы и странные глаза в «весь урожай в пыль» не входят
           var cv = el("canvas", "pix"); itemIcon(cv, it.strain); fitIcon(cv, it.strain.indexOf("p:") === 0 ? 84 : 70); b.appendChild(cv);   b.appendChild(el("span", "n", it.count));   // в амбаре — крупно
+          if (wetOf(it.strain) > 0) {                                      // мокрые колосья: ячейка залита синим, уровень опускается по мере высыхания (его просьба 2026-11-19)
+            var wl = wetLeft(it.strain), wf = el("i", "wetfill"); wf.style.setProperty("--h", Math.min(100, wl / 36).toFixed(1) + "%"); wf.style.animationDuration = Math.max(1, wl) + "s"; b.insertBefore(wf, b.firstChild);
+          }
           b.onclick = function () { haptic("light"); var was = selSet[it.strain]; if (!BARN_MULTI) Object.keys(selSet).forEach(function (k9) { delete selSet[k9]; });
             if (was) delete selSet[it.strain]; else selSet[it.strain] = 1; drawBarn(); };
           bgrid.appendChild(b);
@@ -4975,6 +5066,7 @@
           var sel = picked[0], st = itemOf(sel.strain);
           footInfo.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли." + (BARN_MULTI ? " Можно выделить ещё ячейки." : "")));
           if (recKey(sel.strain) === "brew") footInfo.appendChild(el("div", "sub", BREW_SAYS));   // у странной похлёбки — её свойство
+          var wn = wetOf(sel.strain); if (wn > 0) footInfo.appendChild(el("div", "sub", "Мокрые после ливня: " + wn + " " + plural(wn, "сноп", "снопа", "снопов") + ". Смолоть их можно, когда просохнут, — через " + fmtLeft(wetLeft(sel.strain)) + ". Продать можно и мокрыми."));
           var bsel = sel;
           qtyBox(footInfo, { key: "barn:" + bsel.strain, max: function () { return (barnOf(bsel.strain) || { count: 0 }).count; },
             acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + st.dust * n; }, run: function (n) { toDust(bsel.strain, n, st.dust * n); drawBarn(); } },
@@ -5011,14 +5103,18 @@
     if (RAW_MAIN[recipe] === need && sort) return !!(s.strains[id] && s.strains[id].shape === need && rawKey(s.strains[id]) === sort);
     return !!(s.strains[id] && s.strains[id].shape === need);
   }
+  // мокрые колосья после ливня (его решение 2026-11-19): сохнут час, мельница их до того не берёт
+  function wetOf(id) { var tn = farmNow(), n = 0; ((F.state && F.state.wet) || []).forEach(function (w) { if (w.strain === id && w.dry_at > tn) n += w.n; }); return n; }
+  function wetLeft(id) { var tn = farmNow(), m = 0; ((F.state && F.state.wet) || []).forEach(function (w) { if ((!id || w.strain === id) && w.dry_at > tn) m = Math.max(m, w.dry_at - tn); }); return m; }
+  function dryCount(it, recipe) { return recipe === "flour" ? Math.max(0, it.count - wetOf(it.strain)) : it.count; }
   function haveFor(need, recipe, sort) {
-    var n = 0; (F.state.barn || []).forEach(function (it) { if (it.count > 0 && fitsNeed(it.strain, need, recipe, sort)) n += it.count; }); return n;
+    var n = 0; (F.state.barn || []).forEach(function (it) { if (it.count > 0 && fitsNeed(it.strain, need, recipe, sort)) n += dryCount(it, recipe); }); return n;
   }
   function takeFor(need, recipe, sort, n) {                     // сразу убрать из амбара то, что ушло в печь (сервер подтвердит)
     var s = F.state, fit = (s.barn || []).filter(function (it) { return it.count > 0 && fitsNeed(it.strain, need, recipe, sort); })
       .sort(function (a, b) { return ((itemOf(a.strain) || {}).dust || 0) - ((itemOf(b.strain) || {}).dust || 0); });
     var took = [];
-    fit.forEach(function (it) { var t = Math.min(n, it.count); if (t > 0) { it.count -= t; n -= t; took.push([it.strain, t]); } });
+    fit.forEach(function (it) { var t = Math.min(n, dryCount(it, recipe)); if (t > 0) { it.count -= t; n -= t; took.push([it.strain, t]); } });
     return took;
   }
   // ---------- магазин: доска заказов на блюда ----------
@@ -5143,6 +5239,7 @@
   function kitchenBody(sh, close, b, kind) {
     var s = F.state, mill = kind === "mill", top = el("div"), body = el("div");
     sh.appendChild(top);
+    if (mill && wetLeft()) { var wnt = el("div", "sub", "💧 Часть колосьев мокрая после ливня — они сохнут в амбаре. Смолоть их можно через " + fmtLeft(wetLeft()) + "."); sh.appendChild(wnt); }
     sh.appendChild(el("div", "sub", mill ? "Выбери колосья и нажми «Смолоть» — мука будет готовиться в свободной ячейке. Мука берёт расцветку колосьев, а сорт — по их цене."
                                          : "Выбери блюдо и нажми «Испечь» — оно будет готовиться в свободной ячейке печи. Блюдо помнит сырьё: из дорогого сырья выходит дороже. Звёздный уголь из амбара допекает ячейку сразу. Все рецепты — в справочнике, на странице «Кухня»."));
     sh.appendChild(body);
@@ -5339,19 +5436,19 @@
       var row = function (id, line) { var r = el("div", "seed"), cv = el("canvas", "pix"); itemIcon(cv, id); r.appendChild(cv);
         var tx = el("span"); tx.appendChild(el("b", "", itemName(id))); var sm = el("small", "", line); sm.style.display = "block"; tx.appendChild(sm); r.appendChild(tx); return r; };
       var sig = "", bars = [];
-      var honeyFrom = function (pl) { var g = F.state.strains[pl.crop]; return pl.honey.until - Math.max(600, Math.min(7200, Math.round(((g && g.minutes) || 20) * 30))); };   // как на сервере: половина срока роста, 10 мин – 2 ч
-      var fillBars = function (tn) { bars.forEach(function (b) { b.i.style.width = Math.round(100 * Math.max(0, Math.min(1, (tn - b.a) / Math.max(1, b.z - b.a)))) + "%"; }); };
+      var fillBars = function (tn) { bars.forEach(function (b) { b.i.style.width = Math.round(100 * honeyProg(b.pl, tn)) + "%"; }); };
       var draw = function () {
         var tn = farmNow(), cur = F.state, act = (cur.plots || []).filter(function (pl) { return pl && pl.crop && pl.honey && !pl.honey.got && pl.honey.until > tn; })
           .sort(function (a, b) { return a.honey.until - b.honey.until; });
         var jars = hiveJars();
-        var sg = act.map(function (pl) { return pl.idx + ":" + fmtLeft(pl.honey.until - tn); }).join("|") + "/" + jars.map(function (h) { return h.item + h.count; }).join("|");
+        var wet = showerNow(tn), sg = (wet ? "w" : "") + act.map(function (pl) { return pl.idx + ":" + fmtLeft(pl.honey.until - tn); }).join("|") + "/" + jars.map(function (h) { return h.item + h.count; }).join("|");
         if (sg === sig) return fillBars(tn); sig = sg; box.innerHTML = ""; bars = [];
         box.appendChild(el("div", "ohead", "Сейчас собирают"));
+        if (wet && act.length) box.appendChild(el("div", "sub", "Идёт лунный ливень — пчёлы пережидают его в улье. Сбор мёда продолжится, когда ливень кончится."));
         if (!act.length) box.appendChild(el("div", "sub", "Пчёлам пока нечего собирать: мёд бывает только с созревших растений."));
-        act.forEach(function (pl) { var g = cur.strains[pl.crop], r = row(pl.honey.item, (g ? g.name + " · " : "") + "готов через " + fmtLeft(pl.honey.until - tn));
+        act.forEach(function (pl) { var g = cur.strains[pl.crop], r = row(pl.honey.item, (g ? g.name + " · " : "") + (wet ? "ждёт конца ливня" : "готов через " + fmtLeft(pl.honey.until - tn)));
           var bar = el("div", "ovbar hon"), fill = el("i"); bar.appendChild(fill); r.querySelector("span").appendChild(bar);   // шкала — под строкой времени
-          bars.push({ i: fill, a: honeyFrom(pl), z: pl.honey.until }); box.appendChild(r); });
+          bars.push({ i: fill, pl: pl }); box.appendChild(r); });
         fillBars(tn);
         box.appendChild(el("div", "ohead", "Готово в улье"));
         if (!jars.length) box.appendChild(el("div", "sub", "Пока пусто."));

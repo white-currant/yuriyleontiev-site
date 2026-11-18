@@ -298,7 +298,7 @@ async function breed(a: Strain, b: Strain, mutX = 1): Promise<Strain> {
 export const WEATHER: Record<string, { name: string; icon: string; effect: string; w: number }> = {
   clear:    { name: "Ясная ночь",      icon: "☾",  effect: "обычный день",                         w: 40 },
   stardust: { name: "Звёздный дождь",  icon: "✨", effect: "урожай вдвое больше",                    w: 15 },
-  shower:   { name: "Лунный ливень",   icon: "🌧", effect: "поливать не нужно — грядки политы сами", w: 15 },
+  shower:   { name: "Лунный ливень",   icon: "🌧", effect: "поливать не нужно — грядки политы сами; пчёлы пережидают в улье, колосья после сбора час сохнут, огонь не разгорается, огненные и солнечные растут медленнее", w: 15 },
   drought:  { name: "Засуха",          icon: "☀",  effect: "полива хватает вдвое меньше",           w: 12 },
   wind:     { name: "Солнечный ветер", icon: "🌬", effect: "ветер разносит пыльцу — гибриды вдвое чаще", w: 10 },
   fullmoon: { name: "Полнолуние",      icon: "🌕", effect: "артефакты выпадают вдвое чаще", w: 8 },
@@ -333,12 +333,16 @@ function showersIn(a: number, b: number) {                 // интервалы
 // p = [idx, crop, planted, grown, wet_from, water_until]
 // Растёт, пока полито: окно полива [wet_from, water_until) плюс дни лунного ливня (после wet_from).
 // boost — окна Солнцестояния: рост в них идёт вдвое быстрее (влажное время внутри окна считается дважды)
-function growth(p: any[], t: number, boost: [number, number][] = []) {
-  const a = Number(p[4]), w = Math.min(t, Number(p[5])), parts: [number, number][] = [];
+// огненные и солнечные в лунный ливень растут на четверть медленнее (его решение 2026-11-19: сыро и нет солнца)
+const RAIN_SLOW = 0.25;
+function rainSlow(s?: Strain) { return s && (s.color === "sun" || s.color === "ember") ? RAIN_SLOW : 0; }
+function growth(p: any[], t: number, boost: [number, number][] = [], slow = 0) {
+  const a = Number(p[4]), w = Math.min(t, Number(p[5])), parts: [number, number][] = [], sh = showersIn(a, t);
   if (w > a) parts.push([a, w]);
-  for (const [s0, s1] of showersIn(a, t)) { const b0 = Math.max(s0, w > a ? w : a); if (s1 > b0) parts.push([b0, s1]); }   // ливень вне окна полива
+  for (const [s0, s1] of sh) { const b0 = Math.max(s0, w > a ? w : a); if (s1 > b0) parts.push([b0, s1]); }   // ливень вне окна полива
   let wet = 0;
-  for (const [x0, x1] of parts) { wet += x1 - x0; for (const [b0, b1] of boost) wet += Math.max(0, Math.min(x1, b1, t) - Math.max(x0, b0)); }
+  for (const [x0, x1] of parts) { wet += x1 - x0; for (const [b0, b1] of boost) wet += Math.max(0, Math.min(x1, b1, t) - Math.max(x0, b0));
+    if (slow) for (const [s0, s1] of sh) wet -= slow * Math.max(0, Math.min(x1, s1) - Math.max(x0, s0)); }
   return Number(p[3]) + wet;
 }
 function lastWet(p: any[], t: number) {                   // когда грядка последний раз была влажной
@@ -370,7 +374,7 @@ function fastAt(all: any[][], ss: Record<string, Strain>, idx: number, win = 0, 
   return share;
 }
 function stateOf(p: any[], s: Strain, t: number, boost: [number, number][] = [], fast: number | boolean = 0) {
-  const ripe = growth(p, t, boost) >= s.minutes * 60 * (1 - (1 - ODD_NEAR) * Number(fast));
+  const ripe = growth(p, t, boost, rainSlow(s)) >= s.minutes * 60 * (1 - (1 - ODD_NEAR) * Number(fast));
   const dryFor = weatherOn(t) === "shower" ? 0 : t - lastWet(p, t);
   return { ripe, dead: !ripe && s.bonus !== "hardy" && dryFor > DRY_LIMIT };
 }
@@ -442,6 +446,9 @@ async function plotEvents(uid: number) {
         stmts.push(DB.prepare("INSERT INTO f_stars (user, x, y, dust, at) VALUES (?, ?, ?, ?, ?)").bind(uid, x + Math.round(Math.random() * 6 - 3), y + Math.round(Math.random() * 4 - 2), Math.max(1, d), t)); });
       await DB.batch(stmts);
       out[i] = { kind: "crater", until: 0 }; continue;
+    }
+    if (k === "burn_due" && weatherOn(Number(at)) === "shower") {         // в ливень огонь не разгорается — вспышки и угля нет (его решение 2026-11-19)
+      await q("DELETE FROM f_plotev WHERE user = ? AND idx = ? AND kind = 'burn_due'", [uid, i]); continue;
     }
     if (k === "burn_due") {
       await DB.batch([DB.prepare("UPDATE f_plotev SET kind = 'coal' WHERE user = ? AND idx = ?").bind(uid, i),
@@ -563,6 +570,7 @@ async function checkMono(uid: number) {
   const allMoss = plots.every((p) => ss[String(p[1])]?.shape === "moss");     // мох любой расцветки — главнее расцветки
   const kind = allMoss ? "moss" : colors.size === 1 ? MONO_OF[String([...colors][0])] : "";
   if (!kind) return null;
+  if (kind === "fire" && weatherOn(t) === "shower") return null;   // Огненная ночь в ливень не начинается (его решение 2026-11-19); жребий дня не тратится
   if ((await q("SELECT 1 FROM f_mono WHERE user = ? AND started > ?", [uid, t - MONO_EVERY])).length) return null;
   {                                                            // любое большое событие — по жребию, один раз в сутки на ферму (его правка 2026-11-15):
     const roll = "monoroll:" + Math.floor((t + TZ) / DAY);    //   сколько ни пересаживай, второй попытки сегодня нет
@@ -725,7 +733,7 @@ async function farmState1(u: any) {
     strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
     ...kit, ...(await decorView(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...kit.jobs.map((j: any) => "p:" + j.recipe)])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await metWanderer(u.id, await wandererView(u.id)), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
-    vinyls, inv, barn, stall, chest, hive, seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
+    vinyls, inv, barn, stall, chest, hive, wet: await wetOf(u.id), seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })), ...(await monoView(u.id)), feed_top: await feedTop(u.id),
     orders: await ordersOf(u.id, kit.builds),
   };
@@ -921,7 +929,7 @@ export async function water(u: any, idx: number) {
   // накопленный рост фиксируем и открываем новое окно полива
   // окно полива открывает ровно один запрос (условие water_until <= сейчас) — двойное нажатие не даст очки дважды
   const done = await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ? AND water_until <= ? RETURNING 1",
-                       [growth(p, t, boost), t, t + s.thirst * 60 * (weatherOn(t) === "drought" ? 0.5 : 1) * (s.bonus === "hardy" ? 2 : 1), u.id, idx, t]);   // стойкому — вдвое дольше
+                       [growth(p, t, boost, rainSlow(s)), t, t + s.thirst * 60 * (weatherOn(t) === "drought" ? 0.5 : 1) * (s.bonus === "hardy" ? 2 : 1), u.id, idx, t]);   // стойкому — вдвое дольше
   if (!done.length) { await q("UPDATE f_farms SET water = water + 1 WHERE user = ?", [u.id]); return { error: "Грядка ещё влажная" }; }
   await q("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)", [u.id, nameOf(u), POINTS_WATER, "Лунная ферма", t]);
   return { points: POINTS_WATER, farm: await farmState(u) };
@@ -933,6 +941,7 @@ export async function harvest(u: any, idx: number) {
   if (EV[idx] && EV[idx].kind === "burning") return { error: "Грядка горит — потуши её лейкой или дождись угля" };
   const [p] = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ? AND idx = ?`, [u.id, idx]);
   if (!p) return { error: "Грядка пустая" };
+  await honeyTick(u.id, EV);                                             // таймер мёда — свежий (ливень мог сдвинуть конец), досидевшее — в улей
   const t = now(), all = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [u.id]), boost = await boostOf(u.id);
   const ss = await strains(all.map((x) => x[1])), s = ss[p[1]], win = await oddWin(u.id), st = stateOf(p, s, t, boost, fastAt(all, ss, idx, win));
   if (!st.ripe && !st.dead) return { error: "Ещё не созрело" };
@@ -964,10 +973,13 @@ export async function harvest(u: any, idx: number) {
   const cometDust = evHere === "comet" ? COMET_DUST_X * s.dust : 0;      // комета: прибавка пыли сразу, сверх урожая
   const mythDust = mythNear ? crop * s.dust * 2 : 0;
   const dust = (hasBarn ? 0 : crop * s.dust) + cometDust + mythDust;
+  // колосья, собранные в лунный ливень, — мокрые (его решение 2026-11-19): час сохнут в амбаре, смолоть их до того нельзя
+  const wetGrain = hasBarn && s.shape === "grain" && weatherOn(t) === "shower";
   const writes: any[] = [hasBarn
     ? DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?)
                   ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.odd ? "p:eye" : s.id, crop)
     : DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(crop * s.dust, u.id)];
+  if (wetGrain) writes.push(DB.prepare("INSERT INTO f_wet (user, strain, n, dry_at) VALUES (?, ?, ?, ?)").bind(u.id, s.id, crop, t + WET_DRY));
   if (cometDust + mythDust) writes.push(DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(cometDust + mythDust, u.id));
   if (points > 0) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)")
     .bind(u.id, nameOf(u), points, "Лунная ферма", t));
@@ -1022,7 +1034,7 @@ export async function harvest(u: any, idx: number) {
                       DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'sun', ?)").bind(u.id, t)]);
     }
   }
-  return { crop, dust, honey_lost: honeyLost, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
+  return { crop, dust, wet: wetGrain ? t + WET_DRY : 0, honey_lost: honeyLost, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
 }
 
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
@@ -1047,6 +1059,13 @@ export async function sellCrop(u: any, strain: string, n: number) {
   return { sold, dust: got, farm: await farmState(u) };
 }
 
+// мокрые колосья: сколько каких ещё сохнут (просохшие строки удаляются)
+const WET_DRY = 3600;
+async function wetOf(uid: number) {
+  const t = now(), rows = await q("SELECT strain, n, dry_at FROM f_wet WHERE user = ?", [uid]);
+  if (rows.some((r) => Number(r[2]) <= t)) await q("DELETE FROM f_wet WHERE user = ? AND dry_at <= ?", [uid, t]);
+  return rows.filter((r) => Number(r[2]) > t).map(([strain, n, dry_at]) => ({ strain: String(strain), n: Number(n), dry_at: Number(dry_at) }));
+}
 // ---------- кухня: мельница и печь (2026-11-14) ----------
 // Строения покупаются за пыль. В каждом одно задание: загрузил — ждёшь (как рост, без полива) — забрал в амбар.
 // Ингредиенты — из амбара: по форме растения (любой сорт и цвет; берутся самые дешёвые) или готовые продукты («p:flour»).
@@ -1119,6 +1138,17 @@ function parseFlour(k: string) { const [, color, gr, m] = k.split(":"); return {
 // копится в улье и забирается в амбар, как мука с мельницы. В амбаре продаётся, идёт в печь и в лавку.
 const HONEY_MIN = 600, HONEY_MAX = 7200, HONEY_PRICE = [20, 8, 3];   // баланс (его решение 2026-11-18): мёд не дороже половины растения — ждать мёд выгодно отошедшему, а не сидящему
 function honeyDust(id: any) { return recipeOf(String(id)) === "honey" ? honeyInfo(sortOf(String(id))).dust : 0; }
+// в лунный ливень пчёлы не летают (его решение 2026-11-19): таймер мёда стоит, пока идёт ливень, — конец сдвигается на время ливня
+function honeyEnd(start: number, dur: number) {
+  let t0 = start, left = dur;
+  for (const [a, b] of showersIn(start, start + dur + 4 * DAY)) {
+    if (b <= t0) continue;
+    if (a >= t0 + left) break;
+    if (a > t0) left -= a - t0;
+    t0 = Math.max(t0, b);
+  }
+  return t0 + left;
+}
 function honeyFor(s: Strain) { return Math.max(HONEY_MIN, Math.min(HONEY_MAX, Math.round(s.minutes * 30))); }
 function honeyKey(s: Strain) { const d = s.myth ? s.dust / 3 : s.dust; return "h:" + s.color + ":" + (d <= 10 ? 2 : d <= 40 ? 1 : 0) + (s.myth ? ":m" : ""); }
 function honeyInfo(k: string) {
@@ -1129,8 +1159,8 @@ function honeyInfo(k: string) {
 function ripeAt(p: any[], s: Strain, t: number, boost: [number, number][], fast: number) {   // когда растение созрело: рост во времени только растёт — делим пополам
   const need = s.minutes * 60 * (1 - (1 - ODD_NEAR) * fast);
   let lo = Math.max(Number(p[2]), Number(p[4])), hi = t;
-  if (growth(p, lo, boost) >= need) return lo;
-  for (let i = 0; i < 26 && hi - lo > 1; i++) { const m = Math.floor((lo + hi) / 2); if (growth(p, m, boost) >= need) hi = m; else lo = m; }
+  if (growth(p, lo, boost, rainSlow(s)) >= need) return lo;
+  for (let i = 0; i < 26 && hi - lo > 1; i++) { const m = Math.floor((lo + hi) / 2); if (growth(p, m, boost, rainSlow(s)) >= need) hi = m; else lo = m; }
   return hi;
 }
 // таймеры мёда: заводятся у созревших растений, по окончании баночка — в улей (ровно один раз на посадку)
@@ -1145,10 +1175,16 @@ async function honeyTick(uid: number, EVS: Record<number, any>) {
     if (!s || s.odd || ev === "burning" || ev === "coal") continue;
     let r = rows.get(idx); rows.delete(idx);
     if (r && Number(r[1]) !== Number(p[2])) r = undefined;                 // таймер прошлой посадки
-    if (!r) {
+    let start = 0;
+    if (!r || !Number(r[4])) {                                           // начало и конец сбора — заново: конец сдвигает ливень
       const fast = fastAt(plots, ss, idx, win, t), st = stateOf(p, s, t, boost, fast);
-      if (!st.ripe) continue;
-      const until = Math.max(built, ripeAt(p, s, t, boost, fast)) + honeyFor(s), item = "p:honey@" + honeyKey(s);
+      if (!st.ripe) { if (r) out[idx] = { item: String(r[2]), until: Number(r[3]) }; continue; }
+      start = Math.max(built, ripeAt(p, s, t, boost, fast));
+      const until2 = honeyEnd(start, honeyFor(s));
+      if (r && Number(r[3]) !== until2 && (await q("UPDATE f_honey SET until = ? WHERE user = ? AND idx = ? AND planted = ? AND got = 0 RETURNING 1", [until2, uid, idx, Number(p[2])])).length) r[3] = until2;
+    }
+    if (!r) {
+      const until = honeyEnd(start, honeyFor(s)), item = "p:honey@" + honeyKey(s);
       // два параллельных запроса не должны обнулить уже выданную баночку: строку той же посадки не перезаписываем, а перечитываем
       await q(`INSERT INTO f_honey (user, idx, planted, item, until, got) VALUES (?, ?, ?, ?, ?, 0)
                ON CONFLICT(user, idx) DO UPDATE SET planted = excluded.planted, item = excluded.item, until = excluded.until, got = 0 WHERE f_honey.planted != excluded.planted`, [uid, idx, Number(p[2]), item, until]);
@@ -1162,7 +1198,7 @@ async function honeyTick(uid: number, EVS: Record<number, any>) {
       await q("INSERT INTO f_hive (user, item, count) VALUES (?, ?, 1) ON CONFLICT(user, item) DO UPDATE SET count = count + 1", [uid, String(r[2])]);
       r[4] = 1;
     }
-    out[idx] = { item: String(r[2]), until: Number(r[3]), ...(Number(r[4]) ? { got: true } : {}) };
+    out[idx] = { item: String(r[2]), until: Number(r[3]), ...(start ? { from: start, dur: honeyFor(s) } : {}), ...(Number(r[4]) ? { got: true } : {}) };   // from и dur — для полоски: в ливень она стоит
   }
   for (const idx of rows.keys()) await q("DELETE FROM f_honey WHERE user = ? AND idx = ?", [uid, idx]);   // растения уже нет
   return out;
@@ -1276,8 +1312,15 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
   const busy = new Set((await q("SELECT kind FROM f_jobs WHERE user = ? AND (kind = ? OR kind LIKE ?)", [u.id, r.kind, r.kind + ":%"])).map((x) => String(x[0])));
   const slot = slotKinds(r.kind, await levelOf(u.id, r.kind)).find((x) => !busy.has(x));
   if (!slot) return { error: b.name + " занята" };
-  const barn = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
+  let barn = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
   const ss = await strains(barn.map((x) => x[0]).filter((x) => !String(x).startsWith("p:")));
+  if (recipe === "flour") {                                             // мокрые колосья мельница не берёт, пока не просохнут
+    const wet: Record<string, number> = {}; for (const w of await wetOf(u.id)) wet[w.strain] = (wet[w.strain] || 0) + w.n;
+    const before = barn.filter(([id]) => ss[id]?.shape === "grain").reduce((a, [, c]) => a + Number(c), 0);
+    barn = barn.map(([id, c]) => [id, Number(c) - (wet[String(id)] || 0)]).filter(([, c]) => Number(c) > 0);
+    const after = barn.filter(([id]) => ss[id]?.shape === "grain").reduce((a, [, c]) => a + Number(c), 0);
+    if (after < k && before >= k) return { error: "Колосья ещё сохнут после ливня — смолоть можно, когда просохнут" };
+  }
   const plan: [string, number][] = [];
   // сорт: мельница мелет один сорт колосьев, печь берёт муку одного сорта; без сорта — как раньше (старая «p:flour»)
   const main = RAW_MAIN[recipe], hon = !!r.needs["p:honey"], sorted = hon || recipe === "flour" || !!r.needs["p:flour"] || !!main;
@@ -1938,7 +1981,7 @@ export async function gemDust(u: any, idx: number, kind = "moon") {
   if (kind === "dew" && Number(p[5]) - t > DAY) return { error: "Эта пыль тут уже посыпана" };
   if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = ? AND count >= 1 RETURNING 1", [u.id, g.dust])).length) return { error: "В амбаре нет такой пыли" };
   if (kind === "moon") await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ?", [s.minutes * 60, t, t, u.id, idx]);
-  else if (kind === "dew") await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ?", [growth(p, t, boost), t, t + GEM_DEW_FOR, u.id, idx]);
+  else if (kind === "dew") await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ?", [growth(p, t, boost, rainSlow(s)), t, t + GEM_DEW_FOR, u.id, idx]);
   else await q("INSERT OR REPLACE INTO f_monomark (user, idx, kind, at) VALUES (?, ?, ?, ?)", [u.id, idx, g.mark, t]);
   return { ok: true, kind, farm: await farmState(u) };
 }
