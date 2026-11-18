@@ -387,7 +387,7 @@ async function rainUntil() {                              // звёздный д
   const w = weatherView(now()).today;
   return w.id === "stardust" ? w.until : 0;
 }
-function plotView(p: any[] | undefined, idx: number, unlocked: number, ev?: any) {
+function plotView(p: any[] | undefined, idx: number, unlocked: number, ev?: any, honey?: any) {
   if (idx >= unlocked) return { idx, locked: true, price: PLOT_PRICE[idx] };
   if (ev && ev.kind === "crater") return { idx, crop: null, crater: true, ...(ev.until === 1 ? { big: true } : {}) };
   if (!p) return ev && ev.kind === "frost" ? { idx, crop: null, frost: ev.until } : { idx, crop: null };
@@ -395,6 +395,7 @@ function plotView(p: any[] | undefined, idx: number, unlocked: number, ev?: any)
   if (ev && ev.kind === "coal") v.coal = true;
   if (ev && ev.kind === "burning") v.burning = ev.until;                // Огненная ночь: грядка горит до этого времени
   if (ev && ev.kind === "comet") v.comet = true;
+  if (honey) v.honey = honey;                                         // мёд: { item, until, got } — пчёлы собирают до until
   return v;
 }
 
@@ -678,6 +679,9 @@ function farmReads(uid: number, t: number): [string, any[]][] {
     ["SELECT MAX(id) FROM f_feed WHERE actor != ? AND at > ?", [uid, t - 3 * DAY]],
     ["SELECT slot, items, reward, until, ready FROM f_orders WHERE user = ?", [uid]],
     ["SELECT 1 FROM f_evlog WHERE user = ? AND kind = ?", [uid, "ordskip:" + Math.floor((t + TZ) / DAY)]],
+    ["SELECT at FROM f_builds WHERE user = ? AND kind = 'hive'", [uid]],
+    ["SELECT idx, planted, item, until, got FROM f_honey WHERE user = ?", [uid]],
+    ["SELECT item, count FROM f_hive WHERE user = ? AND count > 0", [uid]],
   ];
 }
 export async function farmState(u: any) {
@@ -692,7 +696,8 @@ export async function farmState(u: any) {
 async function farmState1(u: any) {
   await normFlour(u.id);
   await mythTick(u.id); await mossEnd(u.id);
-  const EVS = await plotEvents(u.id);
+  const EVS = await plotEvents(u.id), HON = await honeyTick(u.id, EVS);
+  const hive = (await q("SELECT item, count FROM f_hive WHERE user = ? AND count > 0", [u.id])).map(([item, count]) => ({ item: String(item), count: Number(count) }));
   const [[dust, unlocked, pub, water]] = await q("SELECT dust, unlocked, pub, water FROM f_farms WHERE user = ?", [u.id]);
   const plots = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [u.id]);
   const by = new Map(plots.map((p) => [Number(p[0]), p]));
@@ -705,7 +710,7 @@ async function farmState1(u: any) {
   const barn = (await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])).map(([strain, count]) => ({ strain, count: Number(count) }));
   const stall = (await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [u.id])).map(([item, listed]) => ({ item: String(item), listed: Number(listed) }));
   const chest = (await q("SELECT strain, count FROM f_chest WHERE user = ? AND count > 0", [u.id])).map(([strain, count]) => ({ strain: String(strain), count: Number(count) }));
-  const bs = [...barn.map((b) => b.strain), ...stall.map((x) => x.item)];
+  const bs = [...barn.map((b) => b.strain), ...stall.map((x) => x.item), ...hive.map((x) => x.item), ...Object.values(HON).map((h: any) => h.item)];
   const bss = await strains(barn.map((b) => String(b.strain)).filter((x) => !x.startsWith("p:")));   // что можно приготовить из амбара — с ценой и сортом
   for (const b of barn) { const id = String(b.strain), g = bss[id];
     if (g?.shape === "grain") bs.push("p:flour@" + flourKey(g));
@@ -714,13 +719,13 @@ async function farmState1(u: any) {
   const kit = await kitchenOf(u.id);                           // один раз на запрос: раньше постройки, работы и уровни читались дважды, а работы — трижды
   return {
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
-    plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked), EVS[i])), events_seen: await seenEvents(u.id),
+    plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked), EVS[i], HON[i])), events_seen: await seenEvents(u.id),
     stars: (await q("SELECT id, x, y, dust FROM f_stars WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     clumps: (await q("SELECT id, x, y, dust FROM f_clumps WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
     ...kit, ...(await decorView(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...kit.jobs.map((j: any) => "p:" + j.recipe)])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await metWanderer(u.id, await wandererView(u.id)), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
-    vinyls, inv, barn, stall, chest, seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
+    vinyls, inv, barn, stall, chest, hive, seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })), ...(await monoView(u.id)), feed_top: await feedTop(u.id),
     orders: await ordersOf(u.id, kit.builds),
   };
@@ -733,6 +738,7 @@ export async function dig(u: any, idx: number) {
   const EVD = await plotEvents(u.id);
   if (EVD[idx] && (EVD[idx].kind === "burning" || EVD[idx].kind === "coal")) return { error: EVD[idx].kind === "burning" ? "Грядка горит — потуши её лейкой" : "Сначала забери уголь" };
   const del = await q("DELETE FROM f_plots WHERE user = ? AND idx = ? RETURNING crop, planted, water_until", [u.id, idx]);
+  await q("DELETE FROM f_honey WHERE user = ? AND idx = ?", [u.id, idx]);
   await q("DELETE FROM f_plotev WHERE user = ? AND idx = ? AND kind != 'frost'", [u.id, idx]);
   // дикий мох (вырос сам, пока мох захватил ферму — семя не тратилось): выкопал — семени нет (дюп, сообщил Askat 2026-11-16)
   const wild = (await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind = 'wild' RETURNING 1", [u.id, idx])).length > 0;
@@ -933,6 +939,10 @@ export async function harvest(u: any, idx: number) {
   // грядку забирает ровно один запрос: повторное нажатие не заплатит дважды
   if (!(await q("DELETE FROM f_plots WHERE user = ? AND idx = ? AND planted = ? RETURNING 1", [u.id, idx, p[2]])).length) return { error: "Уже собрано" };
   const evHere = EV[idx] && EV[idx].kind;
+  const hon = await q("DELETE FROM f_honey WHERE user = ? AND idx = ? RETURNING planted, until, got, item", [u.id, idx]);   // не досидело до конца таймера — мёда не будет
+  const honeyLost = hon.length > 0 && Number(hon[0][0]) === Number(p[2]) && !Number(hon[0][2]) && Number(hon[0][1]) > t;
+  if (hon.length && Number(hon[0][0]) === Number(p[2]) && !Number(hon[0][2]) && Number(hon[0][1]) <= t)   // таймер вышел, а улей ещё не знал — баночка сейчас
+    await q("INSERT INTO f_hive (user, item, count) VALUES (?, ?, 1) ON CONFLICT(user, item) DO UPDATE SET count = count + 1", [u.id, String(hon[0][3])]);
   await q("DELETE FROM f_plotev WHERE user = ? AND idx = ? AND kind NOT IN ('frost', 'crater')", [u.id, idx]);   // несостоявшиеся события грядки — прочь
   if (s && s.myth) await q("DELETE FROM f_monomark WHERE user = ? AND kind IN ('myth', 'mythripe')", [u.id]);
   if (s && s.odd && !all.some((x) => Number(x[0]) !== idx && ss[x[1]]?.odd))                 // странное собрано (или убрано засохшим) — следующая посадка начнёт новые сутки
@@ -1012,7 +1022,7 @@ export async function harvest(u: any, idx: number) {
                       DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'sun', ?)").bind(u.id, t)]);
     }
   }
-  return { crop, dust, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
+  return { crop, dust, honey_lost: honeyLost, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
 }
 
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
@@ -1047,6 +1057,7 @@ export const BUILDS: Record<string, { name: string; price: number; max: number; 
   mill: { name: "Мельница", price: 200, max: 10, up: [400, 1000] },
   oven: { name: "Печь",     price: 300, max: 5,  up: [600, 1500] },
   shop: { name: "Магазин",  price: 500, max: 0 },     // заказы жителей станции на блюда (2026-11-15)
+  hive: { name: "Улей",     price: 500, max: 0 },     // пчёлы собирают мёд с созревших растений (его идея 2026-11-18)
 };
 export const RECIPES: Record<string, { kind: string; name: string; needs: Record<string, number>; min: number; dust: number; points: number }> = {
   flour:  { kind: "mill", name: "Мука",               needs: { grain: 1 },                       min: 3,  dust: 7,   points: 0 },
@@ -1060,6 +1071,12 @@ export const RECIPES: Record<string, { kind: string; name: string; needs: Record
   jam:    { kind: "oven", name: "Кактусовый джем",    needs: { cactus: 2, berry: 1 },            min: 20, dust: 75,  points: 3 },
   // из урожая странного растения (2026-11-18), чёрная, в разделе «Похлёбка» (его правка); в заказы магазина не попадает — глаза редкость
   brew:   { kind: "oven", name: "Странная похлёбка",     needs: { "p:eye": 1, moss: 2 },            min: 40, dust: 180, points: 5 },
+  // из мёда улья (2026-11-18): подходит мёд любого сорта, берётся самый дешёвый
+  honeycake: { kind: "oven", name: "Медовик",          needs: { "p:flour": 2, "p:honey": 1 },     min: 20, dust: 26,  points: 2 },
+  honeytea:  { kind: "oven", name: "Медовый чай",      needs: { flower: 1, "p:honey": 1 },        min: 15, dust: 40,  points: 2 },
+  honeypie:  { kind: "oven", name: "Ягодный медовый пирог", needs: { "p:flour": 1, berry: 2, "p:honey": 1 }, min: 40, dust: 60, points: 3 },   // его просьба 2026-11-18; цены медовых блюд — его решение 2026-11-18 (~1,2–1,3 цены продуктов)
+  honeycandy:   { kind: "oven", name: "Хрустальные леденцы", needs: { crystal: 1, "p:honey": 1 }, min: 30, dust: 110, points: 4 },
+  honeypumpkin: { kind: "oven", name: "Тыква в меду",     needs: { pumpkin: 1, "p:honey": 1 },       min: 30, dust: 50,  points: 3 },
   // самоцветы странника (2026-11-16): каждый мелется в пыль своего цвета; что делает пыль — в GEMS ниже
   gemdust:         { kind: "mill", name: "Лунная самоцветная пыль",    needs: { "p:gem": 1 },       min: 5, dust: 40, points: 0 },
   "gemdust-crop":  { kind: "mill", name: "Бирюзовая самоцветная пыль", needs: { "p:gem-crop": 1 },  min: 5, dust: 40, points: 0 },
@@ -1095,8 +1112,78 @@ export function rawKey(g: Strain) {
   return "r:" + g.color + ":" + (d <= 1.4 ? 2 : d <= 2 ? 1 : 0) + (g.myth ? ":m" : "");
 }
 function parseFlour(k: string) { const [, color, gr, m] = k.split(":"); return { color, grade: Math.max(0, Math.min(2, Number(gr) || 0)), myth: m === "m" }; }
+// ---------- улей и мёд (его идея 2026-11-18) ----------
+// Пока улей построен, пчёлы собирают мёд с каждого созревшего растения: у грядки идёт оранжевый таймер — половина срока роста,
+// от 10 минут до 2 часов, отсчёт с минуты созревания. Растение простояло до конца таймера — в улье появляется баночка мёда;
+// собрали раньше — мёда нет. Мёд помнит расцветку растения и получает сорт по его цене («p:honey@h:<расцветка>:<сорт>[:m]»),
+// копится в улье и забирается в амбар, как мука с мельницы. В амбаре продаётся, идёт в печь и в лавку.
+const HONEY_MIN = 600, HONEY_MAX = 7200, HONEY_PRICE = [20, 8, 3];   // баланс (его решение 2026-11-18): мёд не дороже половины растения — ждать мёд выгодно отошедшему, а не сидящему
+function honeyDust(id: any) { return recipeOf(String(id)) === "honey" ? honeyInfo(sortOf(String(id))).dust : 0; }
+function honeyFor(s: Strain) { return Math.max(HONEY_MIN, Math.min(HONEY_MAX, Math.round(s.minutes * 30))); }
+function honeyKey(s: Strain) { const d = s.myth ? s.dust / 3 : s.dust; return "h:" + s.color + ":" + (d <= 10 ? 2 : d <= 40 ? 1 : 0) + (s.myth ? ":m" : ""); }
+function honeyInfo(k: string) {
+  if (!k.startsWith("h:")) return { name: "Мёд", dust: HONEY_PRICE[2] };
+  const f = parseFlour(k), adj = f.myth ? MYTH_ADJ[0] : (ADJ[f.color] || ODD_ADJ)[0];
+  return { name: adj + " мёд", dust: HONEY_PRICE[f.grade] * (f.myth ? 3 : 1), sort: k, sort_name: GRADE_NAME[f.grade], color: f.color, grade: f.grade, ...(f.myth ? { myth: true } : {}) };
+}
+function ripeAt(p: any[], s: Strain, t: number, boost: [number, number][], fast: number) {   // когда растение созрело: рост во времени только растёт — делим пополам
+  const need = s.minutes * 60 * (1 - (1 - ODD_NEAR) * fast);
+  let lo = Math.max(Number(p[2]), Number(p[4])), hi = t;
+  if (growth(p, lo, boost) >= need) return lo;
+  for (let i = 0; i < 26 && hi - lo > 1; i++) { const m = Math.floor((lo + hi) / 2); if (growth(p, m, boost) >= need) hi = m; else lo = m; }
+  return hi;
+}
+// таймеры мёда: заводятся у созревших растений, по окончании баночка — в улей (ровно один раз на посадку)
+async function honeyTick(uid: number, EVS: Record<number, any>) {
+  const [b] = await q("SELECT at FROM f_builds WHERE user = ? AND kind = 'hive'", [uid]);
+  if (!b) return {};
+  const t = now(), built = Number(b[0]), plots = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [uid]);
+  const rows = new Map((await q("SELECT idx, planted, item, until, got FROM f_honey WHERE user = ?", [uid])).map((r) => [Number(r[0]), r]));
+  const ss = await strains(plots.map((p) => String(p[1]))), boost = await boostOf(uid), win = await oddWin(uid), out: Record<number, any> = {};
+  for (const p of plots) {
+    const idx = Number(p[0]), s = ss[String(p[1])], ev = EVS[idx] && EVS[idx].kind;
+    if (!s || s.odd || ev === "burning" || ev === "coal") continue;
+    let r = rows.get(idx); rows.delete(idx);
+    if (r && Number(r[1]) !== Number(p[2])) r = undefined;                 // таймер прошлой посадки
+    if (!r) {
+      const fast = fastAt(plots, ss, idx, win, t), st = stateOf(p, s, t, boost, fast);
+      if (!st.ripe) continue;
+      const until = Math.max(built, ripeAt(p, s, t, boost, fast)) + honeyFor(s), item = "p:honey@" + honeyKey(s);
+      // два параллельных запроса не должны обнулить уже выданную баночку: строку той же посадки не перезаписываем, а перечитываем
+      await q(`INSERT INTO f_honey (user, idx, planted, item, until, got) VALUES (?, ?, ?, ?, ?, 0)
+               ON CONFLICT(user, idx) DO UPDATE SET planted = excluded.planted, item = excluded.item, until = excluded.until, got = 0 WHERE f_honey.planted != excluded.planted`, [uid, idx, Number(p[2]), item, until]);
+      const [r2] = await q("SELECT idx, planted, item, until, got FROM f_honey WHERE user = ? AND idx = ? AND planted = ?", [uid, idx, Number(p[2])]);
+      if (!r2) continue;
+      r = r2;
+    }
+    if (!Number(r[4]) && Number(r[3]) <= t &&
+        (await q(`UPDATE f_honey SET got = 1 WHERE user = ?1 AND idx = ?2 AND planted = ?3 AND got = 0
+                  AND EXISTS (SELECT 1 FROM f_plots WHERE user = ?1 AND idx = ?2 AND planted = ?3) RETURNING 1`, [uid, idx, Number(p[2])])).length) {   // растение уже собрали параллельно — баночку выдал сбор
+      await q("INSERT INTO f_hive (user, item, count) VALUES (?, ?, 1) ON CONFLICT(user, item) DO UPDATE SET count = count + 1", [uid, String(r[2])]);
+      r[4] = 1;
+    }
+    out[idx] = { item: String(r[2]), until: Number(r[3]), ...(Number(r[4]) ? { got: true } : {}) };
+  }
+  for (const idx of rows.keys()) await q("DELETE FROM f_honey WHERE user = ? AND idx = ?", [uid, idx]);   // растения уже нет
+  return out;
+}
+// забрать мёд из улья в амбар
+export async function hiveCollect(u: any) {
+  if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Сначала нужен амбар: мёду негде лежать" };
+  const got = await q("DELETE FROM f_hive WHERE user = ? AND count > 0 RETURNING item, count", [u.id]);
+  if (!got.length) return { error: "В улье пока нет мёда" };
+  await DB.batch(got.map(([id, n]) => DB.prepare("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count").bind(u.id, String(id), Number(n))));
+  return { n: got.reduce((a, r) => a + Number(r[1]), 0), farm: await farmState(u) };
+}
 export function productInfo(id: string, ss: Record<string, Strain>) {
+  if (recipeOf(id) === "honey") return honeyInfo(sortOf(id));
   const r = RECIPES[recipeOf(id)]; if (!r) return null;
+  if (r.needs["p:honey"]) {                                              // медовые блюда — по мёду: цена растёт с сортом мёда, цвет глазури — его
+    const k = sortOf(id); if (!k.startsWith("h:")) return { name: r.name, dust: r.dust };
+    const f = parseFlour(k), h = honeyInfo(k);
+    return { name: r.name, dust: Math.round((r.dust + r.needs["p:honey"] * (HONEY_PRICE[f.grade] - HONEY_PRICE[2])) * (f.myth ? 3 : 1)), sort: k,
+             sort_name: h.name.toLowerCase() + ", " + GRADE_NAME[f.grade], color: f.color, grade: f.grade, ...(f.myth ? { myth: true } : {}) };
+  }
   const sort = sortOf(id), nf = r.needs["p:flour"] || 0, isFlour = recipeOf(id) === "flour";
   if (isFlour || nf) {                                                   // мука и выпечка — по сорту муки
     const f = sort.startsWith("g:") ? parseFlour(sort) : ss[sort] ? parseFlour(flourKey(ss[sort])) : null;
@@ -1192,14 +1279,20 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
   const ss = await strains(barn.map((x) => x[0]).filter((x) => !String(x).startsWith("p:")));
   const plan: [string, number][] = [];
   // сорт: мельница мелет один сорт колосьев, печь берёт муку одного сорта; без сорта — как раньше (старая «p:flour»)
-  const main = RAW_MAIN[recipe], sorted = recipe === "flour" || !!r.needs["p:flour"] || !!main;
+  const main = RAW_MAIN[recipe], hon = !!r.needs["p:honey"], sorted = hon || recipe === "flour" || !!r.needs["p:flour"] || !!main;
+  // медовые блюда помнят мёд (его правка 2026-11-18: «глазурь такого цвета, какого мёд»): сорт блюда — мёд «h:…»; мука в них — любая, самая дешёвая
+  if (hon && !(sort && sort.startsWith("h:"))) {
+    const by: Record<string, number> = {};
+    for (const [id, c] of barn) if (recipeOf(String(id)) === "honey" && sortOf(String(id)).startsWith("h:")) by[sortOf(String(id))] = (by[sortOf(String(id))] || 0) + Number(c);
+    sort = Object.keys(by).filter((x) => by[x] >= r.needs["p:honey"] * k).sort((a, c) => honeyInfo(a).dust - honeyInfo(c).dust)[0] || "";
+  }
   if (main && !(sort && sort.startsWith("r:"))) {           // суп, похлёбка, чай, джем: сорт главного сырья; не выбран — самый дешёвый, которого хватает
     const by: Record<string, number> = {}, price: Record<string, number> = {};
     for (const [id, c] of barn) { const g = ss[id]; if (g?.shape !== main) continue; const key = rawKey(g); by[key] = (by[key] || 0) + Number(c); price[key] = Math.min(price[key] ?? 1e9, g.dust); }
     const opts = Object.keys(by).filter((x) => by[x] >= r.needs[main] * k).sort((a, c) => price[a] - price[c]);
     sort = opts[0] || "";
   }
-  if (sorted && !main && !sort) {                                  // не выбран — берём тот, которого хватает и который дешевле
+  if (sorted && !main && !hon && !sort) {                          // не выбран — берём тот, которого хватает и который дешевле
     const want = recipe === "flour" ? k : r.needs["p:flour"] * k;
     const opts = barn.filter(([id, c]) => Number(c) >= want && (recipe === "flour" ? ss[id]?.shape === "grain" : String(id).startsWith("p:flour")))
       .sort((a, c) => (ss[a[0]]?.dust || 0) - (ss[c[0]]?.dust || 0));
@@ -1208,9 +1301,9 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
   for (const [need, per] of Object.entries(r.needs)) {
     let left = per * k;
     const flourId = sort ? "p:flour@" + sort : "p:flour";
-    const fit = barn.filter(([id]) => need === "p:flour" ? id === flourId : need.startsWith("p:") ? id === need
+    const fit = barn.filter(([id]) => need === "p:flour" ? (hon ? recipeOf(String(id)) === "flour" : id === flourId) : need === "p:honey" ? recipeOf(String(id)) === "honey" && sortOf(String(id)) === sort : need.startsWith("p:") ? id === need
       : recipe === "flour" && sort ? id === sort : need === main ? !!ss[id] && ss[id].shape === need && rawKey(ss[id]) === sort : ss[id] && ss[id].shape === need)
-      .sort((a, c) => (!sorted ? (ss[c[0]]?.myth ? 1 : 0) - (ss[a[0]]?.myth ? 1 : 0) : 0) || (ss[a[0]]?.dust || 0) - (ss[c[0]]?.dust || 0));   // мифическое — в дело первым
+      .sort((a, c) => (!sorted ? (ss[c[0]]?.myth ? 1 : 0) - (ss[a[0]]?.myth ? 1 : 0) : 0) || (ss[a[0]]?.dust || honeyDust(a[0])) - (ss[c[0]]?.dust || honeyDust(c[0])));   // мифическое — в дело первым; мёд — самый дешёвый
     for (const [id, have] of fit) { const take = Math.min(left, Number(have)); if (take > 0) { plan.push([id, take]); left -= take; } }
     if (left > 0) return { error: "Не хватает продуктов в амбаре" };
   }
@@ -1242,6 +1335,7 @@ const ORDER_FOR = [DAY, DAY, 2 * DAY], ORDER_X = [1.5, 1.5, 2], ORDER_TIER = ["�
 export const ORDER_CATS: Record<string, { name: string; r: string[] }> = {
   bread: { name: "Хлеб", r: ["bread"] }, bun: { name: "Булочки", r: ["bun"] }, soup: { name: "Похлёбка", r: ["soup", "stew"] },
   pie: { name: "Пироги", r: ["pie", "pumpkin"] }, tea: { name: "Чай", r: ["tea"] }, jam: { name: "Джем", r: ["jam"] }, flour: { name: "Мука", r: ["flour"] },
+  honey: { name: "Медовое", r: ["honeycake", "honeytea", "honeypie", "honeycandy", "honeypumpkin"] },
 };
 function anyOf(r: string) { return r.startsWith("~") ? (ORDER_CATS[r.slice(1)] || { r: [] }).r : []; }
 function orderFits(r: string, recipe: string) { return r.startsWith("~") ? anyOf(r).includes(recipe) : r === recipe; }
@@ -1266,10 +1360,11 @@ async function canCook(uid: number) {
   // strains() отдаёт и все сорта станции — форму берём только у своих
   const ids = inv.map((r) => String(r[0])), ss = await strains(ids), mine = ids.map((i) => ss[i]).filter(Boolean);
   const shapes = new Set(mine.map((g) => g.shape));
-  const has = (need: string) => shapes.has(need === "p:flour" ? "grain" : need);
+  const has = (need: string) => need === "p:honey" || shapes.has(need === "p:flour" ? "grain" : need);   // мёд — если есть улей (проверка в genOrder1)
   // какие сорта блюда игроку открыты: у выпечки — по сорту муки из его колосьев, у супа/похлёбки/чая/джема — по главному сырью
   const grades = (k: string) => {
     const main = RAW_MAIN[k], out = new Set<number>();
+    if (RECIPES[k].needs["p:honey"]) return [];                        // медовые — сорт мёда в особых заказах не просим
     for (const g of mine) {
       if (main && g.shape === main) out.add(parseFlour(rawKey(g)).grade);
       else if (!main && g.shape === "grain" && (k === "flour" || RECIPES[k].needs["p:flour"])) out.add(parseFlour(flourKey(g)).grade);
@@ -1281,12 +1376,12 @@ async function canCook(uid: number) {
 type Cook = Awaited<ReturnType<typeof canCook>>;
 // Сорт в особом заказе (его решение 2026-11-16): «не ниже первого сорта» или «высшего сорта» — только из открытых игроку сортов.
 // Сорт блюда — из ключа «g:/r:<расцветка>:<сорт>»; блюдо без сорта — второй сорт.
-function dishGrade(id: string) { const k = sortOf(id); return k.startsWith("g:") || k.startsWith("r:") ? parseFlour(k).grade : 2; }
+function dishGrade(id: string) { const k = sortOf(id); return k.startsWith("g:") || k.startsWith("r:") || k.startsWith("h:") ? parseFlour(k).grade : 2; }
 function gradeDust(k: string, grade: number) { return productInfo("p:" + k + "@" + (RAW_MAIN[k] ? "r:" : "g:") + "sun:" + grade, {})?.dust || RECIPES[k].dust; }
 const GRADE_REQ = ["высшего сорта", "не ниже первого сорта"];
 function genOrder1(slot: number, builds: string[], cook?: Cook) {
   const ok = cook?.ok;
-  const can = Object.keys(RECIPES).filter((k) => !k.startsWith("gemdust") && k !== "brew" && builds.includes(RECIPES[k].kind) && !(k === "flour" && builds.includes("oven")) && (!ok || ok(k)));   // мука — только пока нет печи
+  const can = Object.keys(RECIPES).filter((k) => !k.startsWith("gemdust") && k !== "brew" && builds.includes(RECIPES[k].kind) && (!RECIPES[k].needs["p:honey"] || builds.includes("hive")) && !(k === "flour" && builds.includes("oven")) && (!ok || ok(k)));   // мука — только пока нет печи
   if (!can.length) return null;
   if (slot === 0) {
     const cats = Object.keys(ORDER_CATS).filter((c) => ORDER_CATS[c].r.some((k) => can.includes(k)));   // хоть одно блюдо категории игроку по силам

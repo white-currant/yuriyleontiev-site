@@ -498,6 +498,7 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/order/skip": return json(await farm.skipOrder(user, Number(body.slot)));
     case "/api/farm/cook": return json(await farm.cook(user, String(body.recipe || ""), Number(body.n || 1), String(body.sort || "").slice(0, 64)));
     case "/api/farm/collect": return json(await farm.collect(user, String(body.kind || "")));
+    case "/api/farm/hive/collect": return json(await farm.hiveCollect(user));
     case "/api/farm/stoke": return json(await farm.stoke(user, String(body.slot || "oven").slice(0, 16)));
     case "/api/farm/uncook": return json(await farm.uncook(user, String(body.slot || "").slice(0, 16)));
     case "/api/farm/upgrade": return json(await farm.upgrade(user, String(body.kind || "")));
