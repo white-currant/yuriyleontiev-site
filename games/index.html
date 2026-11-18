@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611190037";
+    var BUILD = "202611190104";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3777,8 +3777,20 @@
   }
 
   // прозрачные кнопки поверх грядок (и колодца) + подписи на дорожке под ними
+  // таймер мёда заводит сервер при обновлении фермы; до ответа страница заводит его сама — по тем же правилам (жалоба 2026-11-19:
+  // колосья созрели, а пчёлы не летят и полоски нет, пока ферма не обновится)
+  function honeyKeyOf(g) { var d = g.myth ? g.dust / 3 : g.dust; return "h:" + g.color + ":" + (d <= 10 ? 2 : d <= 40 ? 1 : 0) + (g.myth ? ":m" : ""); }
+  function honeyEndOf(start, dur) { var t0 = start, left = dur; showers().slice().sort(function (a, b) { return a[0] - b[0]; }).forEach(function (iv) {
+      if (iv[1] <= t0 || iv[0] >= t0 + left) return; if (iv[0] > t0) left -= iv[0] - t0; t0 = Math.max(t0, iv[1]); }); return t0 + left; }
+  function honeyGuess(pl, now, ss, dryLim) {
+    if (pl.honey || !pl.crop || !hasBuild(F.state, "hive")) return;
+    var inf = plotInfo(pl, now, ss, dryLim); if (!inf || !inf.ripe || inf.s.odd || pl.burning || pl.coal) return;
+    var dur = Math.max(600, Math.min(7200, Math.round(inf.s.minutes * 30))), from = now - Math.max(0, inf.g - inf.need);
+    pl.honey = { item: "p:honey@" + honeyKeyOf(inf.s), from: from, dur: dur, until: honeyEndOf(from, dur), local: true };
+  }
   function renderPlots(box, plots, now, own, ss, dryLim) {
     box.innerHTML = ""; var honRows = [];
+    if (own) plots.forEach(function (pl) { if (pl) honeyGuess(pl, now, ss, dryLim); });
     plots.forEach(function (pl, i) {
       if (!BC[i]) return;
       var b = document.createElement("button"); b.type = "button"; b.className = "plot";
