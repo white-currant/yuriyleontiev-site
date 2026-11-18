@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611190104";
+    var BUILD = "202611190201";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2038,7 +2038,8 @@
     // сутки от первой посадки (odd_win, odd_for); «странный» гибрид — пока стоит.
     var f0 = farmOf(), odds = [], cut = 1 - ((f0 && f0.odd_near) || .88);
     if (!s.odd && f0 && f0.plots) near4(pl.idx).forEach(function (j) { var q = f0.plots[j], g0 = q && q.crop && ss[q.crop];
-      if (g0 && g0.color === "anomaly") odds.push([q.planted, g0.odd ? (f0.odd_win || q.planted) + (f0.odd_for || 86400) : 1e12]); });
+      if (g0 && g0.color === "anomaly") { var qi = g0.odd ? plotInfo(q, t, ss, dryLim) : null;   // странное ускоряет весь рост, пока не созреет (как на сервере, 2026-11-19)
+        odds.push([q.planted, qi && qi.ripe ? t - Math.max(0, qi.g - qi.need) : 1e12]); } });
     var shareAt = function (tt) { var life = Math.max(1, tt - pl.planted), sh = 0;
       odds.forEach(function (o) { sh = Math.max(sh, Math.min(1, Math.max(0, Math.min(tt, o[1]) - Math.max(pl.planted, o[0])) / life)); }); return sh; };
     var fast = shareAt(t), fastOn = odds.some(function (o) { return t < o[1]; });
@@ -2235,6 +2236,7 @@
     var odd = !!s.odd, gl = odd && st >= 2 && (Math.floor(t / 90) % 37 === i % 37 || Math.floor(t / 90) % 53 === 7) ? (Math.floor(t / 45) % 2 ? 1 : -1) : 0;   // аномалия дёргается
     for (var n = 0; n < (odd ? 1 : NSP); n++) {
       var p = odd ? [cx, cy + 3] : spot(i, n), sp = rows[st];
+      if (odd && !inf.dead && drawOddPlant(c, pl, i, cx, cy + 3, t, inf, own)) continue;   // кокон → щупальце, с переходами (его решение 2026-11-19)
       if (odd) {                                                                    // аномалия — одна, вдвое крупнее, с тёмным контуром
         var ow = sp[0].length + 2, oh = sp.length + 2, oc = ODDC[st] || (ODDC[st] = (function () { var q = document.createElement("canvas"); q.width = ow; q.height = oh; return q; })()), og = oc.getContext("2d");
         og.clearRect(0, 0, ow, oh); sprS(og, 1, oh - 2, sp, s, inf.dead);
@@ -2426,6 +2428,154 @@
     seg(c, eA[0], eA[1], eB[0], eB[1], roof[3]); seg(c, eB[0], eB[1], eC[0], eC[1], roof[3]); seg(c, ap[0], ap[1], eB[0], eB[1], roof[2]);
     var jars = own && (kit === F.state ? hiveCount() > 0 : (kit.hive || []).some(function (h) { return h.count > 0; }));
     if (jars && (t / 400 | 0) % 2) { px(c, ap[0] - 1, ap[1] - 4, 3, 1, "#ffffff"); px(c, ap[0], ap[1] - 5, 1, 3, "#ffffff"); }   // мёд готов — искорка
+  }
+  // сбор странного растения (2026-11-19, пиксельно — его правка): тьма точками накрывает грядку, над ней открывается глаз,
+  // осматривается, дважды моргает и закрывается; потом тьма уходит. Рисуется в пиксельной картинке фермы, 2,3 с.
+  function drawOddEye(c, t) {
+    if (!F.oddFx || !F.oddFx.length) return;
+    F.oddFx = F.oddFx.filter(function (f) { return t - f.t0 < 2300; });
+    F.oddFx.forEach(function (f) {
+      var e = (t - f.t0) / 2300, cx = BC[f.i][0], cy = BC[f.i][1] - 2, x, y;
+      var dk = Math.min(1, e / .18) * (1 - Math.max(0, (e - .82) / .18));
+      for (y = -15; y <= 15; y++) for (x = -27; x <= 27; x++) {                     // тьма: сгущается к центру, по краю — редкие точки
+        var q = (x * x) / 729 + (y * y) / 225; if (q > 1) continue;
+        var dens = dk * (1.15 - q); if (dens <= 0) continue;
+        var th = hash01((x + 40) * 61 + (y + 40) * 7 + f.i);
+        if (th < dens) px(c, cx + x, cy + y, 1, 1, q < .35 && dens > .7 ? "rgba(10,2,16,.85)" : "rgba(22,4,30,.7)");
+      }
+      var lid = function (a, b) { return Math.max(0, Math.min(1, (e - a) / (b - a))); };
+      var op = lid(.2, .34) * (1 - lid(.46, .5)) + lid(.5, .56) * (1 - lid(.6, .63)) + lid(.63, .68) * (1 - lid(.78, .86));
+      op = Math.max(0, Math.min(1, op));
+      var ex = cx, ey = cy - 13, W = 7, H = Math.round(4 * op);
+      if (op > .05) {
+        var look = e > .34 && e < .46 ? Math.round(Math.sin(e * 40) * 2) : 0;          // зрачок бегает по ферме
+        for (y = -H; y <= H; y++) { var hw = Math.round(W * Math.sqrt(Math.max(0, 1 - (y * y) / ((H + .6) * (H + .6)))));
+          px(c, ex - hw - 1, ey + y, 1, 1, "#2a0a18"); px(c, ex + hw + 1, ey + y, 1, 1, "#2a0a18");
+          px(c, ex - hw, ey + y, hw * 2 + 1, 1, Math.abs(y) === H ? "#c9b8a8" : "#f3e8d6");
+          for (x = -2; x <= 2; x++) { var ix = x - look; if (x * x + y * y <= 5) px(c, ex + x + look, ey + y, 1, 1, x * x + y * y <= 1 ? "#2a0610" : "#d22a3a"); }
+        }
+        px(c, ex - W, ey - H - 1, W * 2 + 1, 1, "#2a0a18"); px(c, ex - W, ey + H + 1, W * 2 + 1, 1, "#2a0a18");   // веки
+        if (H >= 2) px(c, ex + look - 1, ey - 1, 1, 1, "#ffffff");                       // блик
+      } else if (e > .2 && e < .88) px(c, ex - W, ey, W * 2 + 1, 1, "#2a0a18");          // сомкнутые веки — тёмная черта
+      for (var k = 0; k < 5; k++) { var ph = (e * 1.6 + hash01(k + f.i * 3)) % 1;         // красные искры-помехи
+        if (dk > .2 && ph < .6) px(c, cx + Math.round((hash01(k * 9 + f.i) - .5) * 40), cy - Math.round(ph * 18), 1, 1, k % 2 ? "#ff5a6e" : "#ffd0d6"); }
+    });
+  }
+  // созревшее странное растение (его идея и его рисунок 2026-11-19): высокое щупальце с глазами. Тело — его рисунок, уменьшенный до
+  // размера фермы (art/odd-tentacle.png, 25×60); глаза рисуются поверх на тех же местах и моргают каждый в своём ритме;
+  // щупальце плавно покачивается (к кончику сильнее). Заходит на грядки выше, собирается только нажатием на свою грядку.
+  // кадры покачивания (его просьба 2026-11-19): его рисунок изогнут волной в полном размере и уменьшен заново для каждого из 8 кадров —
+  // контур на каждом кадре свой, без построчного сдвига. Лист art/odd-tentacle-sway.png: 8 кадров по 25×60, глаза — по кадрам.
+  var TENT = new Image(); TENT.src = "art/odd-tentacle-sway.png";
+  var TENT_FW = 25, TENT_N = 8, TENT_EYES = [[[9,2,1],[12,12,1],[10,18,0],[9,22,1],[15,27,1],[21,32,0],[17,37,2],[9,40,1],[13,46,2],[8,50,1],[17,55,1]],[[8,2,1],[12,12,1],[11,18,0],[9,22,1],[15,27,1],[21,32,0],[17,37,2],[9,40,1],[14,46,2],[8,50,1],[18,55,1]],[[9,2,1],[13,12,1],[11,18,0],[10,22,1],[16,27,1],[22,32,0],[18,37,2],[10,40,1],[14,46,2],[8,50,1],[18,55,1]],[[11,2,1],[14,12,1],[12,18,0],[10,22,1],[16,27,1],[22,32,0],[18,37,2],[10,40,1],[14,46,2],[8,50,1],[18,55,1]],[[12,2,1],[15,12,1],[13,18,0],[10,22,1],[16,27,1],[22,32,0],[18,37,2],[10,40,1],[14,46,2],[8,50,1],[18,55,1]],[[12,2,1],[15,12,1],[12,18,0],[10,22,1],[16,27,1],[22,32,0],[18,37,2],[9,40,1],[13,46,2],[8,50,1],[17,55,1]],[[12,2,1],[14,12,1],[11,18,0],[9,22,1],[15,27,1],[21,32,0],[17,37,2],[9,40,1],[13,46,2],[8,50,1],[17,55,1]],[[10,2,1],[13,12,1],[11,18,0],[9,22,1],[15,27,1],[21,32,0],[17,37,2],[9,40,1],[13,46,2],[8,50,1],[17,55,1]]];   // для каждого кадра: x, y, размер глаза
+  // стадии странного растения (его решение 2026-11-19): кокон → маленькое щупальце → среднее → созревшее (глаза открыты);
+  // между стадиями — анимации перехода: кокон лопается и из него разворачивается щупальце; щупальце рывком вытягивается;
+  // у созревшего глаза по очереди распахиваются. Размеры — из его рисунка (art/odd-tentacle-s/m/sway.png), у каждого свои кадры покачивания.
+  var TSZ = { 1: { img: new Image(), fw: 10, eyes: [[[4,1,0],[7,15,1],[6,18,1]],[[4,1,0],[7,15,1],[6,18,1]],[[4,1,0],[7,15,1],[6,18,1]],[[5,1,0],[7,15,1],[6,18,1]],[[5,1,0],[7,15,1],[6,18,1]],[[5,1,0],[7,15,1],[6,18,1]],[[5,1,0],[7,15,1],[6,18,1]],[[4,1,0],[7,15,1],[6,18,1]]] },
+              2: { img: new Image(), fw: 16, eyes: [[[5,1,0],[8,8,0],[10,18,0],[11,25,1],[9,31,1],[11,37,0]],[[5,1,0],[8,8,0],[10,18,0],[11,25,1],[9,31,1],[11,37,0]],[[6,1,0],[8,8,0],[10,18,0],[11,25,1],[9,31,1],[11,37,0]],[[7,1,0],[9,8,0],[10,18,0],[12,25,1],[9,31,1],[11,37,0]],[[8,1,0],[10,8,0],[10,18,0],[11,25,1],[9,31,1],[11,37,0]],[[8,1,0],[9,8,0],[10,18,0],[11,25,1],[9,31,1],[11,37,0]],[[7,1,0],[9,8,0],[10,18,0],[11,25,1],[9,31,1],[11,37,0]],[[6,1,0],[8,8,0],[10,18,0],[11,25,1],[9,31,1],[11,37,0]]] } };
+  TSZ[1].img.src = "art/odd-tentacle-s.png"; TSZ[2].img.src = "art/odd-tentacle-m.png";
+  function tsz(sz) { return sz === 3 ? { img: TENT, fw: TENT_FW, eyes: TENT_EYES } : TSZ[sz]; }
+  // -1 — первая стадия, прежний рисунок ростка (его правка 2026-11-19: у тех, кто уже посадил, кокон не должен появиться сразу)
+  function oddStageOf(inf) { return inf.ripe ? 3 : inf.f < .12 ? -1 : inf.f < .35 ? 0 : inf.f < .68 ? 1 : 2; }
+  var ODD_TR_MS = 1400;
+  function oddSeen() { if (!F.oddSeenM) { try { F.oddSeenM = JSON.parse(localStorage.getItem("farm-odd-seen") || "{}"); } catch (e) { F.oddSeenM = {}; } } return F.oddSeenM; }
+  function drawCocoon(c, cx, by, t, i, g, crack, split, hk) {                          // кокон: тёмный, с прожилками и швом; hk — как высоко уже сплёлся (переход)
+    // дыхание (его идея 2026-11-19): у маленького нет, чем больше — тем заметнее; в переходах не дышит
+    var br = crack || split || hk != null ? 0 : g * g * (.5 - .5 * Math.cos(2 * Math.PI * ((t + i * 733) % 3400) / 3400));
+    var w = Math.round(4 + 2 * g), h = Math.round(7 + 4 * g + 1.6 * br), pulse = w * .36 * br, y, x;       // без мигания шва (его правка 2026-11-19: «странная вертикальная полоска»)
+    var hMax = hk == null ? h : Math.max(1, Math.round(h * hk));
+    px(c, cx - w - 2, by + 1, w * 2 + 5, 1, "rgba(20,8,26,.45)");
+    px(c, cx - w - 1, by, w * 2 + 3, 1, "#2a1638"); px(c, cx - w, by - 1, w * 2 + 1, 1, "#3a1f52");      // бугорок земли
+    for (y = 0; y < hMax; y++) { var q = (y - h * .55) / (h * .55), hw = Math.max(1, Math.round((w + pulse * .5) * Math.sqrt(Math.max(0, 1 - q * q))));
+      var yy = by - 2 - y, sp = split ? Math.round(split) : 0;
+      [[-1, -hw, 0], [1, 1, hw]].forEach(function (half) {
+        var sx = half[0] < 0 ? -sp : sp, xa = cx + half[1] + sx, xb = cx + half[2] + sx;
+        px(c, xa - 1, yy, 1, 1, "#140a1c"); px(c, xb + 1, yy, 1, 1, "#140a1c");
+        px(c, xa, yy, xb - xa + 1, 1, "#2a1638");
+        if (half[0] < 0) px(c, xa, yy, 1, 1, "#6e3f8a"); else px(c, xb, yy, 1, 1, "#1c0c26");
+        if ((y + i) % 4 === 1) px(c, half[0] < 0 ? xa + 1 : xb - 1, yy, 1, 1, "#4a2a6a");      // прожилки
+      });
+      if (crack && !split && (y + Math.floor(crack * 6)) % 3 === 0) px(c, cx + ((y % 2) ? 1 : -1), yy, 1, 1, crack > .6 ? "#9a72d4" : "#6e3f8a");   // шва нет (его правка 2026-11-19); перед тем как лопнуть — проступают фиолетовые трещинки
+    }
+    if (hMax >= h) px(c, cx - Math.max(1, w - 2), by - 2 - h, Math.max(1, w - 2) * 2 + 1, 1, "#140a1c");
+  }
+  function drawTentEyes(c, x0, y0, EY, t, i, openK) {                                  // openK: сколько глаз открыто (-1 — все закрыты, 99 — все)
+    for (var k = 0; k < EY.length; k++) {
+      var E = EY[k], ex = x0 + E[0], ey = y0 + E[1], r = E[2];
+      var per = 2100 + k * 610 + i * 170, ph = ((t + k * 977 + i * 431) % per) / per, shut = k >= openK || ph < .08;
+      if (r === 0) { if (shut) { px(c, ex, ey, 2, 1, "#7a4aa8"); px(c, ex, ey + 1, 2, 1, "#140a1c"); } else { px(c, ex, ey, 2, 1, "#f1ecdc"); px(c, ex + 1, ey, 1, 1, "#d22a3a"); } continue; }
+      if (shut) {
+        for (var dz = -r; dz <= r; dz++) { var wz = r + 1 - (Math.abs(dz) === r ? 1 : 0);
+          px(c, ex - wz - 1, ey + dz, 1, 1, "#140a1c"); px(c, ex + wz + 1, ey + dz, 1, 1, "#140a1c"); px(c, ex - wz, ey + dz, wz * 2 + 1, 1, dz < 0 ? "#7a4aa8" : "#5a2a86"); }
+        px(c, ex - r, ey - r - 1, r * 2 + 1, 1, "#140a1c"); px(c, ex - r, ey + r + 1, r * 2 + 1, 1, "#140a1c"); px(c, ex - r - 1, ey, r * 2 + 3, 1, "#140a1c");
+        if (r > 1) { px(c, ex - r, ey + 1, 1, 1, "#140a1c"); px(c, ex + r, ey + 1, 1, 1, "#140a1c"); }
+        continue;
+      }
+      for (var dy = -r; dy <= r; dy++) { var ww = r + 1 - (Math.abs(dy) === r ? 1 : 0); px(c, ex - ww, ey + dy, ww * 2 + 1, 1, "#f1ecdc"); }
+      var lk = Math.floor((t + k * 1300 + i * 500) / 1900) % 4, gx2 = lk === 1 ? -1 : lk === 3 ? 1 : 0; if (r === 1) gx2 = gx2 > 0 ? 1 : 0;
+      px(c, ex + gx2, ey - r + (r > 1 ? 1 : 0), 1, r > 1 ? r * 2 - 1 : 1, "#d22a3a");
+      if (r > 1) { px(c, ex - 1 + gx2, ey - 1, 1, 3, "#d22a3a"); px(c, ex + 1 + gx2, ey - 1, 1, 3, "#d22a3a"); px(c, ex + gx2, ey - 1, 1, 3, "#2a0610"); }
+    }
+  }
+  // щупальце размера sz; sc — растяжение по высоте во время перехода (1 — как есть); vis — видимая высота при вылезании из кокона
+  function drawTentacle(c, cx, by, t, i, sz, openK, sc, vis) {
+    var S = tsz(sz || 3); if (!S.img.complete || !S.img.naturalWidth) return;
+    var W = S.fw, H = S.img.naturalHeight, fr = Math.floor((t + i * 700) / 380) % TENT_N, k = sc || 1;
+    var dh = Math.max(2, Math.round(H * k)), dw = Math.max(2, Math.round(W * (1 + (k - 1) * .5))), V = vis ? Math.max(2, Math.min(dh, Math.round(vis))) : dh;
+    var x0 = Math.round(cx - dw / 2), y0 = by - dh + 2;
+    px(c, cx - Math.round(dw * .3) - 1, by + 1, Math.round(dw * .6) + 3, 1, "rgba(20,8,26,.45)");
+    c.imageSmoothingEnabled = false;
+    c.drawImage(S.img, fr * W, 0, W, H * V / dh, x0, by - V + 2, dw, V);             // при вылезании видна верхняя часть, низ — у земли
+    if (k === 1 && !vis) drawTentEyes(c, x0, y0, S.eyes[fr], t, i, openK == null ? (sz === 3 ? 99 : -1) : openK);
+  }
+  function oddPuff(c, cx, by, e, i, n, col) {                                         // фиолетовые искры перехода
+    for (var k = 0; k < n; k++) { var a = hash01(k * 7 + i) * 6.283, d = 3 + e * (8 + hash01(k + 3) * 10);
+      if (e < .9) px(c, Math.round(cx + Math.cos(a) * d), Math.round(by - 8 - Math.sin(a) * d * .7 - e * 6), 1, 1, k % 3 ? col : "#f1e4ff"); }
+  }
+  function drawOddPlant(c, pl, i, cx, by, t, inf, own) {                             // false — рисует прежний код (первая стадия)
+    var st = oddStageOf(inf), key = i + ":" + pl.planted, seen = oddSeen(), tr = (F.oddTr = F.oddTr || {})[key];
+    if (own) {
+      if (seen[key] == null) { seen[key] = st; try { localStorage.setItem("farm-odd-seen", JSON.stringify(seen)); } catch (e) {} }
+      else if (st > seen[key] && !tr) { tr = F.oddTr[key] = { from: seen[key], to: st, t0: t }; seen[key] = st; try { localStorage.setItem("farm-odd-seen", JSON.stringify(seen)); } catch (e) {} }
+    }
+    if (tr && t - tr.t0 >= ODD_TR_MS + (tr.to === 3 ? 700 : 0)) { delete F.oddTr[key]; tr = null; }
+    var g = Math.min(1, Math.max(0, (inf.f - .12) / .23));
+    if (!tr) {
+      if (st === -1) return false;
+      if (st === 0) drawCocoon(c, cx, by, t, i, g);
+      else drawTentacle(c, cx, by, t, i, st);
+      return true;
+    }
+    var e = (t - tr.t0) / ODD_TR_MS, ez2 = function (x) { x = Math.max(0, Math.min(1, x)); return 1 - Math.pow(1 - x, 3); };
+    if (tr.from === -1) {                                                              // росток обрастает тёмными нитями — они сплетаются в кокон снизу вверх
+      var hk = ez2((e - .15) / .7);
+      for (var k = 0; k < 6; k++) { var sx2 = cx + Math.round((k - 2.5) * 1.6), len = Math.round((4 + (k % 3) * 3) * Math.min(1, e / .35) * (1 - Math.max(0, (e - .6) / .4)));
+        for (var yy2 = 0; yy2 < len; yy2++) px(c, sx2 + Math.round(Math.sin(yy2 * .6 + k + t / 200) * .8), by - 1 - yy2, 1, 1, k % 2 ? "#3a1f52" : "#6e3f8a"); }
+      if (e > .15) drawCocoon(c, cx, by, t, i, 0, 0, 0, hk);
+      oddPuff(c, cx, by, e, i, 6, "#7a52b0");
+      return true;
+    }
+    if (tr.from === 0) {                                                               // кокон лопается — щупальце разворачивается и поднимается
+      if (e < .38) drawCocoon(c, cx + ((Math.floor(t / 60) % 2) ? 1 : -1) * (e > .12 ? 1 : 0), by, t, i, 1, e / .38);   // дрожит, шов разгорается
+      else {
+        var sp = (e - .38) * 14; if (e < .7) drawCocoon(c, cx, by, t, i, 1, 0, sp);    // половинки расходятся
+        var up = ez2((e - .42) / .5), S1 = tsz(tr.to);
+        drawTentacle(c, cx, by, t, i, tr.to, -1, .6 + .4 * up, S1.img.naturalHeight * (.6 + .4 * up) * up);
+        if (e > .4 && e < .5) px(c, cx - 1, by - 8, 3, 3, "#9a72d4");               // вспышка — фиолетовая, без белого
+        oddPuff(c, cx, by, (e - .38) / .62, i, 10, "#b080ee");
+      }
+      return true;
+    }
+    var Hf = tsz(tr.from).img.naturalHeight, Ht = tsz(tr.to).img.naturalHeight;     // рывок роста: новое щупальце вытягивается с лёгким перехлёстом
+    var gr = e < .7 ? ez2(e / .7) * 1.08 : 1.08 - .08 * ez2((e - .7) / .3), hNow = Hf + (Ht - Hf) * gr;
+    drawTentacle(c, cx, by, t, i, tr.to, -1, Math.min(1.12, hNow / Ht));
+    oddPuff(c, cx, by, e, i, 8, "#9a72d4");
+    if (e >= 1) { var oe = (t - tr.t0 - ODD_TR_MS) / 700, S = tsz(tr.to), n = S.eyes[0].length;   // у созревшего глаза распахиваются по очереди
+      drawTentacle(c, cx, by, t, i, tr.to, Math.floor(oe * (n + 1)));
+      var kk = Math.floor(oe * (n + 1)) - 1, fr = Math.floor((t + i * 700) / 380) % TENT_N;
+      if (kk >= 0 && kk < n) { var E = S.eyes[fr][kk], x0 = Math.round(cx - S.fw / 2), y0 = by - S.img.naturalHeight + 2; px(c, x0 + E[0] - 1, y0 + E[1], 3, 1, "#ffffff"); px(c, x0 + E[0], y0 + E[1] - 1, 1, 3, "#ffffff"); }
+    }
+    return true;
   }
   // пчёлы: пара кружит у улья; над грядкой, где собирают мёд, — две вокруг растения и одна носит мёд к улью и обратно.
   // Пиксель-другой на пчелу, рисуются вместе с фермой (8 кадров в секунду) — телефону не тяжело.
@@ -2866,6 +3016,7 @@
     drawMossOver(c, kit, now, t, L, seed + roofKey(kit) + ["barn", "mill", "oven", "shop"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
     if (CHEST_ON) drawChest(c, own);
     if (own) drawFx(c, t);
+    if (own) drawOddEye(c, t);
     drawBees(c, t, kit, plots, now);
     for (i = 0; i < 4; i++) {                                                      // дым из трубы
       var ph = (t / 1800 + i / 4) % 1;
@@ -4110,7 +4261,9 @@
       s.marks = marksOf(s).filter(function (m) { return !(m.idx === pl.idx && (m.kind === "star" || m.kind === "myth" || m.kind === "g2" || m.kind === "gseed" || m.kind === "gcross")) && !(inf.s.myth && (m.kind === "myth" || m.kind === "mythripe")); });
       var pts = " · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков");
       haptic("success"); addFx("harvest", pl.idx, inf.s);
-      if (hasB) { floatText(pl.idx, "+" + gain + " в амбар" + pts); barnAdd(inf.s.odd ? "p:eye" : inf.s.id, gain); flyFruit(pl.idx, inf.s, gain);
+      var oddW = inf.s.odd ? 1700 : 0;                                              // странное: сначала глаз над грядкой, урожай летит потом
+      if (inf.s.odd) { (F.oddFx = F.oddFx || []).push({ i: pl.idx, t0: Date.now() }); farmAnim(); setTimeout(function () { haptic("medium"); }, 480); setTimeout(function () { haptic("light"); }, 1150); }
+      if (hasB) { var gx0 = gain; setTimeout(function () { floatText(pl.idx, "+" + gx0 + " в амбар" + pts); flyFruit(pl.idx, inf.s, gx0); }, oddW); barnAdd(inf.s.odd ? "p:eye" : inf.s.id, gain);
         if (inf.s.shape === "grain" && showerNow(now)) { (s.wet = s.wet || []).push({ strain: inf.s.id, n: gain, dry_at: now + 3600 }); setTimeout(function () { floatText(pl.idx, "колосья мокрые — час сохнут", "big"); }, 700); } }
       else { floatText(pl.idx, "+" + gain * inf.s.dust + " ✦" + pts); s.dust += gain * inf.s.dust; flyDust(pl.idx); }
       if (gemX) setTimeout(function () { floatText(pl.idx, "самоцвет: урожай ×2!", "big"); }, starX ? 700 : 250);
@@ -4121,6 +4274,7 @@
       if (hon && !hon.got) { if (hon.until > now) setTimeout(function () { floatText(pl.idx, "пчёлы не успели — мёда нет", "big"); }, starX || gemX || mossX ? 1100 : 650); else hiveAdd(hon.item, 1); }
       s.plots[pl.idx] = { idx: pl.idx, crop: null }; renderFarm();   // сразу, не дожидаясь сервера
       if (!inf.s.myth && !inf.s.odd) setTimeout(function () { flySeeds(pl.idx, inf.s); }, 260);   // странное — семя может и не остаться: летит после ответа
+      var tH = Date.now();
       return farmCall("/api/farm/harvest", { idx: pl.idx }).then(function (r) {
         if (r.error) return;
         if (r.double) { evFx("double", pl.idx); floatText(pl.idx, "×2 щедрый урожай!", "big"); }
@@ -4131,7 +4285,7 @@
           (F.beamFx = F.beamFx || []).push({ i: r.sunbeam, t0: Date.now() }); farmAnim(); haptic("light");
           setTimeout(function () { haptic("success"); floatText(r.sunbeam, "луч солнца — созрело!", "big"); }, 440);
         }
-        if (inf.s.odd) { if (r.seeds) flySeeds(pl.idx, inf.s); setTimeout(function () { floatText(pl.idx, !r.seeds ? "…семени не осталось" : "…осталось странное семя", "big"); }, 450); }
+        if (inf.s.odd) setTimeout(function () { if (r.seeds) flySeeds(pl.idx, inf.s); setTimeout(function () { floatText(pl.idx, !r.seeds ? "…семени не осталось" : "…осталось странное семя", "big"); }, 450); }, Math.max(0, 1900 - (Date.now() - tH)));
         else if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в инвентарь", "seedf"); }, 450);
         if (r.vinyl) F.items = null;
         var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl); };
