@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611180247";
+    var BUILD = "202611180312";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1963,6 +1963,29 @@
     Object.keys((st && st.strains) || {}).forEach(function (id) { var x = st.strains[id]; if (x && !x.base && !CROPS0[id]) { var k = x.shape + "/" + x.color; (by[k] = by[k] || []).push(id); } });
     Object.keys(by).forEach(function (n) { if (by[n].length > 1) by[n].sort().forEach(function (id, i) { SIBL[id] = i; }); });
   }
+  // «странные» гибриды ночью (22–06 по часам телефона) светятся красными точками (его выбор 2026-11-18).
+  // Точки — две из красных пикселей раскраски (если их нет у формы — две по кроне). Каждая пульсирует со своей фазой.
+  var GLOWC = {};
+  function oddGlowNow() { var h = new Date().getHours(); return NIGHT_TEST || h >= 22 || h < 6; }
+  function oddGlow(c, x, yb, rows, s, t) {
+    var key = s.shape + ":" + rows.join("|"), pts = GLOWC[key];
+    if (!pts) {
+      var roles = ROLES[s.shape] || DIG, all = [], red = [], h = rows.length;
+      for (var j = 0; j < h; j++) for (var i = 0; i < rows[j].length; i++) {
+        var ch = rows[j][i]; if (ch === ".") continue;
+        all.push([i, j]); if (roles[ch] === 4) red.push([i, j]);
+      }
+      var src = red.length ? red : all;                                       // по две точки на кустик, вразброс
+      pts = GLOWC[key] = [1, 3].map(function (k) { return src[Math.floor(src.length * k / 4)]; }).filter(Boolean);
+      pts.h = h;
+    }
+    pts.forEach(function (q, k) {
+      var a = .5 + .5 * Math.sin(t / 380 + k * 1.7), X = x + q[0], Y = yb - pts.h + 1 + q[1];
+      px(c, X - 2, Y, 5, 1, "rgba(255,42,58," + (a * .2).toFixed(2) + ")"); px(c, X, Y - 2, 1, 5, "rgba(255,42,58," + (a * .2).toFixed(2) + ")");
+      px(c, X - 1, Y - 1, 3, 3, "rgba(255,42,58," + (.12 + a * .35).toFixed(2) + ")");
+      px(c, X, Y, 1, 1, a > .6 ? "#ffd6da" : a > .3 ? "#ff6b78" : "#ff2a3a");
+    });
+  }
   function sprS(c, x, yb, rows, s, dead) {
     var roles = ROLES[s.shape] || DIG, pal = dead ? DEAD : s.color === "_sil" ? SIL : palOf(s), h = rows.length;
     for (var j = 0; j < h; j++) for (var i = 0; i < rows[j].length; i++) {
@@ -1991,7 +2014,8 @@
     });
     var bo = boosts();                                      // Солнцестояние: политое время внутри него считается дважды (рост ×2)
     parts.forEach(function (x) { wetT += x[1] - x[0]; bo.forEach(function (b) { wetT += Math.max(0, Math.min(x[1], b[1], t) - Math.max(x[0], b[0])); }); });
-    var need = s.minutes * 60, g = pl.grown + wetT, ripe = g >= need, dryFor = raining ? 0 : t - lastWet;
+    var f0 = farmOf(), fast = !s.odd && f0 && f0.plots && near4(pl.idx).some(function (j) { var q = f0.plots[j], g0 = q && q.crop && ss[q.crop]; return g0 && g0.color === "anomaly" && !g0.odd; });
+    var need = s.minutes * 60 * (fast ? .75 : 1), g = pl.grown + wetT, ripe = g >= need, dryFor = raining ? 0 : t - lastWet;   // рядом со «странным» гибридом — на четверть раньше (как ODD_NEAR на сервере)
     return { s: s, need: need, g: g, f: Math.min(1, g / need), ripe: ripe, wet: !ripe && (raining || t < pl.water_until), shower: raining,
              dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: need - g, wetLeft: raining ? 1e9 : pl.water_until - t };
   }
@@ -2194,6 +2218,7 @@
         continue;
       }
       sprS(c, p[0] - (sp[0].length >> 1), p[1], sp, s, inf.dead);
+      if (s.color === "anomaly" && !inf.dead && st >= 2 && oddGlowNow()) oddGlow(c, p[0] - (sp[0].length >> 1), p[1], sp, s, t + n * 700 + i * 300);
       if (st === 3 && (Math.floor(t / 350) + n * 5 + i * 3) % 9 === 0) {                    // созрело — по растениям бегают искорки
         var top = p[1] - sp.length - 2; px(c, p[0], top - 1, 1, 3, "#ffffff"); px(c, p[0] - 1, top, 3, 1, "#ffffff"); px(c, p[0], top, 1, 1, C.gold);
       }

@@ -345,8 +345,14 @@ function lastWet(p: any[], t: number) {                   // когда гряд
   for (const [, s1] of showersIn(Number(p[2]), t)) x = Math.max(x, s1);
   return x;
 }
-function stateOf(p: any[], s: Strain, t: number, boost: [number, number][] = []) {
-  const ripe = growth(p, t, boost) >= s.minutes * 60;
+// рядом (через сторону) со «странным» гибридом растение созревает на четверть раньше (его выбор 2026-11-18); само странное — нет
+const ODD_NEAR = 0.75;
+function fastAt(all: any[][], ss: Record<string, Strain>, idx: number) {
+  if (ss[String(all.find((x) => Number(x[0]) === idx)?.[1])]?.odd) return false;
+  return all.some((x) => near4(idx).includes(Number(x[0])) && ss[x[1]]?.color === "anomaly" && !ss[x[1]].odd);
+}
+function stateOf(p: any[], s: Strain, t: number, boost: [number, number][] = [], fast = false) {
+  const ripe = growth(p, t, boost) >= s.minutes * 60 * (fast ? ODD_NEAR : 1);
   const dryFor = weatherOn(t) === "shower" ? 0 : t - lastWet(p, t);
   return { ripe, dead: !ripe && s.bonus !== "hardy" && dryFor > DRY_LIMIT };
 }
@@ -574,7 +580,7 @@ async function mythTick(uid: number) {
   const ss = await strains(plots.map((p) => String(p[1])));
   for (const p of plots) {
     const s = ss[String(p[1])], i = Number(p[0]);
-    if (!s || !s.myth || !stateOf(p, s, t, boost).ripe) continue;
+    if (!s || !s.myth || !stateOf(p, s, t, boost, fastAt(plots, ss, i)).ripe) continue;
     await q("INSERT OR IGNORE INTO f_monomark (user, idx, kind, at, until) VALUES (?, ?, 'mythripe', ?, ?)", [uid, i, t, t + MYTH_WAIT]);
     const [m] = await q("SELECT until FROM f_monomark WHERE user = ? AND idx = ? AND kind = 'mythripe'", [uid, i]);
     if (m && Number(m[0]) <= t) await DB.batch([
@@ -812,7 +818,8 @@ export async function water(u: any, idx: number) {
   }
   const [p] = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ? AND idx = ?`, [u.id, idx]);
   if (!p) return { error: "Грядка пустая" };
-  const s = (await strains([p[1]]))[p[1]], t = now(), boost = await boostOf(u.id), st = stateOf(p, s, t, boost);
+  const all0 = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [u.id]), ss0 = await strains(all0.map((x) => x[1]));
+  const s = ss0[p[1]], t = now(), boost = await boostOf(u.id), st = stateOf(p, s, t, boost, fastAt(all0, ss0, idx));
   if (st.dead) return { error: "Растение засохло — его можно только убрать" };
   if (st.ripe) return { error: "Уже созрело — собирай" };
   if (weatherOn(t) === "shower") return { error: "Сегодня лунный ливень — грядки политы сами" };
@@ -836,7 +843,7 @@ export async function harvest(u: any, idx: number) {
   const [p] = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ? AND idx = ?`, [u.id, idx]);
   if (!p) return { error: "Грядка пустая" };
   const t = now(), all = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [u.id]), boost = await boostOf(u.id);
-  const ss = await strains(all.map((x) => x[1])), s = ss[p[1]], st = stateOf(p, s, t, boost);
+  const ss = await strains(all.map((x) => x[1])), s = ss[p[1]], st = stateOf(p, s, t, boost, fastAt(all, ss, idx));
   if (!st.ripe && !st.dead) return { error: "Ещё не созрело" };
   // грядку забирает ровно один запрос: повторное нажатие не заплатит дважды
   if (!(await q("DELETE FROM f_plots WHERE user = ? AND idx = ? AND planted = ? RETURNING 1", [u.id, idx, p[2]])).length) return { error: "Уже собрано" };
@@ -881,7 +888,7 @@ export async function harvest(u: any, idx: number) {
   const r0 = Math.floor(idx / 3), c0 = idx % 3;
   const near = all.filter((x) => {
     const i = Number(x[0]), r = Math.floor(i / 3), c = i % 3;
-    return i !== idx && Math.abs(r - r0) + Math.abs(c - c0) === 1 && x[1] !== p[1] && ss[x[1]] && !ss[x[1]].myth && stateOf(x, ss[x[1]], t, boost).ripe;
+    return i !== idx && Math.abs(r - r0) + Math.abs(c - c0) === 1 && x[1] !== p[1] && ss[x[1]] && !ss[x[1]].myth && stateOf(x, ss[x[1]], t, boost, fastAt(all, ss, i)).ripe;
   });
   // розовая самоцветная пыль: гибрид наверняка — с соседом другого сорта (зрелость не нужна), а нет соседа — с базовым растением станции;
   // новая форма и новый цвет выпадают втрое чаще
@@ -911,7 +918,7 @@ export async function harvest(u: any, idx: number) {
                     DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'frost', ?)").bind(u.id, t)]);
   }
   if (s.color === "sun" && Math.random() < EV_SUN) {
-    const grow = all.filter((x) => Number(x[0]) !== idx && ss[x[1]] && !ss[x[1]].odd && !stateOf(x, ss[x[1]], t, boost).ripe && !stateOf(x, ss[x[1]], t, boost).dead);
+    const grow = all.filter((x) => Number(x[0]) !== idx && ss[x[1]] && !ss[x[1]].odd && !stateOf(x, ss[x[1]], t, boost, fastAt(all, ss, Number(x[0]))).ripe && !stateOf(x, ss[x[1]], t, boost).dead);
     if (grow.length) {
       const x = grow[Math.floor(Math.random() * grow.length)]; sunbeam = Number(x[0]);
       await DB.batch([DB.prepare("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ?").bind(ss[x[1]].minutes * 60, t, t, u.id, sunbeam),
@@ -1724,7 +1731,8 @@ export async function gemDust(u: any, idx: number, kind = "moon") {
   const g = GEM_KINDS[kind]; if (!g) return { error: "Такой пыли нет" };
   const [p] = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ? AND idx = ?`, [u.id, idx]);
   if (!p) return { error: "Грядка пустая" };
-  const t = now(), boost = await boostOf(u.id), s = (await strains([String(p[1])]))[String(p[1])], st = stateOf(p, s, t, boost);
+  const allg = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [u.id]), ssg = await strains(allg.map((x) => String(x[1])));
+  const t = now(), boost = await boostOf(u.id), s = ssg[String(p[1])], st = stateOf(p, s, t, boost, fastAt(allg, ssg, idx));
   if (st.ripe && !g.mark) return { error: "Уже созрело — эта пыль не нужна, собирай" };   // лунная и золотая — для растущих; бирюзовая, травяная, розовая срабатывают при сборе — их можно и на созревшее (его решение 2026-11-17)
   if (st.dead) return { error: "Растение засохло" };
   if (kind === "moon" && s.odd) return { error: "Странное растение не торопится — эта пыль на него не действует" };
