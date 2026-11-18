@@ -320,6 +320,44 @@
     for (var e = 0; e < 3; e++) { var ph = (t * .9 + hz(e + sd)) % 1; ctx.fillStyle = ph < .5 ? pal[1] : pal[2];   // искры вверх
       ctx.fillRect(Math.round(cx + Math.sin(t * 4 + e * 2 + sd) * (w * .8)), Math.round(base - h - ph * h * 1.2), 1, 1); }
   }
+  // живые плитки (его просьба 2026-11-18): у кристаллов — внутреннее свечение и искры, у лавового камня мерцают оранжевые жилы.
+  // Всё считается из самой его картинки: искры — только внутри кристалла, в его сетке 2 px; жилы — его оранжевые пиксели, три участка мерцают вразнобой.
+  var TFX = {};
+  function tfxOf(k) {
+    if (TFX[k]) return TFX[k];
+    var im = IMG[k], w = im.width, h = im.height, c = mk(w, h), g = c.getContext("2d"); g.drawImage(im, 0, 0);
+    var d = g.getImageData(0, 0, w, h).data, o = { pts: [], hot: [], dark: [] }, x, y, b;
+    var A = function (x2, y2) { return x2 >= 0 && y2 >= 0 && x2 < w && y2 < h && d[(y2 * w + x2) * 4 + 3] > 0; };
+    if (k === "t_lava") {
+      for (b = 0; b < 3; b++) { var hc = mk(w, h), dc = mk(w, h), hg = hc.getContext("2d"), dg = dc.getContext("2d");
+        for (y = 0; y < h; y += 2) for (x = 0; x < w; x += 2) { var q = (y * w + x) * 4;
+          if (d[q + 3] && d[q] > 140 && d[q + 2] < 110 && Math.min(2, Math.floor((x + y * .6) / ((w + h * .6) / 3))) === b) { px(hg, x, y, 2, 2, "#ffc45a"); px(dg, x, y, 2, 2, "#3a0c06"); } }
+        o.hot.push(hc); o.dark.push(dc); }
+    } else for (y = 0; y < h; y += 2) for (x = 0; x < w; x += 2) if (A(x, y) && A(x - 2, y) && A(x + 3, y) && A(x, y - 2) && A(x, y + 3)) o.pts.push([x, y]);
+    return (TFX[k] = o);
+  }
+  function tileFx(k, x0, y0, t, ph) {
+    var o = tfxOf(k), i;
+    if (k === "t_lava") {
+      for (i = 0; i < 3; i++) {
+        var f = .5 + .5 * Math.sin(t * (2.3 + i * .9) + ph + i * 2.1); f = f * (.65 + .35 * hz(Math.floor(t * 10) + i * 31 + ph));   // медленное дыхание жара + мелкая дрожь
+        if (f < .35) { ctx.globalAlpha = (.35 - f) * 1.1; ctx.drawImage(o.dark[i], x0, y0); }                                    // жила остывает — темнеет
+        ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = Math.max(0, f - .3) * .95; ctx.drawImage(o.hot[i], x0, y0);        // разгорается — до жёлто-белого
+        ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
+      }
+      return;
+    }
+    ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = .08 + .16 * (.5 + .5 * Math.sin(t * 1.6 + ph)); ctx.drawImage(IMG[k], x0, y0);   // свет изнутри: кристалл плавно разгорается и гаснет
+    ctx.globalAlpha = 1;
+    if (o.pts.length) for (i = 0; i < 5; i++) {                          // искры: вспыхивают на миг в случайной точке внутри кристалла
+      var per = 1.5 + i * .37, cyc = t / per + i * .29 + ph, n = Math.floor(cyc), u = cyc - n;
+      if (u > .32) continue;
+      var kk = Math.sin(u / .32 * 3.1416), pt = o.pts[Math.floor(hz(n * 7.3 + i * 13 + ph) * o.pts.length)], sx = x0 + pt[0], sy = y0 + pt[1];
+      px(ctx, sx, sy, 2, 2, "rgba(255,255,255," + kk.toFixed(2) + ")");
+      if (kk > .55) { var a2 = ((kk - .55) * 1.6).toFixed(2), cc2 = "rgba(220,240,255," + a2 + ")"; px(ctx, sx - 2, sy, 2, 2, cc2); px(ctx, sx + 2, sy, 2, 2, cc2); px(ctx, sx, sy - 2, 2, 2, cc2); px(ctx, sx, sy + 2, 2, 2, cc2); }
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
   function img(name, x, y) { var im = IMG[name]; ctx.drawImage(im, Math.round(x), Math.round(y)); }
   var T = 0;
   function draw(ts) {
@@ -352,7 +390,7 @@
     cur.decor.forEach(function (d) { if (d.flat) return; list.push({ z: d.u + d.v - .5, f: function () { var s = S(d.u, d.v), im = IMG[d.k]; img(d.k, s[0] - im.width / 2, s[1] - im.height + 6); } }); });
     cur.props.forEach(function (p) { list.push({ z: p.i + p.j + 1, f: function () {
       var k = p.k === "brazier" ? "brazier_f" + (Math.floor(T * 9 + p.i * 3 + p.j) % 9) : p.k;     // жаровня — его 9 кадров огня, тумба неподвижна
-      if (k.charAt(1) === "_") { var s0 = S(p.i, p.j); return img(k, s0[0] - TW / 2, s0[1] - 36); }   // предмет со своей плитки — точно над ней
+      if (k.charAt(1) === "_") { var s0 = S(p.i, p.j), tx = Math.round(s0[0] - TW / 2), ty = Math.round(s0[1] - 36); img(k, tx, ty); return tileFx(k, tx, ty, T, p.i * 3.1 + p.j * 1.7); }   // предмет со своей плитки — точно над ней
       var s = S(p.i + .5, p.j + .5), im = IMG[k], x0 = Math.round(s[0] - im.width / 2), y0 = Math.round(s[1] - im.height + 16); img(k, x0, y0); } }); });
     cur.drops.forEach(function (d) { list.push({ z: d.u + d.v, f: function () { var s = S(d.u, d.v), bob = Math.round(Math.sin(d.t * 5) * 2); px(ctx, s[0] - 5, s[1], 10, 2, "rgba(8,6,10,.4)"); ctx.drawImage(boneC, Math.round(s[0] - 6), Math.round(s[1] - 12 + bob)); } }); });
     cur.mobs.forEach(function (m) { if (m.hp <= 0) return; list.push({ z: m.u + m.v, f: function () {
@@ -374,7 +412,9 @@
     // свет
     L.globalCompositeOperation = "source-over"; L.fillStyle = "#8a84aa"; L.fillRect(0, 0, W / 4, H / 4); L.globalCompositeOperation = "lighter";
     cur.walls.forEach(function (wl, n3) { if (wl.k !== "torch") return; var s = wl.side === "v" ? S(wl.i + .5, wl.j) : S(wl.i, wl.j + .5); glow(s[0], s[1] - 52, 150, "rgba(255,160,80,A)", .65 * (.9 + Math.sin(t * 9 + n3) * .08)); });
-    cur.props.forEach(function (p) { var c2 = GLOWS[p.k]; if (!c2) return; var s = S(p.i + .5, p.j + .5); glow(s[0], s[1] - 20, 100, c2, .55 * (.9 + Math.sin(t * 2 + p.i) * .1)); });
+    cur.props.forEach(function (p) { var c2 = GLOWS[p.k]; if (!c2) return; var s = S(p.i + .5, p.j + .5); 
+      var gk = p.k === "t_lava" ? .7 + .2 * Math.sin(t * 2.3 + p.i * 3.1 + p.j * 1.7) + .1 * Math.sin(t * 11.7 + p.i) : p.k.charAt(1) === "_" ? .78 + .22 * Math.sin(t * 1.6 + p.i * 3.1 + p.j * 1.7) : .9 + Math.sin(t * 2 + p.i) * .1;   // живые плитки светят в такт своей анимации
+      glow(s[0], s[1] - 20, 100, c2, .55 * gk); });
     for (j = 0; j < cur.h; j++) for (i = 0; i < cur.w; i++) if (cur.floor[j][i] === 7 && cur.open[j][i]) { var rs2 = S(i + .5, j + .5); glow(rs2[0], rs2[1], 80, "rgba(120,180,255,A)", .55 + .2 * Math.sin(t * 2.2 + i)); }   // руна светится
     var hs = S(hero.u, hero.v); glow(hs[0], hs[1] - 18, 90, "rgba(225,215,255,A)", .7);
     cur.drops.forEach(function (d) { var s = S(d.u, d.v); glow(s[0], s[1] - 6, 20, "rgba(255,240,200,A)", .35); });
