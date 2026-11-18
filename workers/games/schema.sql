@@ -98,3 +98,6 @@ DROP INDEX IF EXISTS g_daypts_top;
 -- суммы за день больше не копятся: вкладка «Сегодня» убрана (2026-11-16). Триггер снимаем — это минус строка записи с каждого начисления.
 -- Таблица g_daypts остаётся пустой, на случай возврата вкладки.
 DROP TRIGGER IF EXISTS g_events_daypts;
+-- накопленное время в играх (2026-11-18, строчка «всего в игре» на карточке бота /gametime): действия старше 30 дней удаляются,
+-- поэтому завершённые сутки складываются сюда. sec — секунды за сутки до upto (номер суток по Минску, не включая), since — первое действие.
+CREATE TABLE IF NOT EXISTS g_playtime (user INTEGER PRIMARY KEY, sec INTEGER NOT NULL DEFAULT 0, upto INTEGER NOT NULL DEFAULT 0, since INTEGER NOT NULL DEFAULT 0);

@@ -312,6 +312,43 @@ export default {
   },
 };
 
+// ---------- время в играх ----------
+// Считаем по действиям, за которые идут очки. Заход — действия подряд с паузами до 5 минут; на каждый заход прибавляется минута.
+// Сутки — по Минску; в полночь заход обрывается, поэтому сутки считаются независимо и их можно складывать по одним.
+function playDays(ev: any[][], day0: number, n: number) {
+  const days = Array.from({ length: n }, (_, i) => ({ day: new Date((day0 + i) * 86400000).toISOString().slice(0, 10), sec: 0, acts: 0, visits: 0, by: {} as Record<string, number> }));
+  const hours = Array.from({ length: 24 }, () => 0), games: Record<string, { name: string; sec: number; acts: number }> = {};
+  let prev = 0, prevDay = -1;
+  for (const [at0, reason] of ev) {
+    const at = Number(at0), loc = at + TZ_SHIFT, di = Math.floor(loc / 86400) - day0, d = days[di]; if (!d) continue;
+    const cont = prev > 0 && di === prevDay && at - prev <= 300, add = cont ? at - prev : 60;
+    if (!cont) d.visits++;
+    const game = String(reason || "Игры").split(",")[0].trim() || "Игры";       // «Угадай трек, серия» — та же игра; время идёт игре этого действия
+    d.sec += add; d.acts++; d.by[game] = (d.by[game] || 0) + add; hours[Math.floor(loc % 86400 / 3600)] += add;
+    (games[game] ??= { name: game, sec: 0, acts: 0 }).sec += add; games[game].acts++;
+    prev = at; prevDay = di;
+  }
+  return { days, hours, games: Object.values(games).sort((a, b) => b.sec - a.sec) };
+}
+// «Всего в игре»: действия старше 30 дней удаляются, поэтому завершённые сутки (до today, не включая) складываем в g_playtime.
+// Читает только то, что ещё не сложено. Сегодняшние сутки сюда не входят — их прибавляет тот, кто спрашивает.
+let FOLD_DAY = 0;
+async function foldPlay(uid: number, today: number): Promise<{ sec: number; since: number }> {
+  const [row] = await q("SELECT sec, upto, since FROM g_playtime WHERE user = ?", [uid]);
+  const have = row ? Number(row[0]) : 0, upto = row ? Number(row[1]) : -1, since0 = row ? Number(row[2]) : 0;
+  if (upto >= today) return { sec: have, since: since0 };
+  const ev = await q("SELECT at, reason FROM g_events WHERE user = ? AND at >= ? AND at < ? AND reason != 'unlink' ORDER BY at",
+                     [uid, upto < 0 ? 0 : upto * 86400 - TZ_SHIFT, today * 86400 - TZ_SHIFT]);
+  if (!ev.length && !row) return { sec: 0, since: 0 };
+  const first = ev.length ? Math.floor((Number(ev[0][0]) + TZ_SHIFT) / 86400) : today;
+  const add = ev.length ? playDays(ev, first, today - first).days.reduce((a, d) => a + d.sec, 0) : 0, since = since0 || (ev.length ? Number(ev[0][0]) : 0);
+  // складывает ровно один запрос: условие «upto прежний» не даст двум одновременным запросам прибавить дважды
+  await q(`INSERT INTO g_playtime (user, sec, upto, since) VALUES (?, ?, ?, ?)
+           ON CONFLICT(user) DO UPDATE SET sec = g_playtime.sec + excluded.sec, upto = excluded.upto, since = CASE WHEN g_playtime.since > 0 THEN g_playtime.since ELSE excluded.since END
+           WHERE g_playtime.upto = ?`, [uid, add, today, since, upto]);
+  return { sec: have + add, since };
+}
+
 async function handle(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const origin = req.headers.get("origin") || "";
@@ -378,6 +415,15 @@ async function handle(req: Request): Promise<Response> {
       }
       if (body.consumed != null) {
         await q("INSERT INTO g_meta (key, value) VALUES ('consumed', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE g_meta.value IS NOT excluded.value", [String(body.consumed)]);
+        const today = Math.floor((now() + TZ_SHIFT) / 86400);
+        if (FOLD_DAY !== today) {                                  // раз в сутки: время тех, чьи действия скоро удалятся, — в накопленное
+          const [m] = await q("SELECT value FROM g_meta WHERE key = 'playfold'");
+          if (!m || Number(m[0]) !== today) {
+            for (const [u] of await q("SELECT DISTINCT user FROM g_events WHERE at < ?", [now() - 28 * 86400])) await foldPlay(Number(u), today);
+            await q("INSERT INTO g_meta (key, value) VALUES ('playfold', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(today)]);
+          }
+          FOLD_DAY = today;
+        }
         await q("DELETE FROM g_events WHERE +id <= ? AND at < ?", [Number(body.consumed), now() - 30 * 86400]);
         await q("DELETE FROM g_daypts WHERE day < ?", [Math.floor((now() + TZ_SHIFT) / 86400) - 2]);   // «+id» — искать по индексу времени, а не перебирать номера
       }
@@ -397,25 +443,12 @@ async function handle(req: Request): Promise<Response> {
       await DB.prepare("INSERT OR REPLACE INTO g_avatars (key, data) VALUES (?, ?)").bind(b.key, bytes.buffer).run();
       return json({ ok: true });
     }
-    // время в играх для карточки бота (команда /time в чате, 2026-11-18): считаем по действиям, за которые идут очки.
-    // Заход — действия подряд с паузами до 5 минут; на каждый заход прибавляется минута. Сутки — по Минску, последние 7.
+    // время в играх для карточки бота (команда /gametime в чате, 2026-11-18) — см. playDays и foldPlay ниже
     if (req.method === "GET" && url.pathname === "/bot/playtime") {
-      const uid = Number(url.searchParams.get("user") || 0), t = now(), day0 = Math.floor((t + TZ_SHIFT) / 86400) - 6;
+      const uid = Number(url.searchParams.get("user") || 0), today = Math.floor((now() + TZ_SHIFT) / 86400), day0 = today - 6;
       const ev = await q("SELECT at, reason FROM g_events WHERE user = ? AND at >= ? AND reason != 'unlink' ORDER BY at LIMIT 30000", [uid, day0 * 86400 - TZ_SHIFT]);
-      const days = Array.from({ length: 7 }, (_, i) => ({ day: new Date((day0 + i) * 86400000).toISOString().slice(0, 10), sec: 0, acts: 0, visits: 0, by: {} as Record<string, number> }));
-      const hours = Array.from({ length: 24 }, () => 0), games: Record<string, { name: string; sec: number; acts: number }> = {};
-      let prev = 0, prevDay = -1;
-      for (const [at0, reason] of ev) {
-        const at = Number(at0), loc = at + TZ_SHIFT, di = Math.floor(loc / 86400) - day0, d = days[di]; if (!d) continue;
-        const cont = prev > 0 && di === prevDay && at - prev <= 300, add = cont ? at - prev : 60;
-        if (!cont) d.visits++;
-        const game = String(reason || "Игры").split(",")[0].trim() || "Игры";       // «Угадай трек, серия» — та же игра; время идёт игре этого действия
-        d.sec += add; d.acts++; d.by[game] = (d.by[game] || 0) + add; hours[Math.floor(loc % 86400 / 3600)] += add;
-        (games[game] ??= { name: game, sec: 0, acts: 0 }).sec += add; games[game].acts++;
-        prev = at; prevDay = di;
-      }
-      const [[since]] = await q("SELECT MIN(at) FROM g_events WHERE user = ?", [uid]);
-      return json({ days, hours, games: Object.values(games).sort((a, b) => b.sec - a.sec), since: Number(since) || 0 });
+      const week = playDays(ev, day0, 7), all = await foldPlay(uid, today);
+      return json({ ...week, total: all.sec + week.days[6].sec, since: all.since || (ev.length ? Number(ev[0][0]) : 0) });
     }
     if (req.method === "GET" && url.pathname === "/bot/weather") return json(farm.weatherView(now()));   // для объявлений бота в чате
     if (req.method === "GET" && url.pathname === "/bot/mono") return json(await farm.monoFeed(Number(url.searchParams.get("after")) || 0));   // события моно-фермы — объявить в чате
