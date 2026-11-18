@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611181712";
+    var BUILD = "202611181726";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2014,16 +2014,20 @@
     });
     var bo = boosts();                                      // Солнцестояние: политое время внутри него считается дважды (рост ×2)
     parts.forEach(function (x) { wetT += x[1] - x[0]; bo.forEach(function (b) { wetT += Math.max(0, Math.min(x[1], b[1], t) - Math.max(x[0], b[0])); }); });
-    // Рядом со странным растением (и «странным» гибридом) созревает раньше — до четверти срока. Доля — та часть жизни растения,
-    // которую странный сосед простоял рядом (как fastAt на сервере): подсаженное к почти созревшему почти ничего не даёт.
-    var f0 = farmOf(), odds = [];
-    if (!s.odd && f0 && f0.plots) near4(pl.idx).forEach(function (j) { var q = f0.plots[j], g0 = q && q.crop && ss[q.crop]; if (g0 && g0.color === "anomaly") odds.push(q.planted); });
-    var shareAt = function (tt) { var life = Math.max(1, tt - pl.planted), sh = 0; odds.forEach(function (q0) { sh = Math.max(sh, Math.min(1, Math.max(0, tt - Math.max(pl.planted, q0)) / life)); }); return sh; };
-    var fast = shareAt(t), full = s.minutes * 60, need = full * (1 - .25 * fast), g = pl.grown + wetT, ripe = g >= need, dryFor = raining ? 0 : t - lastWet;
-    var left = need - g;                                    // доля растёт со временем — уточняем, сколько осталось на самом деле
-    if (odds.length && !ripe) for (var it = 0; it < 6; it++) left = Math.max(0, full * (1 - .25 * shareAt(t + left)) - g);
+    // Рядом со странным растением (и «странным» гибридом) созревает раньше — до 12% срока (odd_near с сервера). Доля — та часть жизни
+    // растения, которую странный сосед простоял рядом и ещё ускорял (как fastAt на сервере). Странное растение ускоряет только первые
+    // сутки от первой посадки (odd_win, odd_for); «странный» гибрид — пока стоит.
+    var f0 = farmOf(), odds = [], cut = 1 - ((f0 && f0.odd_near) || .88);
+    if (!s.odd && f0 && f0.plots) near4(pl.idx).forEach(function (j) { var q = f0.plots[j], g0 = q && q.crop && ss[q.crop];
+      if (g0 && g0.color === "anomaly") odds.push([q.planted, g0.odd ? (f0.odd_win || q.planted) + (f0.odd_for || 86400) : 1e12]); });
+    var shareAt = function (tt) { var life = Math.max(1, tt - pl.planted), sh = 0;
+      odds.forEach(function (o) { sh = Math.max(sh, Math.min(1, Math.max(0, Math.min(tt, o[1]) - Math.max(pl.planted, o[0])) / life)); }); return sh; };
+    var fast = shareAt(t), fastOn = odds.some(function (o) { return t < o[1]; });
+    var full = s.minutes * 60, need = full * (1 - cut * fast), g = pl.grown + wetT, ripe = g >= need, dryFor = raining ? 0 : t - lastWet;
+    var left = need - g;                                    // доля меняется со временем — уточняем, сколько осталось на самом деле
+    if (odds.length && !ripe) for (var it = 0; it < 6; it++) left = Math.max(0, full * (1 - cut * shareAt(t + left)) - g);
     return { s: s, need: need, g: g, f: Math.min(1, g / need), ripe: ripe, wet: !ripe && (raining || t < pl.water_until), shower: raining,
-             dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: left, fast: fast, wetLeft: raining ? 1e9 : pl.water_until - t };
+             dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: left, fast: fastOn ? fast : 0, wetLeft: raining ? 1e9 : pl.water_until - t };
   }
   function strainCode(s) { return s.base ? "" : "сорт " + s.id.slice(1, 5).toUpperCase(); }
   function describe(s) {
@@ -5684,7 +5688,7 @@
   function visit(pub) {
     call("/api/farm/visit", { pub: pub }).then(function (v) {
       if (v.error) return toast(v.error);
-      F.visiting = { pub: pub, seed: parseInt(pub.slice(0, 6), 16), rain_until: v.rain_until, plots: v.plots, now: v.now, fetched: Date.now(),
+      F.visiting = { pub: pub, seed: parseInt(pub.slice(0, 6), 16), rain_until: v.rain_until, plots: v.plots, now: v.now, fetched: Date.now(), odd_win: v.odd_win, odd_for: v.odd_for, odd_near: v.odd_near,
                      strains: v.strains, dry_limit: v.dry_limit, weather: v.weather, showers: v.showers,
                      builds: v.builds || [], jobs: v.jobs || [], levels: v.levels || {}, mono: v.mono, marks: v.marks || [], boost: v.boost || [], roof: v.roof };            // постройки соседа — иначе в гостях видны пустые участки
       show("farm-visit"); $("vtitle").textContent = v.name;

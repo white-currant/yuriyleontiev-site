@@ -346,19 +346,27 @@ function lastWet(p: any[], t: number) {                   // когда гряд
   for (const [, s1] of showersIn(Number(p[2]), t)) x = Math.max(x, s1);
   return x;
 }
-// Рядом (через сторону) со странным растением или «странным» гибридом растение созревает раньше — до четверти срока (его выбор 2026-11-18).
-// С 2026-11-18 ускоряет и само странное растение, пока растёт (его просьба). Странное растение само не ускоряется.
-// Баланс: ускорение — не порог, а доля. Считается та часть жизни растения, которую сосед простоял рядом: посадили вместе или сосед
-// уже рос — вся четверть; подсадили странное к почти созревшему — почти ничего. Иначе одно семя с лопатой «дозревало» бы всю ферму по кругу.
-// Несколько странных соседей не складываются — берётся лучший.
-const ODD_NEAR = 0.75;
-function fastAt(all: any[][], ss: Record<string, Strain>, idx: number, t = now()): number {
+// Рядом (через сторону) со странным растением или «странным» гибридом растение созревает раньше.
+// Его решения 2026-11-18: ускоряет и само странное растение, пока растёт; сила — 12% срока (было 25% — «такая большая разница»);
+// странное растение ускоряет только первые сутки (ODD_FOR) — иначе держатель семени ускорял бы грядки без конца.
+// Сутки идут от первой посадки (f_evlog «odd:win»): лопата и пересадка отсчёт не обнуляют, новый начинается после сбора.
+// Баланс: ускорение — не порог, а доля. Считается та часть жизни растения, которую сосед простоял рядом и ещё ускорял: посадили
+// вместе или сосед уже рос — все 12%; подсадили странное к почти созревшему — почти ничего. Несколько соседей не складываются.
+// Странное растение само не ускоряется. «Странные» гибриды (растут как обычные) ускоряют, пока стоят.
+const ODD_NEAR = 0.88, ODD_FOR = DAY;
+async function oddWin(uid: number): Promise<number> {              // когда у игрока пошли сутки ускорения; 0 — не идут
+  const [r] = await q("SELECT at FROM f_evlog WHERE user = ? AND kind = 'odd:win' ORDER BY at DESC LIMIT 1", [uid]);
+  return r ? Number(r[0]) : 0;
+}
+function fastAt(all: any[][], ss: Record<string, Strain>, idx: number, win = 0, t = now()): number {
   const p = all.find((x) => Number(x[0]) === idx);
   if (!p || ss[String(p[1])]?.odd) return 0;
   const born = Number(p[2]), life = Math.max(1, t - born);
   let share = 0;
-  for (const x of all) if (near4(idx).includes(Number(x[0])) && ss[x[1]]?.color === "anomaly")
-    share = Math.max(share, Math.min(1, Math.max(0, t - Math.max(born, Number(x[2]))) / life));
+  for (const x of all) if (near4(idx).includes(Number(x[0])) && ss[x[1]]?.color === "anomaly") {
+    const until = ss[x[1]].odd ? (win || Number(x[2])) + ODD_FOR : Infinity;
+    share = Math.max(share, Math.min(1, Math.max(0, Math.min(t, until) - Math.max(born, Number(x[2]))) / life));
+  }
   return share;
 }
 function stateOf(p: any[], s: Strain, t: number, boost: [number, number][] = [], fast: number | boolean = 0) {
@@ -529,7 +537,7 @@ async function monoView(uid: number) {
   const [m] = await q("SELECT kind, started, until FROM f_mono WHERE user = ? AND until > ? ORDER BY started DESC LIMIT 1", [uid, t]);
   const marks = all.filter((r) => !gone(r))
     .map(([idx, kind, n, until]) => ({ idx: Number(idx), kind: String(kind), n: Number(n), until: Number(until) }));
-  return { mono: m ? { kind: String(m[0]), started: Number(m[1]), until: Number(m[2]) } : null, marks, boost: await boostOf(uid) };
+  return { mono: m ? { kind: String(m[0]), started: Number(m[1]), until: Number(m[2]) } : null, marks, boost: await boostOf(uid), odd_win: await oddWin(uid), odd_for: ODD_FOR, odd_near: ODD_NEAR };
 }
 async function mythSeed(uid: number) {                         // мифический вариант случайного растения: из станции или из своего мешка
   const inv = (await q("SELECT strain FROM f_inv WHERE user = ? AND count > 0", [uid])).map((r) => String(r[0]));
@@ -592,9 +600,11 @@ async function checkMono(uid: number) {
 async function mythTick(uid: number) {
   const t = now(), boost = await boostOf(uid), plots = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [uid]);
   const ss = await strains(plots.map((p) => String(p[1])));
+  if (!plots.some((p) => ss[String(p[1])]?.myth)) return;                  // мифического нет — дальше считать нечего
+  const win = await oddWin(uid);
   for (const p of plots) {
     const s = ss[String(p[1])], i = Number(p[0]);
-    if (!s || !s.myth || !stateOf(p, s, t, boost, fastAt(plots, ss, i)).ripe) continue;
+    if (!s || !s.myth || !stateOf(p, s, t, boost, fastAt(plots, ss, i, win)).ripe) continue;
     await q("INSERT OR IGNORE INTO f_monomark (user, idx, kind, at, until) VALUES (?, ?, 'mythripe', ?, ?)", [uid, i, t, t + MYTH_WAIT]);
     const [m] = await q("SELECT until FROM f_monomark WHERE user = ? AND idx = ? AND kind = 'mythripe'", [uid, i]);
     if (m && Number(m[0]) <= t) await DB.batch([
@@ -641,6 +651,7 @@ async function normFlour(uid: number) {
 function farmReads(uid: number, t: number): [string, any[]][] {
   return [
     ["SELECT started, until FROM f_mono WHERE user = ? AND kind = 'solstice'", [uid]],
+    ["SELECT at FROM f_evlog WHERE user = ? AND kind = 'odd:win' ORDER BY at DESC LIMIT 1", [uid]],
     [`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [uid]],
     ["SELECT started FROM f_mono WHERE user = ? AND kind = 'moss' AND until <= ?", [uid, t]],
     ["SELECT idx, kind, at, until FROM f_plotev WHERE user = ?", [uid]],
@@ -765,6 +776,11 @@ export async function plant(u: any, idx: number, crop: string) {
   if (crop === "anomaly" && (await q("DELETE FROM f_evlog WHERE rowid = (SELECT rowid FROM f_evlog WHERE user = ? AND kind = 'odd:fresh' LIMIT 1) RETURNING 1", [u.id])).length)
     await q("INSERT OR REPLACE INTO f_monomark (user, idx, kind, at) VALUES (?, ?, 'oddfresh', ?)", [u.id, idx, t]);   // посажено свежее семя
   const s = (await strains([crop]))[crop];
+  if (s && s.odd) {                                                   // сутки ускорения соседей: от первой посадки; лопата и пересадка их не обнуляют
+    const w = await oddWin(u.id), [[n]] = await q("SELECT COUNT(*) FROM f_plots WHERE user = ? AND crop = ?", [u.id, crop]);
+    if (!w) await q("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'odd:win', ?)", [u.id, t]);
+    else if (t - w > 3 * DAY && Number(n) <= 1) await q("UPDATE f_evlog SET at = ? WHERE user = ? AND kind = 'odd:win'", [t, u.id]);   // семя долго лежало (продали, подарили) — отсчёт заново
+  }
   let thawed: number[] = [];
   if (s && s.color === "ember") {                                    // огонь растапливает иней на соседних грядках
     const ice = near4(idx);
@@ -887,7 +903,7 @@ export async function water(u: any, idx: number) {
   const [p] = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ? AND idx = ?`, [u.id, idx]);
   if (!p) return { error: "Грядка пустая" };
   const all0 = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [u.id]), ss0 = await strains(all0.map((x) => x[1]));
-  const s = ss0[p[1]], t = now(), boost = await boostOf(u.id), st = stateOf(p, s, t, boost, fastAt(all0, ss0, idx));
+  const s = ss0[p[1]], t = now(), boost = await boostOf(u.id), st = stateOf(p, s, t, boost, fastAt(all0, ss0, idx, await oddWin(u.id)));
   if (st.dead) return { error: "Растение засохло — его можно только убрать" };
   if (st.ripe) return { error: "Уже созрело — собирай" };
   if (weatherOn(t) === "shower") return { error: "Сегодня лунный ливень — грядки политы сами" };
@@ -911,13 +927,15 @@ export async function harvest(u: any, idx: number) {
   const [p] = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ? AND idx = ?`, [u.id, idx]);
   if (!p) return { error: "Грядка пустая" };
   const t = now(), all = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [u.id]), boost = await boostOf(u.id);
-  const ss = await strains(all.map((x) => x[1])), s = ss[p[1]], st = stateOf(p, s, t, boost, fastAt(all, ss, idx));
+  const ss = await strains(all.map((x) => x[1])), s = ss[p[1]], win = await oddWin(u.id), st = stateOf(p, s, t, boost, fastAt(all, ss, idx, win));
   if (!st.ripe && !st.dead) return { error: "Ещё не созрело" };
   // грядку забирает ровно один запрос: повторное нажатие не заплатит дважды
   if (!(await q("DELETE FROM f_plots WHERE user = ? AND idx = ? AND planted = ? RETURNING 1", [u.id, idx, p[2]])).length) return { error: "Уже собрано" };
   const evHere = EV[idx] && EV[idx].kind;
   await q("DELETE FROM f_plotev WHERE user = ? AND idx = ? AND kind NOT IN ('frost', 'crater')", [u.id, idx]);   // несостоявшиеся события грядки — прочь
   if (s && s.myth) await q("DELETE FROM f_monomark WHERE user = ? AND kind IN ('myth', 'mythripe')", [u.id]);
+  if (s && s.odd && !all.some((x) => Number(x[0]) !== idx && ss[x[1]]?.odd))                 // странное собрано (или убрано засохшим) — следующая посадка начнёт новые сутки
+    await q("DELETE FROM f_evlog WHERE user = ? AND kind = 'odd:win'", [u.id]);
   if (st.dead) return { withered: true, farm: await farmState(u) };       // засохшее — просто убрали (звезда созвездия на грядке остаётся)
   const marks = (await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind IN ('star', 'myth', 'wild', 'g2', 'gseed', 'gcross') RETURNING kind", [u.id, idx])).map((r) => String(r[0]));
   const rain = (await rainUntil()) > t;
@@ -956,7 +974,7 @@ export async function harvest(u: any, idx: number) {
   const r0 = Math.floor(idx / 3), c0 = idx % 3;
   const near = all.filter((x) => {
     const i = Number(x[0]), r = Math.floor(i / 3), c = i % 3;
-    return i !== idx && Math.abs(r - r0) + Math.abs(c - c0) === 1 && x[1] !== p[1] && ss[x[1]] && !ss[x[1]].myth && stateOf(x, ss[x[1]], t, boost, fastAt(all, ss, i)).ripe;
+    return i !== idx && Math.abs(r - r0) + Math.abs(c - c0) === 1 && x[1] !== p[1] && ss[x[1]] && !ss[x[1]].myth && stateOf(x, ss[x[1]], t, boost, fastAt(all, ss, i, win)).ripe;
   });
   // розовая самоцветная пыль: гибрид наверняка — с соседом другого сорта (зрелость не нужна), а нет соседа — с базовым растением станции;
   // новая форма и новый цвет выпадают втрое чаще
@@ -986,7 +1004,7 @@ export async function harvest(u: any, idx: number) {
                     DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'frost', ?)").bind(u.id, t)]);
   }
   if (s.color === "sun" && Math.random() < EV_SUN) {
-    const grow = all.filter((x) => Number(x[0]) !== idx && ss[x[1]] && !ss[x[1]].odd && !stateOf(x, ss[x[1]], t, boost, fastAt(all, ss, Number(x[0]))).ripe && !stateOf(x, ss[x[1]], t, boost).dead);
+    const grow = all.filter((x) => Number(x[0]) !== idx && ss[x[1]] && !ss[x[1]].odd && !stateOf(x, ss[x[1]], t, boost, fastAt(all, ss, Number(x[0]), win)).ripe && !stateOf(x, ss[x[1]], t, boost).dead);
     if (grow.length) {
       const x = grow[Math.floor(Math.random() * grow.length)]; sunbeam = Number(x[0]);
       await DB.batch([DB.prepare("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ?").bind(ss[x[1]].minutes * 60, t, t, u.id, sunbeam),
@@ -1802,7 +1820,7 @@ export async function gemDust(u: any, idx: number, kind = "moon") {
   const [p] = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ? AND idx = ?`, [u.id, idx]);
   if (!p) return { error: "Грядка пустая" };
   const allg = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [u.id]), ssg = await strains(allg.map((x) => String(x[1])));
-  const t = now(), boost = await boostOf(u.id), s = ssg[String(p[1])], st = stateOf(p, s, t, boost, fastAt(allg, ssg, idx));
+  const t = now(), boost = await boostOf(u.id), s = ssg[String(p[1])], st = stateOf(p, s, t, boost, fastAt(allg, ssg, idx, await oddWin(u.id)));
   if (st.ripe && !g.mark) return { error: "Уже созрело — эта пыль не нужна, собирай" };   // лунная и золотая — для растущих; бирюзовая, травяная, розовая срабатывают при сборе — их можно и на созревшее (его решение 2026-11-17)
   if (st.dead) return { error: "Растение засохло" };
   if (kind === "moon" && s.odd) return { error: "Странное растение не торопится — эта пыль на него не действует" };
