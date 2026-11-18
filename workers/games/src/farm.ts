@@ -747,12 +747,20 @@ export async function plant(u: any, idx: number, crop: string) {
 export const ANOM_PUB = "~";
 const ANOM_EPOCH = Date.UTC(2026, 10, 18) / 1000, ANOM_GAP = 7, ANOM_P = 6;
 const fnv = (str: string) => { let h = 2166136261; for (const ch of str) { h ^= ch.codePointAt(0)!; h = Math.imul(h, 16777619); } return h >>> 0; };
+// Запуск (его решение 2026-11-18): пока семя никто не купил, оно лежит каждую ночь. Первая покупка игроком запускает цикл выше —
+// следующая ночь не раньше чем через ANOM_GAP ночей после неё. Его собственная покупка в ночь 0 («anomclaim:0») запуском не считается.
 const ANOM_DAYS = new Map<number, boolean>();
-function anomDay(d: number): boolean {                          // d — номер ночи по Минску от эпохи
+async function anomStart(): Promise<number | null> {             // ночь первой покупки; не запоминаем: несостоявшаяся покупка свою отметку снимает
+  const rows = await q("SELECT kind FROM f_evlog WHERE user = 0 AND kind LIKE 'anomclaim:%' AND kind != 'anomclaim:0'");
+  const ds = rows.map((r) => Number(String(r[0]).split(":")[1])).filter((x) => x >= 0);
+  return ds.length ? Math.min(...ds) : null;
+}
+function anomDay(d: number, start: number | null): boolean {    // d — номер ночи по Минску от эпохи
   if (d < 0) return false;
+  if (start == null || d <= start) return true;                 // цикл ещё не запущен — каждую ночь
   const m = ANOM_DAYS.get(d); if (m !== undefined) return m;
-  let last = -1e9;                                              // считаем вперёд от эпохи — от даты вызова не зависит
-  for (let i = 0; i <= d; i++) {
+  let last = start;                                             // считаем вперёд от ночи запуска — от даты вызова не зависит
+  for (let i = start + 1; i <= d; i++) {
     let v = ANOM_DAYS.get(i);
     if (v === undefined) { v = i - last >= ANOM_GAP && fnv("anom:" + i) % ANOM_P === 0; ANOM_DAYS.set(i, v); }
     if (v) last = i;
@@ -761,9 +769,9 @@ function anomDay(d: number): boolean {                          // d — ном�
 }
 const GLYPHS = [..."ϞϟϠϡϢϣϤϥҖҗӜӝѮѯѰѱѦѧѪѫҨҩ҂ξζϑϕϖʬʭǂǁʘɮ∴≋⁂‡¤"], MARKS = ["\u0334", "\u0337", "\u0353", "\u0336", "\u031b", ""];
 export let ANOM_FORCE = 0;                                      // стенд: 1 — продаётся прямо сейчас
-export function anomalyMarket(t = now()) {
+export function anomalyMarket(t = now(), start: number | null = null) {
   const loc = t + TZ, d = Math.floor((loc - ANOM_EPOCH) / DAY), sec = loc - ANOM_EPOCH - d * DAY;
-  if (!ANOM_FORCE && (sec >= 4 * 3600 || !anomDay(d))) return null;
+  if (!ANOM_FORCE && (sec >= 4 * 3600 || !anomDay(d, start))) return null;
   const h = fnv("anomw:" + d), from = ANOM_EPOCH - TZ + d * DAY, until = from + 4 * 3600;
   if (!ANOM_FORCE && (t < from || t >= until)) return null;
   let name = "", x = fnv("anomn:" + d);
@@ -773,7 +781,8 @@ export function anomalyMarket(t = now()) {
 // иногда за ночь лежит больше одного семени (номер ночи → сколько). Ночь 0 (18.11.2026): он купил первое и попросил выложить ещё одно
 const ANOM_LOTS: Record<number, number> = { 0: 2 };
 async function anomalyLive(t = now()) {
-  const o = anomalyMarket(t);
+  if (!ANOM_FORCE && (t + TZ - ANOM_EPOCH) % DAY >= 4 * 3600) return null;   // не ночь — в базу не ходим
+  const o = anomalyMarket(t, await anomStart());
   if (!o) return null;
   const d = Number(o.key.split(":")[1]), lots = ANOM_LOTS[d] || 1;
   for (let i = 1; i <= lots; i++) {                                // первое некупленное
