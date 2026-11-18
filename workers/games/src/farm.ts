@@ -346,14 +346,23 @@ function lastWet(p: any[], t: number) {                   // когда гряд
   for (const [, s1] of showersIn(Number(p[2]), t)) x = Math.max(x, s1);
   return x;
 }
-// рядом (через сторону) со «странным» гибридом растение созревает на четверть раньше (его выбор 2026-11-18); само странное — нет
+// Рядом (через сторону) со странным растением или «странным» гибридом растение созревает раньше — до четверти срока (его выбор 2026-11-18).
+// С 2026-11-18 ускоряет и само странное растение, пока растёт (его просьба). Странное растение само не ускоряется.
+// Баланс: ускорение — не порог, а доля. Считается та часть жизни растения, которую сосед простоял рядом: посадили вместе или сосед
+// уже рос — вся четверть; подсадили странное к почти созревшему — почти ничего. Иначе одно семя с лопатой «дозревало» бы всю ферму по кругу.
+// Несколько странных соседей не складываются — берётся лучший.
 const ODD_NEAR = 0.75;
-function fastAt(all: any[][], ss: Record<string, Strain>, idx: number) {
-  if (ss[String(all.find((x) => Number(x[0]) === idx)?.[1])]?.odd) return false;
-  return all.some((x) => near4(idx).includes(Number(x[0])) && ss[x[1]]?.color === "anomaly" && !ss[x[1]].odd);
+function fastAt(all: any[][], ss: Record<string, Strain>, idx: number, t = now()): number {
+  const p = all.find((x) => Number(x[0]) === idx);
+  if (!p || ss[String(p[1])]?.odd) return 0;
+  const born = Number(p[2]), life = Math.max(1, t - born);
+  let share = 0;
+  for (const x of all) if (near4(idx).includes(Number(x[0])) && ss[x[1]]?.color === "anomaly")
+    share = Math.max(share, Math.min(1, Math.max(0, t - Math.max(born, Number(x[2]))) / life));
+  return share;
 }
-function stateOf(p: any[], s: Strain, t: number, boost: [number, number][] = [], fast = false) {
-  const ripe = growth(p, t, boost) >= s.minutes * 60 * (fast ? ODD_NEAR : 1);
+function stateOf(p: any[], s: Strain, t: number, boost: [number, number][] = [], fast: number | boolean = 0) {
+  const ripe = growth(p, t, boost) >= s.minutes * 60 * (1 - (1 - ODD_NEAR) * Number(fast));
   const dryFor = weatherOn(t) === "shower" ? 0 : t - lastWet(p, t);
   return { ripe, dead: !ripe && s.bonus !== "hardy" && dryFor > DRY_LIMIT };
 }

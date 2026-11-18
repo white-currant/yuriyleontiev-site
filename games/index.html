@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611181549";
+    var BUILD = "202611181712";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2014,10 +2014,16 @@
     });
     var bo = boosts();                                      // Солнцестояние: политое время внутри него считается дважды (рост ×2)
     parts.forEach(function (x) { wetT += x[1] - x[0]; bo.forEach(function (b) { wetT += Math.max(0, Math.min(x[1], b[1], t) - Math.max(x[0], b[0])); }); });
-    var f0 = farmOf(), fast = !s.odd && f0 && f0.plots && near4(pl.idx).some(function (j) { var q = f0.plots[j], g0 = q && q.crop && ss[q.crop]; return g0 && g0.color === "anomaly" && !g0.odd; });
-    var need = s.minutes * 60 * (fast ? .75 : 1), g = pl.grown + wetT, ripe = g >= need, dryFor = raining ? 0 : t - lastWet;   // рядом со «странным» гибридом — на четверть раньше (как ODD_NEAR на сервере)
+    // Рядом со странным растением (и «странным» гибридом) созревает раньше — до четверти срока. Доля — та часть жизни растения,
+    // которую странный сосед простоял рядом (как fastAt на сервере): подсаженное к почти созревшему почти ничего не даёт.
+    var f0 = farmOf(), odds = [];
+    if (!s.odd && f0 && f0.plots) near4(pl.idx).forEach(function (j) { var q = f0.plots[j], g0 = q && q.crop && ss[q.crop]; if (g0 && g0.color === "anomaly") odds.push(q.planted); });
+    var shareAt = function (tt) { var life = Math.max(1, tt - pl.planted), sh = 0; odds.forEach(function (q0) { sh = Math.max(sh, Math.min(1, Math.max(0, tt - Math.max(pl.planted, q0)) / life)); }); return sh; };
+    var fast = shareAt(t), full = s.minutes * 60, need = full * (1 - .25 * fast), g = pl.grown + wetT, ripe = g >= need, dryFor = raining ? 0 : t - lastWet;
+    var left = need - g;                                    // доля растёт со временем — уточняем, сколько осталось на самом деле
+    if (odds.length && !ripe) for (var it = 0; it < 6; it++) left = Math.max(0, full * (1 - .25 * shareAt(t + left)) - g);
     return { s: s, need: need, g: g, f: Math.min(1, g / need), ripe: ripe, wet: !ripe && (raining || t < pl.water_until), shower: raining,
-             dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: need - g, wetLeft: raining ? 1e9 : pl.water_until - t };
+             dead: !ripe && s.bonus !== "hardy" && dryFor > dryLim, dryFor: dryFor, left: left, fast: fast, wetLeft: raining ? 1e9 : pl.water_until - t };
   }
   function strainCode(s) { return s.base ? "" : "сорт " + s.id.slice(1, 5).toUpperCase(); }
   function describe(s) {
@@ -3227,7 +3233,13 @@
       if (!gemSel && F.gemA > 0 && F.gemLast) gemSel = F.gemLast;                          // гаснет — тем же цветом
     }
     var gA = gemSel ? (F.gemA || 0) : 0, gIn = !!(F.sel === "gem");
-    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !bfx.length && !efx.length && !gemLive.length && !gemEnd.length && !millGem.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    // грядки, которые сейчас ускоряет странное растение: [грядка, доля] — для бледных искр
+    var fastBeds = [];
+    if (f && f.plots) f.plots.forEach(function (pl) {
+      if (!pl || !pl.crop || !BC[pl.idx] || pl.burning || pl.coal) return;
+      var inf = plotInfo(pl, now, ss, f.dry_limit || 1e9); if (inf && !inf.ripe && !inf.dead && inf.fast > .02) fastBeds.push([pl.idx, inf.fast]);
+    });
+    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !bfx.length && !efx.length && !gemLive.length && !gemEnd.length && !millGem.length && !fastBeds.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
     var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
     var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
@@ -3289,6 +3301,16 @@
       var gl = c.createRadialGradient(p[0] * kx, (p[1] - 2) * ky, 0, p[0] * kx, (p[1] - 2) * ky, 22 * kx);   // тихое свечение под ними
       gl.addColorStop(0, "rgba(" + GK.glow.join(",") + "," + (.20 + .07 * Math.sin(t / 700 + g.i)) + ")"); gl.addColorStop(1, "rgba(" + GK.glow.join(",") + ",0)");
       c.globalAlpha = 1; c.fillStyle = gl; c.beginPath(); c.ellipse(p[0] * kx, (p[1] - 2) * ky, 24 * kx, 13 * ky, 0, 0, 7); c.fill();
+    });
+    // грядки, которые ускоряет странное растение (его просьба 2026-11-18): редкие бледные искры, без свечения — заметно, но не спорит с пылью
+    fastBeds.forEach(function (fb) {
+      var p = BC[fb[0]];
+      for (var n = 0; n < 5; n++) {
+        var sd = n * 11.7 + fb[0] * 17 + 5, ph = ((t / 2900) + hash01(sd)) % 1;
+        var ox = (hash01(sd + 1) - .5) * 22, oy = (hash01(sd + 2) - .5) * 10;                      // держатся над самой грядкой, к соседним не улетают
+        if (Math.abs(ox) / 22 + Math.abs(oy) / 10 > .5) { ox *= .6; oy *= .6; }
+        spark((p[0] + ox) * kx, (p[1] - 1 + oy - ph * 7) * ky, (.7 + hash01(sd + 3) * .5) * dpr, n % 2 ? "#d9ccff" : "#f4f0ff", Math.sin(ph * Math.PI) * (.55 + .45 * fb[1]), sd);
+      }
     });
     // растворение: искры взмывают и расходятся, свечение гаснет, напоследок — короткое кольцо
     gemEnd.forEach(function (g) {
