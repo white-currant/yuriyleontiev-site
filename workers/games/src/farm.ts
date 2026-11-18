@@ -1170,6 +1170,7 @@ async function honeyTick(uid: number, EVS: Record<number, any>) {
 // забрать мёд из улья в амбар
 export async function hiveCollect(u: any) {
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Сначала нужен амбар: мёду негде лежать" };
+  await honeyTick(u.id, await plotEvents(u.id));                       // досидевший мёд, который улей ещё не принял, — сначала в улей (жалоба 2026-11-18: «мёд готов, а там пусто»)
   const got = await q("DELETE FROM f_hive WHERE user = ? AND count > 0 RETURNING item, count", [u.id]);
   if (!got.length) return { error: "В улье пока нет мёда" };
   await DB.batch(got.map(([id, n]) => DB.prepare("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count").bind(u.id, String(id), Number(n))));

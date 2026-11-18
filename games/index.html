@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611182310";
+    var BUILD = "202611182324";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2393,7 +2393,7 @@
     eA = [eA[0] - 2, eA[1] + 1]; eB = [eB[0], eB[1] + 2]; eC = [eC[0] + 2, eC[1] + 1]; eD = [eD[0], eD[1] - 1];
     poly(c, [eD, eA, ap], roof[2]); poly(c, [eA, eB, ap], roof[0]); poly(c, [eB, eC, ap], roof[1]);
     seg(c, eA[0], eA[1], eB[0], eB[1], roof[3]); seg(c, eB[0], eB[1], eC[0], eC[1], roof[3]); seg(c, ap[0], ap[1], eB[0], eB[1], roof[2]);
-    var jars = own && (kit.hive || []).some(function (h) { return h.count > 0; });
+    var jars = own && (kit === F.state ? hiveCount() > 0 : (kit.hive || []).some(function (h) { return h.count > 0; }));
     if (jars && (t / 400 | 0) % 2) { px(c, ap[0] - 1, ap[1] - 4, 3, 1, "#ffffff"); px(c, ap[0], ap[1] - 5, 1, 3, "#ffffff"); }   // мёд готов — искорка
   }
   // пчёлы: пара кружит у улья; над грядкой, где собирают мёд, — две вокруг растения и одна носит мёд к улью и обратно.
@@ -4129,7 +4129,13 @@
   var FLOUR_ADJ = { moss: "Лунная", berry: "Звёздная", crystal: "Кометная", sun: "Солнечная", nebula: "Туманная", ember: "Огненная", frost: "Ледяная", night: "Полуночная", aurora: "Сияющая", anomaly: "Странная" },
       GRADE_NAMES = ["высший сорт", "первый сорт", "второй сорт"];
   var HONEY_ADJ = { moss: "Лунный", berry: "Звёздный", crystal: "Кометный", sun: "Солнечный", nebula: "Туманный", ember: "Огненный", frost: "Ледяной", night: "Полуночный", aurora: "Сияющий", anomaly: "Странный" };
-  function hiveCount() { return ((F.state && F.state.hive) || []).reduce(function (a, h) { return a + h.count; }, 0); }
+  // мёд в улье: то, что сервер уже принял, плюс досидевшее у грядок, пока сервер не обновился (иначе в окне улья «пусто», а таймер уже прошёл)
+  function hiveJars() {
+    var s = F.state; if (!s) return []; var out = (s.hive || []).filter(function (h) { return h.count > 0; }).map(function (h) { return { item: h.item, count: h.count }; }), tn = farmNow();
+    (s.plots || []).forEach(function (pl) { if (pl && pl.crop && pl.honey && !pl.honey.got && pl.honey.until <= tn) { var it = null; out.forEach(function (h) { if (h.item === pl.honey.item) it = h; }); if (it) it.count++; else out.push({ item: pl.honey.item, count: 1 }); } });
+    return out;
+  }
+  function hiveCount() { return hiveJars().reduce(function (a, h) { return a + h.count; }, 0); }
   function hiveAdd(id, n) { var s = F.state; s.hive = s.hive || []; var it = null; s.hive.forEach(function (h) { if (h.item === id) it = h; }); if (it) it.count += n; else s.hive.push({ item: id, count: n }); }
   function flourKey(g) { var d = g.myth ? g.dust / 3 : g.dust; return "g:" + g.color + ":" + (d <= 7 ? 2 : d <= 10 ? 1 : 0) + (g.myth ? ":m" : ""); }   // как на сервере
   var RAW_MAIN = { soup: "moss", stew: "mushroom", tea: "flower", jam: "cactus" }, RAW_REF = { moss: 4, mushroom: 8, flower: 8, cactus: 8 };   // как на сервере
@@ -5338,7 +5344,7 @@
       var draw = function () {
         var tn = farmNow(), cur = F.state, act = (cur.plots || []).filter(function (pl) { return pl && pl.crop && pl.honey && !pl.honey.got && pl.honey.until > tn; })
           .sort(function (a, b) { return a.honey.until - b.honey.until; });
-        var jars = (cur.hive || []).filter(function (h) { return h.count > 0; });
+        var jars = hiveJars();
         var sg = act.map(function (pl) { return pl.idx + ":" + fmtLeft(pl.honey.until - tn); }).join("|") + "/" + jars.map(function (h) { return h.item + h.count; }).join("|");
         if (sg === sig) return fillBars(tn); sig = sg; box.innerHTML = ""; bars = [];
         box.appendChild(el("div", "ohead", "Сейчас собирают"));
@@ -5354,7 +5360,8 @@
           var n = jars.reduce(function (a, h) { return a + h.count; }, 0);
           var take = btn("Забрать в амбар · " + n, "", function () {
             if (!hasBuild(cur, "barn")) { haptic("error"); return toast("Сначала нужен амбар: мёду негде лежать"); }
-            haptic("success"); jars.forEach(function (h) { barnAdd(h.item, h.count); }); cur.hive = []; renderFarm(); close();
+            haptic("success"); jars.forEach(function (h) { barnAdd(h.item, h.count); }); cur.hive = [];
+            (cur.plots || []).forEach(function (pl) { if (pl && pl.honey && !pl.honey.got && pl.honey.until <= farmNow()) pl.honey.got = true; }); renderFarm(); close();
             toast("+" + n + " " + plural(n, "баночка", "баночки", "баночек") + " мёда в амбар");
             farmCall("/api/farm/hive/collect").catch(function () {});
           });
