@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611191028";
+    var BUILD = "202611191058";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1973,6 +1973,16 @@
     if (st === "mossy") return seam ? (h < .55 ? "#3f7a35" : h < .8 ? "#2f6229" : "#3a3f46") : ht < .1 ? (h < .5 ? "#3f8a36" : "#4f9a40") : lit ? "#7a8088" : h < .12 ? "#5aaa43" : ht < .5 ? "#5f656d" : "#535961";
     return seam ? (h < .3 ? "#5aaa43" : C.std) : lit ? (ht < .5 ? C.stl : "#c4c9cf") : ht < .45 ? C.st : ht < .85 ? "#aab0b8" : "#b3b8bf";   // каменные плиты
   }
+  // светящиеся плиты: одна волна от калитки — вглубь двора и вниз по дорожке, раз в 5–10 секунд в случайный момент (его правки 2026-11-19);
+  // лунные искры мерцают сами по себе
+  function drawGlowPx(c, list, t) {
+    if (!list || !list.length) return;
+    var gseg = Math.floor(t / 7500), gel = t - gseg * 7500 - hash01(gseg * 7.7 + 1) * 2500, gw = gel >= 0 && gel < 4300 ? gel / 45 : -99;
+    list.forEach(function (g) {
+      if (g[2]) { var tw = Math.sin(t / 650 + g[0] * 1.7 + g[1] * .9); if (tw > .75) px(c, g[0], g[1], 1, 1, tw > .93 ? "#ffffff" : "#fff6df"); return; }
+      if (gw < 0) return; var dd = gw - Math.abs(g[1] - YC[2][1]); if (dd >= 0 && dd < 4) px(c, g[0], g[1], 1, 1, dd < 2 ? "#c9fff1" : "#7ff0d6");
+    });
+  }
   var PLAZA = [67, 177];                                                             // площадка у печи: между печью и дорожкой
   function ell(c, cx, cy, rx, ry, col) { for (var yy = -ry; yy <= ry; yy++) { var ww = Math.round(Math.sqrt(Math.max(0, 1 - yy * yy / (ry * ry + .01))) * rx); px(c, cx - ww, cy + yy, ww * 2 + 1, 1, col); } }
   function drawPlaza(c, k, x, y) {                                                   // неподвижная часть; вода фонтана и огонёк скамейки — в drawPlazaFx
@@ -2202,7 +2212,7 @@
     yk = yk || yardKey(null);
     var SB = ["arch", "birdhouse", "planters", "hay"].filter(function (b) { return yk.bits.indexOf(b) >= 0; });   // неподвижные мелочи — в статике
     var has = function (b) { return SB.indexOf(b) >= 0; };
-    var glowPx = [];
+    var glowPx = [], yardGlow = [];                                                  // свет дорожки и двора — отдельно: двор светится под грядками, а не поверх (его правка 2026-11-19)
     rk = ROOF_PAL[rk] ? rk : "orange"; var sk = seed + ":" + rk + ":" + yk.fence + ":" + yk.path + ":" + yk.ground + ":" + yk.plaza + ":" + yk.scare + ":" + SB.join(",");
     FENCE_LAMPS = [];
     if (statics[sk]) return statics[sk];
@@ -2239,7 +2249,7 @@
     if (yk.ground !== "dirt") {                                                       // двор вокруг грядок — в стиль дорожек (его просьба 2026-11-19), узор по осям двора
       for (y = 70; y < 164; y++) for (x = 2; x < FW - 2; x++) { var ga = (x - O[0]) / PX, gb = (y - O[1]) / PY, gcc = (ga + gb) / 2, grr = (gb - ga) / 2;
         if (Math.abs(gcc) > 1.85 || Math.abs(grr) > 1.85) continue;
-        px(c, x, y, 1, 1, Math.abs(gcc) > 1.79 || Math.abs(grr) > 1.79 ? C.dtd : groundCol(yk.ground, gcc, grr, x, y, glowPx)); }
+        px(c, x, y, 1, 1, Math.abs(gcc) > 1.79 || Math.abs(grr) > 1.79 ? C.dtd : groundCol(yk.ground, gcc, grr, x, y, yardGlow)); }
     } else
     for (i = 0; i < 560; i++) { var qc = (r() * 2 - 1) * 1.85, qr = (r() * 2 - 1) * 1.85, q = iso(qc, qr), nn = r();
       px(c, q[0], q[1], 1, 1, nn < .5 ? C.dtd : C.dtl); if (nn > .93) { px(c, q[0], q[1], 2, 1, C.pb); px(c, q[0], q[1], 1, 1, C.pbl); } }
@@ -2396,7 +2406,7 @@
     tree(f, 181, 122, 7, TREES[1]);                                                  // дерево у правого угла — перед забором, а не за ним
     for (y = FH - 6; y < FH; y++) px(f, 0, y, FW, 1, "rgba(30,60,20," + ((y - FH + 7) * .07).toFixed(2) + ")");
     FENCE_LAMPS.forEach(function (g) { glows.push(g); }); FENCE_LAMPS = null;
-    statics[sk] = { back: back, shed: shed, back2: back2, front: front, lamps: [[gl[0], gl[1] - 15], [gr[0], gr[1] - 15]], smoke: smoke, glows: glows, glowPx: glowPx, yk: yk };
+    statics[sk] = { back: back, shed: shed, back2: back2, front: front, lamps: [[gl[0], gl[1] - 15], [gr[0], gr[1] - 15]], smoke: smoke, glows: glows, glowPx: glowPx, yardGlow: yardGlow, yk: yk };
     return statics[sk];
   }
 
@@ -3469,6 +3479,7 @@
     drawMill(c, t, kit, own, now);
     drawHive(c, t, kit, own, now);
     var nextLock = -1; (plots || []).forEach(function (pl, k) { if (pl.locked && nextLock < 0) nextLock = k; });
+    drawGlowPx(c, L.yardGlow, t);                                                   // двор: свет по швам — до грядок, под ними
     BORDER.forEach(function (k) { if (plots && plots[k] && BC[k]) drawBed(c, plots[k], k, now, t, ss, dryLim, own, k === nextLock); });   // дальние грядки — раньше
     (plots || []).forEach(function (pl, k) { if (pl && pl.crater && !pl.big && BC[k]) drawCrater(c, k, t); });
     var bigC = bigCraterBox(plots); if (bigC) drawBigCrater(c, bigC, t);
@@ -3478,11 +3489,7 @@
     drawShop(c, t, kit, own, mossOn(kit, now));
     drawPlazaFx(c, YK.plaza, PLAZA[0], PLAZA[1], t);                               // украшения двора: вода фонтана, искра статуи
     if (YK.bits.indexOf("vane") >= 0 && hasBuild(kit, "barn") && MOSSGEO.barn) drawVane(c, MOSSGEO.barn.R1, t);
-    // светящиеся плиты: волна света проходит раз в 5–10 секунд, в случайный момент (его правки 2026-11-19)
-    var gseg = Math.floor(t / 7500), gel = t - gseg * 7500 - hash01(gseg * 7.7 + 1) * 2500, gw = gel >= 0 && gel < 2700 ? gel / 45 : -99;
-    if (L.glowPx.length) { L.glowPx.forEach(function (g) {
-      if (g[2]) { var tw = Math.sin(t / 650 + g[0] * 1.7 + g[1] * .9); if (tw > .75) px(c, g[0], g[1], 1, 1, tw > .93 ? "#ffffff" : "#fff6df"); return; }   // лунная дорожка: искры мерцают
-      if (gw < 0) return; var d = (g[1] - YC[2][1] + 60 - gw + 600) % 60; if (d < 4) px(c, g[0], g[1], 1, 1, d < 2 ? "#c9fff1" : "#7ff0d6"); }); }   // по швам бежит свет от калитки
+    drawGlowPx(c, L.glowPx, t);                                                     // дорожка: свет и искры — поверх
     drawMossOver(c, kit, now, t, L, seed + roofKey(kit) + ["barn", "mill", "oven", "shop"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
     if (CHEST_ON) drawChest(c, own);
     if (own) drawFx(c, t);

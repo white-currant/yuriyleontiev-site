@@ -64,6 +64,13 @@ async function oddInGame() {
                               + (SELECT COUNT(*) FROM f_plots WHERE crop = 'anomaly')`);
   return Number(n);
 }
+// у одного игрока — не больше двух странных семян: в мешке, в сундуке и уже посаженных (его решение 2026-11-19)
+const ODD_PER_USER = 2, ODD_FULL = "У тебя уже два странных семени — больше одному не унести";
+async function oddHeld(uid: number) {
+  const [[n]] = await q(`SELECT COALESCE((SELECT count FROM f_inv WHERE user = ? AND strain = 'anomaly'), 0) + COALESCE((SELECT count FROM f_chest WHERE user = ? AND strain = 'anomaly'), 0)
+                              + (SELECT COUNT(*) FROM f_plots WHERE user = ? AND crop = 'anomaly')`, [uid, uid, uid]);
+  return Number(n);
+}
 async function oddFresh(uid: number) { await q("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'odd:fresh', ?)", [uid, now()]); }   // купил или нашёл — «свежее» семя
 const POINTS_PLANT = 1, POINTS_WATER = 1;    // очки в звание за посадку и за полив сухой грядки (награда за саму игру, решение 2026-11-13)
 const SEEDS_MIN = 2, SEEDS_EXTRA = 0.35;     // семян с урожая: 2, с шансом 35% — 3
@@ -881,6 +888,7 @@ async function buyAnomaly(u: any) {
   const o = await anomalyLive();
   if (!o) return { error: "Его здесь больше нет" };
   await ensureFarm(u);
+  if ((await oddHeld(u.id)) >= ODD_PER_USER) return { error: ODD_FULL };
   if (!(await q("INSERT INTO f_evlog (user, kind, at) SELECT 0, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = 0 AND kind = ?) RETURNING 1",
                 [o.key, now(), o.key])).length) return { error: "Уже раскупили" };
   if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [o.price, u.id, o.price])).length) {
@@ -991,7 +999,7 @@ export async function harvest(u: any, idx: number) {
   const fresh = s.odd && (await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind = 'oddfresh' RETURNING 1", [u.id, idx])).length > 0;
   const oddStock = s.odd ? Number((await q(`SELECT COALESCE((SELECT count FROM f_inv WHERE user = ? AND strain = 'anomaly'), 0)
                                                  + COALESCE((SELECT count FROM f_chest WHERE user = ? AND strain = 'anomaly'), 0)`, [u.id, u.id]))[0][0]) : 0;
-  const seeds = s.odd ? ((fresh && oddStock === 0) || (await oddInGame()) + 1 <= (await oddCap()) ? 1 : 0) : s.color === "anomaly" ? 1 : (s.myth ? 0 : SEEDS_MIN + (Math.random() < SEEDS_EXTRA ? 1 : 0) + (s.bonus === "seedy" ? 1 : 0)) * (marks.includes("gseed") ? 3 : 1);   // травяная пыль — семян втрое   // мифическое семян не даёт
+  const seeds = s.odd ? ((await oddHeld(u.id)) >= ODD_PER_USER ? 0 : (fresh && oddStock === 0) || (await oddInGame()) + 1 <= (await oddCap()) ? 1 : 0) : s.color === "anomaly" ? 1 : (s.myth ? 0 : SEEDS_MIN + (Math.random() < SEEDS_EXTRA ? 1 : 0) + (s.bonus === "seedy" ? 1 : 0)) * (marks.includes("gseed") ? 3 : 1);   // травяная пыль — семян втрое   // мифическое семян не даёт
   if (seeds) writes.push(DB.prepare(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)
                                      ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.id, seeds));
   await DB.batch(writes);
@@ -1825,6 +1833,7 @@ export async function buy(u: any, pub: string, strain: string, myName: string, k
   const s = (await strains([strain]))[strain];
   if (!s) return { error: "Такого товара нет" };
   await ensureFarm(u);
+  if (strain === "anomaly" && (await oddHeld(u.id)) >= ODD_PER_USER) return { error: ODD_FULL };
   const price = sellerPrice(s.price!, (await ownPrices(Number(f[0])))["s:" + strain]);
   if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [price, u.id, price])).length)
     return { error: "Не хватает звёздной пыли" };
