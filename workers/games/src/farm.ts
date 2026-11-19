@@ -1610,9 +1610,56 @@ async function giftsLeft(uid: number) {
 export const ROOF_PRICE = 300;
 export const ROOF_COLORS: Record<string, string> = { orange: "Оранжевая", amber: "Янтарная", red: "Красная", blue: "Синяя", green: "Зелёная", purple: "Фиолетовая", teal: "Бирюзовая", slate: "Графитовая" };
 async function roofOf(uid: number) { const r = await q("SELECT roof FROM f_style WHERE user = ?", [uid]); const k = r.length ? String(r[0][0]) : ""; return ROOF_COLORS[k] ? k : "orange"; }
+// Украшения двора (его решение 2026-11-19: «куда богатым тратить пыль» — начинаем с декораций; готовые места, не свободная расстановка).
+// Забор, дорожка и площадка у печи — по одному варианту на место (первый в списке — бесплатный, как было); мелочи — каждая сама по себе,
+// купленную можно спрятать. Купленное хранится навсегда (f_decor), выбор — в f_yard. Гости видят то же, что хозяин.
+export const YARD: Record<string, { name: string; items: Record<string, { name: string; price: number }> }> = {
+  fence: { name: "Забор", items: { wood: { name: "Деревянный", price: 0 }, vine: { name: "Дерево с плющом", price: 3000 }, white: { name: "Белый штакетник", price: 3000 },
+                                   hedge: { name: "Живая изгородь", price: 3000 }, stone: { name: "Каменный", price: 3000 }, brick: { name: "Красный кирпич", price: 3000 },
+                                   pillars: { name: "Столбы с фонарями", price: 3000 } } },
+  path:  { name: "Дорожка", items: { dirt: { name: "Утоптанная", price: 0 }, stone: { name: "Каменные плиты", price: 600 }, planks: { name: "Деревянный настил", price: 600 }, brick: { name: "Кирпичная", price: 700 },
+                                     mossy: { name: "Старые камни со мхом", price: 800 }, cobble: { name: "Мощёная", price: 900 }, glow: { name: "Светящиеся плиты", price: 1500 } } },
+  plaza: { name: "Площадка у печи", items: { none: { name: "Пусто", price: 0 }, birdbath: { name: "Чаша для птиц", price: 600 }, flowerbed: { name: "Круглая клумба", price: 800 },
+                                             statue: { name: "Статуя звездочёта", price: 2000 }, fountain: { name: "Фонтан", price: 3000 },
+                                             column: { name: "Фонтан-колонна", price: 2200 }, lily: { name: "Фонтан с кувшинками", price: 2600 }, tiered: { name: "Ярусный фонтан", price: 3500 },
+                                             crystal: { name: "Хрустальный фонтан", price: 4000 }, starfount: { name: "Фонтан звездочёта", price: 5000 } } },
+  scare: { name: "Пугало", items: { none: { name: "Без пугала", price: 0 }, classic: { name: "Пугало в белой рубахе", price: 400 }, straw: { name: "Пугало в соломенной шляпе", price: 400 },
+                                    crow: { name: "Пугало с вороной", price: 500 }, witch: { name: "Пугало-ведьма", price: 600 }, pumpkin: { name: "Пугало-тыква", price: 600 } } },
+  bits:  { name: "Мелочи", items: { hay: { name: "Сено", price: 300 }, birdhouse: { name: "Скворечник", price: 400 }, vane: { name: "Флюгер-петух", price: 500 },
+                                    planters: { name: "Ящики с цветами", price: 600 }, fireflies: { name: "Светлячки", price: 1000 },
+                                    arch: { name: "Арка из роз", price: 1500 } } },
+};
+// что из украшений уже открыто игрокам (его решение 2026-11-19: сначала только заборы, все платные по ✦3000); остальное — на стенде
+export const YARD_ON = ["fence"];
+async function yardOf(uid: number) {
+  const set = new Map((await q("SELECT slot, item FROM f_yard WHERE user = ?", [uid])).map((r) => [String(r[0]), String(r[1])]));
+  const owned = new Set((await q("SELECT item FROM f_decor WHERE user = ? AND kind = 'yard'", [uid])).map((r) => String(r[0])));
+  const y: any = {};
+  for (const sl of ["fence", "path", "plaza", "scare"]) { const k = set.get(sl) || "", first = Object.keys(YARD[sl].items)[0]; y[sl] = YARD_ON.includes(sl) && YARD[sl].items[k] && (k === first || owned.has(sl + ":" + k)) ? k : first; }
+  y.bits = YARD_ON.includes("bits") ? Object.keys(YARD.bits.items).filter((k) => owned.has("bits:" + k) && set.get("bit:" + k) !== "off") : [];
+  return { yard: y, yard_owned: [...owned] };
+}
 async function decorView(uid: number) {
   const owned = (await q("SELECT item FROM f_decor WHERE user = ? AND kind = 'roof'", [uid])).map((r) => String(r[0]));
-  return { roof: await roofOf(uid), roofs_owned: ["orange", ...owned.filter((k) => k !== "orange" && ROOF_COLORS[k])], roof_price: ROOF_PRICE, roof_colors: ROOF_COLORS };
+  return { roof: await roofOf(uid), roofs_owned: ["orange", ...owned.filter((k) => k !== "orange" && ROOF_COLORS[k])], roof_price: ROOF_PRICE, roof_colors: ROOF_COLORS,
+           ...(await yardOf(uid)), yard_list: Object.fromEntries(Object.entries(YARD).filter(([k]) => YARD_ON.includes(k))) };
+}
+export async function setDecor(u: any, slot: string, item: string, on: boolean) {
+  const S = YARD_ON.includes(slot) ? YARD[slot] : undefined, it = S && S.items[item];
+  if (!it) return { error: "Такого украшения нет" };
+  await ensureFarm(u);
+  const key = slot + ":" + item, free = it.price === 0;
+  const has = free || (await q("SELECT 1 FROM f_decor WHERE user = ? AND kind = 'yard' AND item = ?", [u.id, key])).length > 0;
+  if (!has) {   // сперва «занять» покупку, потом списать: два одновременных нажатия не спишут дважды; не хватило пыли — покупка снимается
+    const claim = await q("INSERT OR IGNORE INTO f_decor (user, kind, item, at) VALUES (?, 'yard', ?, ?) RETURNING 1", [u.id, key, now()]);
+    if (claim.length && !(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [it.price, u.id, it.price])).length) {
+      await q("DELETE FROM f_decor WHERE user = ? AND kind = 'yard' AND item = ?", [u.id, key]);
+      return { error: "Не хватает звёздной пыли" };
+    }
+  }
+  if (slot === "bits") await q("INSERT INTO f_yard (user, slot, item) VALUES (?, ?, ?) ON CONFLICT(user, slot) DO UPDATE SET item = excluded.item", [u.id, "bit:" + item, on ? "on" : "off"]);
+  else await q("INSERT INTO f_yard (user, slot, item) VALUES (?, ?, ?) ON CONFLICT(user, slot) DO UPDATE SET item = excluded.item", [u.id, slot, item]);
+  return { bought: !has, farm: await farmState(u) };
 }
 export async function setRoof(u: any, color: string) {
   if (!ROOF_COLORS[color]) return { error: "Такого цвета нет" };
@@ -1636,7 +1683,7 @@ export async function visit(u: any, pub: string) {
   const shop = await q("SELECT strain, listed FROM f_inv WHERE user = ? AND listed > 0", [f[0]]);
   const stall = await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [f[0]]);
   const ii = await itemInfo(stall.map((r) => String(r[0]))), own = await ownPrices(Number(f[0]));
-  const res: any = { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given, roof: await roofOf(Number(f[0])),
+  const res: any = { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given, roof: await roofOf(Number(f[0])), ...(await yardOf(Number(f[0]))),
            plots: await (async () => { const ev = await plotEvents(Number(f[0])); return Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(f[1]), ev[i])); })(), now: now(),
            rain_until: await rainUntil(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY), dry_limit: DRY_LIMIT, gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY,
            ...(await kitchenOf(Number(f[0]))),

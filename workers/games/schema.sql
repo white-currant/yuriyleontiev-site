@@ -89,6 +89,8 @@ CREATE INDEX IF NOT EXISTS f_sales_seller ON f_sales (seller, seen);
 -- вид фермы (2026-11-15): купленные цвета крыш и выбранный цвет
 CREATE TABLE IF NOT EXISTS f_decor (user INTEGER NOT NULL, kind TEXT NOT NULL, item TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (user, kind, item));
 CREATE TABLE IF NOT EXISTS f_style (user INTEGER PRIMARY KEY, roof TEXT);
+-- украшения двора (2026-11-19): что стоит на каждом месте (fence, path, plaza) и какие мелочи спрятаны (bit:<id> = off); купленное — в f_decor
+CREATE TABLE IF NOT EXISTS f_yard (user INTEGER NOT NULL, slot TEXT NOT NULL, item TEXT NOT NULL, PRIMARY KEY (user, slot));
 -- очки за сутки по Минску (2026-11-15: рейтинг «Сегодня» читал все сегодняшние события — тысячи строк на открытие).
 -- Каждое начисление само прибавляется сюда триггером; рейтинг читает по строке на игрока.
 CREATE TABLE IF NOT EXISTS g_daypts (day INTEGER NOT NULL, user INTEGER NOT NULL, pts INTEGER NOT NULL DEFAULT 0, name TEXT, PRIMARY KEY (day, user));
