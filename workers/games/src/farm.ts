@@ -65,7 +65,25 @@ async function oddInGame() {
   return Number(n);
 }
 // у одного игрока — не больше двух странных семян: в мешке, в сундуке и уже посаженных (его решение 2026-11-19)
-const ODD_PER_USER = 2, ODD_FULL = "У тебя уже два странных семени — больше одному не унести";
+// Третье купить можно, но тогда одно семя из мешка (или сундука) пропадает (его решение 2026-11-19); посаженные не трогаем —
+// если оба уже растут, вытеснять нечего и купить нельзя.
+const ODD_PER_USER = 2, ODD_FULL = "Оба странных растения уже растут — третьему места нет";
+async function oddEvictable(uid: number) {
+  const [[n]] = await q(`SELECT COALESCE((SELECT count FROM f_inv WHERE user = ? AND strain = 'anomaly'), 0) + COALESCE((SELECT count FROM f_chest WHERE user = ? AND strain = 'anomaly'), 0)`, [uid, uid]);
+  return Number(n);
+}
+async function oddEvict(uid: number) {                                   // одно семя пропадает: сначала из мешка, потом из сундука; на его месте — скорлупа
+  const gone = (await q("UPDATE f_inv SET count = count - 1, listed = MIN(listed, count - 1) WHERE user = ? AND strain = 'anomaly' AND count > 0 RETURNING 1", [uid])).length > 0
+            || (await q("UPDATE f_chest SET count = count - 1 WHERE user = ? AND strain = 'anomaly' AND count > 0 RETURNING 1", [uid])).length > 0;
+  if (gone) await q("INSERT INTO f_shell (user, count) VALUES (?, 1) ON CONFLICT(user) DO UPDATE SET count = count + 1", [uid]);
+  return gone;
+}
+export const SHELL_DUST = 1;
+export async function dustShell(u: any) {                                // распылить скорлупу — ✦1
+  if (!(await q("UPDATE f_shell SET count = count - 1 WHERE user = ? AND count > 0 RETURNING 1", [u.id])).length) return { error: "Скорлупы нет" };
+  await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [SHELL_DUST, u.id]);
+  return { dust: SHELL_DUST, farm: await farmState(u) };
+}
 async function oddHeld(uid: number) {
   const [[n]] = await q(`SELECT COALESCE((SELECT count FROM f_inv WHERE user = ? AND strain = 'anomaly'), 0) + COALESCE((SELECT count FROM f_chest WHERE user = ? AND strain = 'anomaly'), 0)
                               + (SELECT COUNT(*) FROM f_plots WHERE user = ? AND crop = 'anomaly')`, [uid, uid, uid]);
@@ -742,7 +760,7 @@ async function farmState1(u: any) {
     strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
     ...kit, ...(await decorView(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...kit.jobs.map((j: any) => "p:" + j.recipe)])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await metWanderer(u.id, await wandererView(u.id)), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
-    vinyls, inv, barn, stall, chest, hive, wet: await wetOf(u.id), seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
+    vinyls, inv, barn, stall, chest, hive, shells: Number((await q("SELECT count FROM f_shell WHERE user = ?", [u.id]))[0]?.[0] || 0), shell_dust: SHELL_DUST, wet: await wetOf(u.id), seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })), ...(await monoView(u.id)), feed_top: await feedTop(u.id),
     orders: await ordersOf(u.id, kit.builds),
   };
@@ -888,14 +906,16 @@ async function buyAnomaly(u: any) {
   const o = await anomalyLive();
   if (!o) return { error: "Его здесь больше нет" };
   await ensureFarm(u);
-  if ((await oddHeld(u.id)) >= ODD_PER_USER) return { error: ODD_FULL };
+  const full = (await oddHeld(u.id)) >= ODD_PER_USER;
+  if (full && !(await oddEvictable(u.id))) return { error: ODD_FULL };
   if (!(await q("INSERT INTO f_evlog (user, kind, at) SELECT 0, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = 0 AND kind = ?) RETURNING 1",
                 [o.key, now(), o.key])).length) return { error: "Уже раскупили" };
   if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [o.price, u.id, o.price])).length) {
     await q("DELETE FROM f_evlog WHERE user = 0 AND kind = ?", [o.key]); return { error: "Не хватает звёздной пыли" }; }
+  const evicted = full && (await oddEvict(u.id));
   await q(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, 'anomaly', 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1`, [u.id]);
   await oddFresh(u.id);
-  return { ok: true, price: o.price, farm: await farmState(u) };
+  return { ok: true, price: o.price, odd_evicted: evicted, farm: await farmState(u) };
 }
 
 // «Семенная лавка станции»: базовые семена в мешок за пыль
@@ -1833,7 +1853,8 @@ export async function buy(u: any, pub: string, strain: string, myName: string, k
   const s = (await strains([strain]))[strain];
   if (!s) return { error: "Такого товара нет" };
   await ensureFarm(u);
-  if (strain === "anomaly" && (await oddHeld(u.id)) >= ODD_PER_USER) return { error: ODD_FULL };
+  const full = strain === "anomaly" && (await oddHeld(u.id)) >= ODD_PER_USER;
+  if (full && !(await oddEvictable(u.id))) return { error: ODD_FULL };
   const price = sellerPrice(s.price!, (await ownPrices(Number(f[0])))["s:" + strain]);
   if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [price, u.id, price])).length)
     return { error: "Не хватает звёздной пыли" };
@@ -1842,6 +1863,7 @@ export async function buy(u: any, pub: string, strain: string, myName: string, k
     await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [price, u.id]);
     return { error: "Уже раскупили" };
   }
+  const evicted = full && (await oddEvict(u.id));                          // третье — сначала пропадает одно старое, потом приходит новое
   await DB.batch([
     DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(price, f[0]),
     DB.prepare(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1`).bind(u.id, strain),
@@ -1849,7 +1871,7 @@ export async function buy(u: any, pub: string, strain: string, myName: string, k
   ]);
   await logFeed("buy", u.id, Number(f[0]), strain);
   if (strain === "anomaly") await oddFresh(u.id);                          // купленное у игрока — тоже «свежее»
-  return { ok: true, price, ...(await visit(u, pub)), farm: await farmState(u) };
+  return { ok: true, price, odd_evicted: evicted, ...(await visit(u, pub)), farm: await farmState(u) };
 }
 
 // справочник: все сорта, которые у игрока когда-либо были (строки инвентаря не удаляются — в т.ч. посаженные и проданные)

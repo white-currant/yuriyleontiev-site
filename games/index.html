@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611191058";
+    var BUILD = "202611191111";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -5151,7 +5151,7 @@
     else {
       var st = s.strains[key], it = bagOf(key), grp = groupOf(key); cropIcon(cv, st); b.setAttribute("aria-label", itemName(it.strain)); b.appendChild(cv);
       if (BN_FRAMES && st.bonus) b.classList.add("bn", "bn-" + st.bonus);
-      b.appendChild(el("span", "n", grp ? grp.total : freeOf(it)));
+      if (key !== "anomaly") b.appendChild(el("span", "n", grp ? grp.total : freeOf(it)));   // странные семена не складываются — у каждого своя ячейка (его решение 2026-11-19)
       if (grp ? groupFav(grp) : isFav(key)) b.appendChild(el("span", "fav", "★"));
       if (grp && grp.ids.length > 1) b.appendChild(el("span", "vars", grp.ids.length + " " + plural(grp.ids.length, "сорт", "сорта", "сортов")));
     }
@@ -5161,6 +5161,35 @@
       haptic("light"); F.sel = key; if (key !== "can") F.pick[s.strains[key].name] = key; renderHotbar(); if (onPick) onPick();
     };
     return b;
+  }
+  // скорлупа пропавшего странного семени (его решение 2026-11-19): лежит в инвентаре, распыляется за 1 пыль
+  var SHELL_ROWS = ["...............", "...............", "...............", "....K...K......", "...KWK.KWK.....", "..KWWWKWWWK....", "..KWDDDDDWK....",
+                    "..KWDpDDDwK....", "..KWwDDDwwK.KK.", "...KWwwwwK.KWwK", ".p..KKKKK...KK.", ".SSSSSSSSSSSSS.", ".sssssssssssss."];
+  var SHELL_PAL = { K: "#2a1638", W: "#f1ecdc", w: "#c9c0a6", D: "#1a0c20", p: "#9a72b4", S: "#c9c0a6", s: "#6b4428" };
+  function shellIcon(cv) { cv.width = 15; cv.height = 13; var c = cv.getContext("2d"); c.clearRect(0, 0, 15, 13);
+    SHELL_ROWS.forEach(function (r, y) { for (var x = 0; x < r.length; x++) if (SHELL_PAL[r[x]]) px(c, x, y, 1, 1, SHELL_PAL[r[x]]); }); }
+  function shellSlot(redraw) {
+    var b = el("button", "slot shell"); b.type = "button"; b.setAttribute("aria-label", "Скорлупа");
+    var cv = el("canvas", "pix"); shellIcon(cv); b.appendChild(cv);
+    b.onclick = function () { haptic("light"); shellSheet(redraw); };
+    return b;
+  }
+  function shellSheet(redraw) {
+    var s = F.state, d = s.shell_dust || 1;
+    sheet(function (sh, close) {
+      var cv = el("canvas", "pix bigseed"); shellIcon(cv); sh.appendChild(cv);
+      sh.appendChild(el("h3", "", "Скорлупа"));
+      sh.appendChild(el("div", "sub", "Пустая скорлупа странного семени — само семя пропало, когда пришло третье. Её можно распылить в звёздную пыль."));
+      var acts = el("div", "salebtns sheetfoot");
+      acts.appendChild(btn("Распылить — ✦ " + d, "", function (ev) {
+        if (!(s.shells > 0)) return close();
+        haptic("success"); var r0 = ev.currentTarget.getBoundingClientRect(); flyText(r0.left + r0.width / 2, r0.top - 4, "+✦ " + d, "gain"); s.shells--; s.dust += d; close(); renderFarm(); if (F.invRedraw) F.invRedraw();
+        toast("Скорлупа рассыпалась в пыль: +✦ " + d);
+        farmCall("/api/farm/shell", {}).catch(function () {});
+      }));
+      acts.appendChild(btn("Закрыть", "ghost", close));
+      sh.appendChild(acts);
+    });
   }
   function selText() {
     var s = F.state;
@@ -5576,8 +5605,14 @@
         if (favOnly) seeds = seeds.filter(groupFav);             // «только избранное»
         if (fb) fb.classList.toggle("on", favOnly);
         if (favOnly && !seeds.length) { var e0 = el("div", "sub", "В избранном пока ничего нет. Открой карточку семени и нажми звёздочку слева вверху."); e0.style.gridColumn = "1 / -1"; grid.appendChild(e0); }
-        seeds.forEach(function (g) { grid.appendChild(makeSlot(g.key, draw)); });
-        for (var k = seeds.length; k < Math.max(15, Math.ceil(seeds.length / 5) * 5); k++) grid.appendChild(el("div", "slot empty"));
+        var cells = 0;
+        seeds.forEach(function (g) {
+          var n = g.key === "anomaly" ? Math.max(1, g.total) : 1;                // странное — каждое семя в своей ячейке
+          for (var j = 0; j < n; j++) { grid.appendChild(makeSlot(g.key, draw)); cells++; }
+          if (g.key === "anomaly" && !favOnly) for (j = 0; j < (s.shells || 0); j++) { grid.appendChild(shellSlot(draw)); cells++; }   // скорлупа — рядом, на месте пропавших
+        });
+        if (!favOnly && !seeds.some(function (g) { return g.key === "anomaly"; })) for (var j2 = 0; j2 < (s.shells || 0); j2++) { grid.appendChild(shellSlot(draw)); cells++; }
+        for (var k = cells; k < Math.max(15, Math.ceil(cells / 5) * 5); k++) grid.appendChild(el("div", "slot empty"));
         // в инвентаре — только про семена: выбран инструмент — короткая подсказка, а не текст про лейку
         note.textContent = isTool(F.sel) ? "Нажми на семена, чтобы выбрать их для посадки. Ещё раз на ячейку — свойства." : selText();
         // первые четыре — те, что в полоске под фермой: жёлтая рамка вокруг них (его решение 2026-11-15)
@@ -6258,14 +6293,14 @@
           if (o.pub === "~") act[key] = function () {                                   // ночная аномалия: ни сорта, ни свойств — только цена
             var d = infoBox(box, "???", ["Продаёт " + o.seller + "."]);
             var acts = el("div", "invacts"), b = btn("Купить за ✦ " + op, "", function () { buyWare(b, o.pub, "anomaly", "seed", op, "+1 семя", "Странное семя — в инвентаре"); });
-            acts.appendChild(b); d.appendChild(acts);
+            acts.appendChild(b); d.appendChild(acts); oddWarn(d, b);
           };
           else act[key] = function () {
             var tier = SEEDTIER[st.tier] || SEEDTIER.common;
             var d = st.odd ? infoBox(box, st.name, ["Продаёт " + o.seller + "."]) : infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · продаёт " + o.seller, describe(st)]);
             var acts = el("div", "invacts"), b = btn("Купить за ✦ " + op, "", function () { buyWare(b, o.pub, st.id, "seed", op, "+1 семя", "Куплено: " + st.name + " — семя в инвентаре"); });
             acts.appendChild(b); if (!st.odd) acts.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: m.bonuses, buy: function () { b.click(); } }); }));
-            d.appendChild(acts);
+            d.appendChild(acts); if (st.id === "anomaly") oddWarn(d, b);
           };
         });
       } else {
@@ -6349,6 +6384,15 @@
     if (sel) acts2[sel](); else note(cat === "seed" ? "Нажми на сорт, чтобы выставить его семена и назначить цену. Их увидят все игроки и соседи у тебя в гостях; пыль приходит сразу."
       : "Нажми на товар, чтобы выставить его на прилавок. Продать игрокам выгоднее, чем распылить: цена на рынке в полтора раза больше, а ты можешь её чуть подвинуть. Пыль приходит сразу.");
   }
+  // странные семена: у игрока не больше двух; третье вытесняет одно из мешка или сундука (его решение 2026-11-19), посаженные не трогаем
+  function oddCount() { var s = F.state || {}, bag = 0, n = 0;
+    (s.inv || []).forEach(function (x) { if (x.strain === "anomaly") bag += x.count; }); (s.chest || []).forEach(function (x) { if (x.strain === "anomaly") bag += x.count; });
+    (s.plots || []).forEach(function (p) { if (p && p.crop === "anomaly") n++; }); return { all: bag + n, bag: bag }; }
+  function oddWarn(d, b) {                                             // предупреждение в карточке покупки странного семени
+    var oc = oddCount(); if (oc.all < 2) return;
+    if (oc.bag > 0) d.insertBefore(el("div", "sub", "У тебя уже два странных семени: купишь третье — одно из твоих пропадёт."), d.lastChild);
+    else { d.insertBefore(el("div", "sub", "Оба странных растения уже растут — третьему места нет."), d.lastChild); if (b) b.disabled = true; }
+  }
   function buyWare(b, pub, id, kind, price, gain, done) {
     var cur = F.state;
     if (cur.dust < price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
@@ -6357,7 +6401,7 @@
     b.disabled = true; b.textContent = "Покупаю…";
     call("/api/farm/buy", { pub: pub, strain: id, kind: kind }).then(function (r) {
       if (r.error) { toast(r.error); loadFarm(); return openShop("buy"); }
-      toast(done); F.shopSel = null; setFarm(r.farm); openShop("buy");
+      toast(r.odd_evicted ? "Куплено. Одно старое странное семя пропало" : done); F.shopSel = null; setFarm(r.farm); openShop("buy");
     }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; });
   }
 
@@ -6509,7 +6553,7 @@
       act["s:" + it.strain] = function () {
         var tier = SEEDTIER[st.tier] || SEEDTIER.common, d = st.odd ? infoBox(box, st.name, []) : infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · семена", describe(st)]);
         var a = el("div", "invacts"), b = btn("Купить за ✦ " + vp, "", function () { buyHere(b, st.id, "seed", vp, "Куплено: " + st.name + " — семя в инвентаре"); });
-        a.appendChild(b); if (!st.odd) a.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: v.bonuses, buy: function () { b.click(); } }); })); d.appendChild(a);
+        a.appendChild(b); if (!st.odd) a.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: v.bonuses, buy: function () { b.click(); } }); })); d.appendChild(a); if (st.id === "anomaly") oddWarn(d, b);
       };
     });
     (v.stall || []).forEach(function (x) {
@@ -6533,7 +6577,7 @@
       haptic("light"); b.disabled = true; b.textContent = "Покупаю…";
       call("/api/farm/buy", { pub: pub, strain: id, kind: kind }).then(function (r) {
         if (r.error) { toast(r.error); b.disabled = false; b.textContent = "Купить за ✦ " + price; return; }
-        haptic("success"); toast(done); setFarm(r.farm); F.visitSel = null;
+        haptic("success"); toast(r.odd_evicted ? "Куплено. Одно старое странное семя пропало" : done); setFarm(r.farm); F.visitSel = null;
         F.visiting.strains = r.strains; renderShop(pub, r);
       }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; b.textContent = "Купить за ✦ " + price; });
     }

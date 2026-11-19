@@ -91,6 +91,8 @@ CREATE TABLE IF NOT EXISTS f_decor (user INTEGER NOT NULL, kind TEXT NOT NULL, i
 CREATE TABLE IF NOT EXISTS f_style (user INTEGER PRIMARY KEY, roof TEXT);
 -- украшения двора (2026-11-19): что стоит на каждом месте (fence, path, plaza) и какие мелочи спрятаны (bit:<id> = off); купленное — в f_decor
 CREATE TABLE IF NOT EXISTS f_yard (user INTEGER NOT NULL, slot TEXT NOT NULL, item TEXT NOT NULL, PRIMARY KEY (user, slot));
+-- скорлупа пропавших странных семян (2026-11-19): лежит в инвентаре, распыляется за 1 пыль
+CREATE TABLE IF NOT EXISTS f_shell (user INTEGER PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0);
 -- очки за сутки по Минску (2026-11-15: рейтинг «Сегодня» читал все сегодняшние события — тысячи строк на открытие).
 -- Каждое начисление само прибавляется сюда триггером; рейтинг читает по строке на игрока.
 CREATE TABLE IF NOT EXISTS g_daypts (day INTEGER NOT NULL, user INTEGER NOT NULL, pts INTEGER NOT NULL DEFAULT 0, name TEXT, PRIMARY KEY (day, user));
