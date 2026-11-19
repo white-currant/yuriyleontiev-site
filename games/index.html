@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611190323";
+    var BUILD = "202611190341";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1813,6 +1813,19 @@
       }
       return;
     }
+    if (st === "moon") {                                                             // лунный забор (его идея 2026-11-19): столбики лунного камня с полумесяцем, серебряные жерди, кристалл в пролёте
+      var dM = x1 > x0 ? 1 : -1, sM = (y1 - y0) * dM > 0 ? 1 : -1, lenM = Math.abs(x1 - x0), yM = function (xx) { return y0 + sM * Math.floor(Math.abs(xx - x0) / 2); };
+      for (var qm = 0; qm <= lenM; qm++) { var xm = x0 + dM * qm, ym = yM(xm);
+        px(c, xm, ym - 7, 1, 1, "#e4e7f5"); px(c, xm, ym - 6, 1, 1, "#9aa2c4"); px(c, xm, ym - 3, 1, 1, "#cfd6ea"); px(c, xm, ym - 2, 1, 1, "#5d6488"); px(c, xm, ym + 1, 1, 1, "rgba(40,60,20,.25)"); }
+      var nM = Math.max(1, Math.round(lenM * 1.5 / 32)), prev = null;
+      for (var jm = 0; jm <= nM; jm++) { var qq = Math.round(lenM * jm / nM), xq = x0 + dM * qq, yq = yM(xq);
+        if (prev !== null) { var xc = x0 + dM * Math.round((prev + qq) / 2), yc = yM(xc);                     // кристалл посреди пролёта
+          px(c, xc, yc - 5, 1, 1, "#9aa2c4"); px(c, xc - 1, yc - 4, 3, 2, "#5fd9c0"); px(c, xc, yc - 4, 1, 3, "#9ff5de"); px(c, xc, yc - 4, 1, 1, "#ffffff"); }
+        prev = qq;
+        if (FENCE_SKIP && FENCE_SKIP.some(function (g) { return Math.abs(g[0] - xq) < 4 && Math.abs(g[1] - yq) < 4; })) continue;
+        moonPost(c, xq, yq); }
+      return;
+    }
     if (st === "iron" || st === "pillars") {                                         // кованая решётка с пиками; «столбы с фонарями» — та же решётка между каменными столбами
       var dI = x1 > x0 ? 1 : -1, sI = (y1 - y0) * dI > 0 ? 1 : -1, lenI = Math.abs(x1 - x0), yI = function (xx) { return y0 + sI * Math.floor(Math.abs(xx - x0) / 2); };
       var IR = "#2e3138", IL = "#5d6673";
@@ -1845,8 +1858,13 @@
     for (i = 0; i <= n; i++) { x = Math.round(x0 + (x1 - x0) * i / n); y = Math.round(y0 + (y1 - y0) * i / n);
       px(c, x, y - 8, 2, 9, P[2]); px(c, x, y - 8, 1, 8, P[0]); px(c, x, y - 9, 2, 1, P[1]); px(c, x - 1, y + 1, 4, 1, "rgba(40,60,20,.3)"); }
   }
-  var FENCE_LAMPS = null, FENCE_SKIP = null;                                                            // фонари на столбах забора «столбы с фонарями» — для тёплого ореола
+  var FENCE_LAMPS = null, FENCE_SKIP = null;
+  function moonPost(c, x, y) {                                                       // столбик лунного камня с золотым полумесяцем
+    px(c, x - 1, y - 10, 3, 11, "#b8bdd6"); px(c, x - 1, y - 10, 1, 11, "#e4e7f5"); px(c, x + 1, y - 10, 1, 11, "#6e7396"); px(c, x - 2, y - 11, 5, 1, "#e4e7f5"); px(c, x - 2, y - 10, 5, 1, "#8b93b5");
+    px(c, x, y - 15, 2, 1, "#ffe9a8"); px(c, x - 1, y - 14, 1, 2, "#ffd27a"); px(c, x, y - 12, 2, 1, "#ffe9a8"); px(c, x - 1, y + 1, 3, 1, "rgba(40,60,20,.3)");
+  }                                                            // фонари на столбах забора «столбы с фонарями» — для тёплого ореола
   function gatePost(c, g, st) {                                                      // столб калитки — в стиль забора; высота одна, чтобы фонарь стоял на месте
+    if (st === "moon") { moonPost(c, g[0], g[1]); px(c, g[0] - 1, g[1] - 12, 3, 2, "#b8bdd6"); return; }
     if (st === "iron") { px(c, g[0] - 1, g[1] - 12, 3, 13, "#2e3138"); px(c, g[0] - 1, g[1] - 12, 1, 12, "#5d6673"); px(c, g[0] - 2, g[1] - 13, 5, 1, "#2e3138"); return; }
     if (st === "brick") { px(c, g[0] - 2, g[1] - 12, 5, 13, "#b9533a"); px(c, g[0] - 2, g[1] - 12, 1, 13, "#d9744f"); px(c, g[0] + 2, g[1] - 12, 1, 13, "#7a2e22");
       for (var yb = g[1] - 10; yb < g[1]; yb += 2) px(c, g[0] - 2, yb, 5, 1, "#7a2e22"); px(c, g[0] - 3, g[1] - 13, 7, 1, C.stl); return; }
@@ -1861,11 +1879,50 @@
   // дорожка от калитки: утоптанная (как было), каменные плиты, мощёная, светящиеся плиты; glow — швы, по которым бежит свет (drawFarm)
   function drawYardPath(c, st, cx, y0, y1, base, glow) {
     if (st === "dirt" || !st) { for (var y = y0; y < y1; y++) { var pw0 = 7 + ((y - base) >> 2); px(c, cx - pw0, y, pw0 * 2, 1, y % 3 ? C.dt : C.dtd); } return; }
+    if (st === "moon") {                                                             // лунная дорожка — поверхность Луны (его правка 2026-11-19): пыль и кратеры, к зрителю крупнее
+      var pwAt = function (yy) { return 7 + ((yy - base) >> 2); };
+      for (var ym = y0; ym < y1; ym++) { var pwm = pwAt(ym), Lm = cx - pwm, Wm = pwm * 2;
+        for (var xm = Lm; xm < Lm + Wm; xm++) { var hd = hash01(xm * 7.3 + ym * 13.1);
+          var hc = hash01((xm >> 1) * 3.7 + (ym >> 1) * 5.9);                           // шум пыли (его правка 2026-11-19): пятнами покрупнее и мелкой рябью
+          px(c, xm, ym, 1, 1, xm === Lm || xm === Lm + Wm - 1 ? "#8b93b5" : hd < .12 ? "#a3aabf" : hd < .3 ? (hc < .5 ? "#aeb5c9" : "#b4bbcd") : hd < .62 ? (hc < .4 ? "#b4bbcd" : "#bcc2d4") : hd < .87 ? "#c3c8d9" : "#cdd2e1");
+          if (hd > .955 && hd <= .985 && xm > Lm + 1 && xm < Lm + Wm - 2) { px(c, xm, ym, 1, 1, "#8a92ad"); px(c, xm + 1, ym, 1, 1, "#d6dbea"); }   // мелкие ямки
+          if (glow && hd > .992 && xm > Lm && xm < Lm + Wm - 1) glow.push([xm, ym, 1]); } }
+      var crater = function (ccx, ccy, rx, ry) {
+        for (var dy = -ry - 1; dy <= ry + 1; dy++) { var yy = ccy + dy; if (yy < y0 || yy >= y1) continue; var pwc = pwAt(yy);
+          for (var dx = -rx - 1; dx <= rx + 1; dx++) { var xx = ccx + dx; if (xx <= cx - pwc || xx >= cx + pwc - 1) continue;
+            var d = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry), side = dx / rx + dy / ry * 1.4, col = null;
+            if (d <= .5) col = side < -.3 ? "#99a0b8" : "#a6adc3";                             // дно — мягко (его правка 2026-11-19: «мягче»)
+            else if (d <= 1) col = side < -.5 ? "#7f87a3" : side < 0 ? "#8e96b0" : side < .5 ? "#c4c9da" : "#d4d9e7";   // стенка: тень и свет в два шага
+            else if (d <= 1.45) col = side < -.4 ? "#ccd1e1" : null;   // самый мягкий вариант — его выбор 2026-11-19                          // светлый вал только по верхнему краю
+            if (col) px(c, xx, yy, 1, 1, col); } } };
+      // композиция (его правка 2026-11-19: «не в линию, красивая композиция»): крупный кратер сбоку, средние в разных местах,
+      // россыпь мелких — часть садится на валы больших. u — поперёк дорожки (−1…1), v — вдоль (0 у калитки … 1 у края), r — размер.
+      var CRAT = [[-.5, .76, 1.1], [.55, .4, .7], [-.55, .18, .5], [.5, .93, .45], [.08, .55, .3],
+                  [-.05, .06, .26], [.7, .66, .22], [-.15, .4, .2], [.2, .82, .2]];
+      var span = y1 - y0, use = span < 30 ? CRAT.slice(0, 4) : CRAT;                    // в маленькой картинке окна — только крупные
+      use.forEach(function (q) { var yc = Math.round(y0 + 2 + q[1] * (span - 3)), pwk = pwAt(yc), rxk = Math.max(2, Math.round(pwk * .5 * q[2])), ryk = Math.max(1, Math.round(rxk * .5));
+        crater(cx + Math.round(q[0] * (pwk - 3)), yc, rxk, ryk); });
+      return;
+    }
+    if (st === "steps") {                                                            // камни-ступеньки в траве (его образец 2026-11-19, вместо деревянного настила): к зрителю крупнее, вразбежку
+      var stone = function (sx, sy, rx, ry, alt, moss) {                             // округлый плоский камень: тень, тёмный низ, тело, светлый верх
+        var row = function (dx, dy, rr, col) { for (var q = -rr; q <= rr; q++) { var w = Math.round(rx * Math.sqrt(Math.max(0, 1 - (q / (rr + .7)) * (q / (rr + .7))))); if (w > 0) px(c, sx + dx - w, sy + dy + q, w * 2, 1, col(q)); } };
+        row(1, 1, ry, function () { return "rgba(30,55,15,.35)"; });
+        row(0, 0, ry, function (q) { return q >= ry - 0 ? C.std : q <= -ry + 1 ? C.stl : alt ? "#aab0b8" : C.st; });
+        px(c, sx - Math.round(rx * .4), sy - ry + 1, Math.max(1, Math.round(rx * .5)), 1, "#e3e6ea");
+        if (moss) { px(c, sx + rx - 3, sy + ry - 1, 2, 1, "#5aaa43"); px(c, sx + rx - 2, sy + ry - 2, 1, 1, "#8acf60"); }
+      };
+      for (var yy0 = y0 + 1, r0 = 0; yy0 < y1; r0++) { var pwr = 7 + ((yy0 - base) >> 2), rxs = Math.max(3, Math.round(pwr * .36)), rys = Math.max(1, Math.round(rxs * .45));
+        var cxs = r0 % 2 ? [cx - Math.round(pwr * .55), cx + Math.round(pwr * .55)] : [cx + (r0 % 4 ? 1 : -1)];
+        cxs.forEach(function (sx, k3) { var hs3 = hash01(r0 * 7 + k3 * 3); stone(sx, yy0 + rys, cxs.length > 1 ? rxs : rxs + 1, rys, hs3 < .5, hs3 > .6); });
+        yy0 += rys * 2 + 3 + Math.floor((yy0 - y0) / 12); }
+      return;
+    }
     // в перспективе (его правка 2026-11-19): ряды к зрителю выше, швы поперёк — расходятся от калитки, как сама дорожка
     var cob = st === "cobble", yy = y0, r = 0;
     while (yy < y1) {
       var h = cob || st === "brick" ? 2 + Math.floor((yy - y0) / 12) : 3 + Math.floor((yy - y0) / 8), ye = Math.min(y1, yy + h);
-      var cuts = cob ? (r % 2 ? [.1, .3, .5, .7, .9] : [.2, .4, .6, .8]) : st === "planks" ? [.25, .5, .75] : st === "brick" ? (r % 2 ? [.125, .375, .625, .875] : [.25, .5, .75]) : (r % 2 ? [.5] : [.3, .7]);
+      var cuts = cob ? (r % 2 ? [.1, .3, .5, .7, .9] : [.2, .4, .6, .8]) : st === "brick" ? (r % 2 ? [.125, .375, .625, .875] : [.25, .5, .75]) : (r % 2 ? [.5] : [.3, .7]);
       for (var y = yy; y < ye; y++) { var pw = 7 + ((y - base) >> 2), L = cx - pw, W = pw * 2, seamRow = y === ye - 1;
         var cx2 = cuts.map(function (q) { return Math.round(L + q * W); });
         for (var x = L; x < L + W; x++) {
@@ -1876,8 +1933,7 @@
           else if (cob) col = seam ? "#6f6a63" : y === yy && hs > .4 ? "#d3cdc2" : hs < .33 ? "#a7a199" : hs < .66 ? "#bab3a7" : "#958e84";
           else if (st === "brick") col = seam ? "#6e3022" : y === yy ? "#e08a68" : hs < .4 ? "#b5533c" : hs < .8 ? "#c86848" : "#9a4430";
           else if (st === "mossy") { var hm = hash01(x * 13 + y * 7);
-            col = seam ? (hm < .55 ? "#5aaa43" : hm < .8 ? "#3f8f3a" : C.std) : hs < .12 ? (hm < .5 ? C.g : C.gl) : y === yy ? "#b9bec5" : hm < .12 ? "#8acf60" : hs < .5 ? "#9aa0a6" : "#868c93"; }
-          else if (st === "planks") col = seamRow ? "#4a2e1a" : cx2.indexOf(x) >= 0 ? "#5e3a22" : y === yy ? "#c58c54" : y === ye - 2 ? "#7a4d2c" : (x * 7 + r) % 11 === 0 ? "#8a5a36" : hs < .5 ? "#a06a40" : "#ad7848";
+            col = seam ? (hm < .55 ? "#3f7a35" : hm < .8 ? "#2f6229" : "#3a3f46") : hs < .12 ? (hm < .5 ? "#3f8a36" : "#4f9a40") : y === yy ? "#7a8088" : hm < .12 ? "#5aaa43" : hs < .5 ? "#5f656d" : "#535961"; }   // тёмные старые камни (его правка 2026-11-19)
           else { var hm2 = hash01(x * 9 + y * 5);                                    // каменные плиты как в его образце: светлый верх, тень снизу, мох в швах
             col = seam ? (hm2 < .3 ? "#5aaa43" : C.std) : y === yy ? (hs < .5 ? C.stl : "#c4c9cf") : y === ye - 2 ? "#878d95" : x === cx2[k - 1] + 1 ? "#b9bec5" : hs < .45 ? C.st : hs < .85 ? "#aab0b8" : "#b3b8bf"; }
           px(c, x, y, 1, 1, col); } }
@@ -3384,7 +3440,9 @@
     drawShop(c, t, kit, own, mossOn(kit, now));
     drawPlazaFx(c, YK.plaza, PLAZA[0], PLAZA[1], t);                               // украшения двора: вода фонтана, искра статуи
     if (YK.bits.indexOf("vane") >= 0 && hasBuild(kit, "barn") && MOSSGEO.barn) drawVane(c, MOSSGEO.barn.R1, t);
-    if (L.glowPx.length) { var gw = (t / 45) % 60; L.glowPx.forEach(function (g) { var d = (g[1] - YC[2][1] + 60 - gw + 600) % 60; if (d < 4) px(c, g[0], g[1], 1, 1, d < 2 ? "#c9fff1" : "#7ff0d6"); }); }   // по швам бежит свет от калитки
+    if (L.glowPx.length) { var gw = (t / 45) % 60; L.glowPx.forEach(function (g) {
+      if (g[2]) { var tw = Math.sin(t / 650 + g[0] * 1.7 + g[1] * .9); if (tw > .75) px(c, g[0], g[1], 1, 1, tw > .93 ? "#ffffff" : "#fff6df"); return; }   // лунная дорожка: искры мерцают
+      var d = (g[1] - YC[2][1] + 60 - gw + 600) % 60; if (d < 4) px(c, g[0], g[1], 1, 1, d < 2 ? "#c9fff1" : "#7ff0d6"); }); }   // по швам бежит свет от калитки
     drawMossOver(c, kit, now, t, L, seed + roofKey(kit) + ["barn", "mill", "oven", "shop"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
     if (CHEST_ON) drawChest(c, own);
     if (own) drawFx(c, t);

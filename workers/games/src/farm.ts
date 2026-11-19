@@ -1616,9 +1616,10 @@ async function roofOf(uid: number) { const r = await q("SELECT roof FROM f_style
 export const YARD: Record<string, { name: string; items: Record<string, { name: string; price: number }> }> = {
   fence: { name: "Забор", items: { wood: { name: "Деревянный", price: 0 }, vine: { name: "Дерево с плющом", price: 3000 }, white: { name: "Белый штакетник", price: 3000 },
                                    hedge: { name: "Живая изгородь", price: 3000 }, stone: { name: "Каменный", price: 3000 }, brick: { name: "Красный кирпич", price: 3000 },
-                                   pillars: { name: "Столбы с фонарями", price: 3000 } } },
-  path:  { name: "Дорожка", items: { dirt: { name: "Утоптанная", price: 0 }, stone: { name: "Каменные плиты", price: 600 }, planks: { name: "Деревянный настил", price: 600 }, brick: { name: "Кирпичная", price: 700 },
-                                     mossy: { name: "Старые камни со мхом", price: 800 }, cobble: { name: "Мощёная", price: 900 }, glow: { name: "Светящиеся плиты", price: 1500 } } },
+                                   pillars: { name: "Столбы с фонарями", price: 3000 }, moon: { name: "Лунный забор", price: 3000 } } },
+  path:  { name: "Дорожка", items: { dirt: { name: "Утоптанная", price: 0 }, stone: { name: "Каменные плиты", price: 2000 }, steps: { name: "Камни-ступеньки", price: 2000 }, brick: { name: "Кирпичная", price: 2000 },
+                                     mossy: { name: "Старые камни со мхом", price: 2000 }, cobble: { name: "Мощёная", price: 2000 }, glow: { name: "Светящиеся плиты", price: 2000 },
+                                     moon: { name: "Лунная дорожка", price: 2000 } } },
   plaza: { name: "Площадка у печи", items: { none: { name: "Пусто", price: 0 }, birdbath: { name: "Чаша для птиц", price: 600 }, flowerbed: { name: "Круглая клумба", price: 800 },
                                              statue: { name: "Статуя звездочёта", price: 2000 }, fountain: { name: "Фонтан", price: 3000 },
                                              column: { name: "Фонтан-колонна", price: 2200 }, lily: { name: "Фонтан с кувшинками", price: 2600 }, tiered: { name: "Ярусный фонтан", price: 3500 },
@@ -1630,7 +1631,7 @@ export const YARD: Record<string, { name: string; items: Record<string, { name: 
                                     arch: { name: "Арка из роз", price: 1500 } } },
 };
 // что из украшений уже открыто игрокам (его решение 2026-11-19: сначала только заборы, все платные по ✦3000); остальное — на стенде
-export const YARD_ON = ["fence"];
+export const YARD_ON = ["fence", "path"];   // дорожки открыты 2026-11-19, все платные по ✦2000 (его решение)
 async function yardOf(uid: number) {
   const set = new Map((await q("SELECT slot, item FROM f_yard WHERE user = ?", [uid])).map((r) => [String(r[0]), String(r[1])]));
   const owned = new Set((await q("SELECT item FROM f_decor WHERE user = ? AND kind = 'yard'", [uid])).map((r) => String(r[0])));
