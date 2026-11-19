@@ -1620,6 +1620,9 @@ export const YARD: Record<string, { name: string; items: Record<string, { name: 
   path:  { name: "Дорожка", items: { dirt: { name: "Утоптанная", price: 0 }, stone: { name: "Каменные плиты", price: 2000 }, steps: { name: "Камни-ступеньки", price: 2000 }, brick: { name: "Кирпичная", price: 2000 },
                                      mossy: { name: "Старые камни со мхом", price: 2000 }, cobble: { name: "Мощёная", price: 2000 }, glow: { name: "Светящиеся плиты", price: 2000 },
                                      moon: { name: "Лунная дорожка", price: 2000 } } },
+  ground: { name: "Двор вокруг грядок", items: { dirt: { name: "Утоптанная земля", price: 0 }, stone: { name: "Каменные плиты", price: 2500 },
+                                                 brick: { name: "Кирпичный", price: 2500 }, mossy: { name: "Старые камни со мхом", price: 2500 }, cobble: { name: "Мощёный", price: 2500 },
+                                                 glow: { name: "Светящиеся плиты", price: 2500 }, moon: { name: "Лунный", price: 2500 } } },   // его просьба 2026-11-19: варианты «как дорожки» вокруг грядок
   plaza: { name: "Площадка у печи", items: { none: { name: "Пусто", price: 0 }, birdbath: { name: "Чаша для птиц", price: 600 }, flowerbed: { name: "Круглая клумба", price: 800 },
                                              statue: { name: "Статуя звездочёта", price: 2000 }, fountain: { name: "Фонтан", price: 3000 },
                                              column: { name: "Фонтан-колонна", price: 2200 }, lily: { name: "Фонтан с кувшинками", price: 2600 }, tiered: { name: "Ярусный фонтан", price: 3500 },
@@ -1631,12 +1634,12 @@ export const YARD: Record<string, { name: string; items: Record<string, { name: 
                                     arch: { name: "Арка из роз", price: 1500 } } },
 };
 // что из украшений уже открыто игрокам (его решение 2026-11-19: сначала только заборы, все платные по ✦3000); остальное — на стенде
-export const YARD_ON = ["fence", "path"];   // дорожки открыты 2026-11-19, все платные по ✦2000 (его решение)
+export const YARD_ON = ["fence", "path", "ground"];   // открыто игрокам: заборы ✦3000, дорожки ✦2000, двор ✦2500 — его решения 2026-11-19
 async function yardOf(uid: number) {
   const set = new Map((await q("SELECT slot, item FROM f_yard WHERE user = ?", [uid])).map((r) => [String(r[0]), String(r[1])]));
   const owned = new Set((await q("SELECT item FROM f_decor WHERE user = ? AND kind = 'yard'", [uid])).map((r) => String(r[0])));
   const y: any = {};
-  for (const sl of ["fence", "path", "plaza", "scare"]) { const k = set.get(sl) || "", first = Object.keys(YARD[sl].items)[0]; y[sl] = YARD_ON.includes(sl) && YARD[sl].items[k] && (k === first || owned.has(sl + ":" + k)) ? k : first; }
+  for (const sl of ["fence", "path", "ground", "plaza", "scare"]) { const k = set.get(sl) || "", first = Object.keys(YARD[sl].items)[0]; y[sl] = YARD_ON.includes(sl) && YARD[sl].items[k] && (k === first || owned.has(sl + ":" + k)) ? k : first; }
   y.bits = YARD_ON.includes("bits") ? Object.keys(YARD.bits.items).filter((k) => owned.has("bits:" + k) && set.get("bit:" + k) !== "off") : [];
   return { yard: y, yard_owned: [...owned] };
 }
