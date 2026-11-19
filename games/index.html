@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611200015";
+    var BUILD = "202611200023";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -426,7 +426,8 @@
   #farmbanners .banner button { background: rgba(255, 255, 255, .16); text-shadow: none; }
   .farm-actions { margin-top: 16px; }
   .pills { display: flex; gap: 8px; }
-  .farm-top.noexit .pills { flex: 1; justify-content: space-between; }        /* без «← Гильдия» значки ферм — во всю ширину (2026-11-20) */
+  .farm-top.noexit .pills { flex: 1; justify-content: flex-end; }             /* без «← Гильдия»: значки — вправо, валик «Вид фермы» — у левого края (его правка 2026-11-20) */
+  .farm-top.noexit #decorbtn { order: -1; margin-right: auto; }
   .dust-pill.blue, .cost.blue { color: #9ddcff; }
   .plot .lbl.water { color: #1d5f9e; }
   .plot .lbl.dead { color: #7a4a20; }
