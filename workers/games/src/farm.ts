@@ -1720,7 +1720,7 @@ export async function visit(u: any, pub: string) {
   const vin = Number((await q("SELECT COUNT(DISTINCT item) FROM g_items WHERE user = ? AND game = 'farm' ", [f[0]]))[0][0]);
   const given = (await q("SELECT 1 FROM f_given WHERE from_user = ? AND to_user = ? AND day = ?", [u.id, f[0], today()])).length > 0;
   const shop = await q("SELECT strain, listed FROM f_inv WHERE user = ? AND listed > 0", [f[0]]);
-  const stall = await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [f[0]]);
+  const stall = (await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [f[0]])).filter((r) => String(r[0]) !== "p:fert");   // удобрение на прилавке гостям не видно (2026-11-19)
   const ii = await itemInfo(stall.map((r) => String(r[0]))), own = await ownPrices(Number(f[0]));
   const res: any = { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given, roof: await roofOf(Number(f[0])), ...(await yardOf(Number(f[0]))),
            plots: await (async () => { const ev = await plotEvents(Number(f[0])); return Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(f[1]), ev[i])); })(), now: now(),
@@ -1831,6 +1831,7 @@ export async function listItem(u: any, item: string, delta: number) {
   return { farm: await farmState(u) };
 }
 async function buyItem(u: any, seller: number, pub: string, item: string, myName: string) {
+  if (item === "p:fert") return { error: "Такого товара нет" };                 // пока подземелье скрыто — удобрение не купить
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Урожай и продукты кладут в амбар — сначала построй его" };
   const it = (await itemInfo([item])).info[item];
   if (!it) return { error: "Такого товара нет" };
@@ -1902,7 +1903,7 @@ export async function market(u: any, hidden: number[]) {
   if (an) { ss.anomaly = view(CROPS.anomaly); offers.splice(fnv(an.key) % (offers.length + 1), 0, { pub: ANOM_PUB, strain: "anomaly", count: 1, price: an.price, seller: an.seller }); }
   const st = await q(`SELECT s.user, f.pub, s.item, s.listed, p.name, pr.price FROM f_stall s JOIN f_farms f ON f.user = s.user
                       LEFT JOIN g_profiles p ON p.user = s.user LEFT JOIN f_prices pr ON pr.user = s.user AND pr.item = s.item
-                      WHERE s.listed > 0 AND s.user != ? LIMIT 300`, [u.id]);
+                      WHERE s.listed > 0 AND s.user != ? AND s.item != 'p:fert' LIMIT 300`, [u.id]);   // удобрение на рынке пока не показываем (2026-11-19)
   const ii = await itemInfo(st.map((r) => String(r[2])));
   const items = st.map(([uid, pub, item, n, name, own]) => ({ pub, item: String(item), count: Number(n), price: ii.info[String(item)] ? sellerPrice(stallPrice(ii.info[String(item)].dust), own) : 0,
                                                           seller: hidden.includes(Number(uid)) ? "Сосед" : name || "Сосед" })).filter((o) => o.price);
@@ -1942,7 +1943,7 @@ const MONO_NAMES: Record<string, [string, string]> = {
   comet: ["Кометный дождь", "на ферме большой кратер и осколки со звёздной пылью — собери их, кратер убери лопатой"],
 };
 export async function logFeed(kind: string, actor: number, target: number | null, item: string | null, n = 1) {
-  if (item && /^(anomaly|p:eye|p:brew)/.test(item)) return;          // о странном в новостях — ни слова (его правка 2026-11-18)
+  if (item && /^(anomaly|p:eye|p:brew|p:fert)/.test(item)) return;   // о странном в новостях — ни слова (его правка 2026-11-18); об удобрении — тоже, подземелье ещё скрыто (2026-11-19)
   const t = now();
   const upd = await q("UPDATE f_feed SET n = n + ?, at = ? WHERE id = (SELECT id FROM f_feed WHERE kind = ? AND actor = ? AND target IS ? AND item IS ? AND at > ? ORDER BY id DESC LIMIT 1) RETURNING 1",
                       [n, t, kind, actor, target, item, t - 600]);
@@ -1963,6 +1964,7 @@ export async function feed(u: any, hidden: number[], since = 0) {      // since 
   for (const [id, at, kind, actor, target, item, n] of rows) {
     if (hidden.includes(Number(actor)) && Number(actor) !== u.id) continue;          // скрытых игроков в ленте нет
     const k = String(kind), it = String(item || "");
+    if (it === "p:fert") continue;                                                   // удобрение из подземелья — пока тайна для всех, кроме хозяина (утечка 2026-11-19)
     out.push({ id: Number(id), at: Number(at), kind: k, n: Number(n), actor: who(Number(actor)), target: target ? who(Number(target)) || { name: "соседу", pub: "", me: false } : null,
                item: k === "event" ? { id: it, name: (MONO_NAMES[it] || [it])[0] } : it ? { id: it, name: nameOfItem(it) } : null });
   }
@@ -2111,12 +2113,13 @@ export async function noticeSeen(u: any, id: string) {
 // ---------- Подземелье (его решения 2026-11-19) ----------
 // Кости — у героя (d_hero), рюкзак — 6 ячеек по одному блюду (d_pack), котёл — очередь удобрений (d_brew).
 // Вход стоит «сытость» = очки блюда (хлеб 1 … Странная похлёбка 5): малое 1, среднее 2, большое 4. Бой считается в игре,
-// сервер запоминает итог при выходе (два запроса на поход). Удобрение — товар амбара «p:fert», 40 костей, 30 минут штука.
+// сервер запоминает итог при выходе (два запроса на поход). Удобрение — товар амбара «p:fert», 40 костей, 20 минут штука.
 // Пока подземелье открыто только хозяину — и все запросы тоже.
 PRODUCTS["p:fert"] = { name: "Удобрение", dust: 20 };
 export const DG_NEED: Record<string, number> = { s: 1, m: 2, l: 4 };
 const DG_MAXB: Record<string, number> = { s: 150, m: 400, l: 700 };    // больше костей с уровня не набрать (замер 150 уровней: не больше 88 / 258 / 400)
-export const FERT_BONES = 40, FERT_SEC = 30 * 60, DG_SLOTS = 6, BREW_MAX = 20;
+export const FERT_BONES = 40, FERT_SEC = 20 * 60,   // котёл — 20 минут на удобрение (его решение 2026-11-19, было 30)
+  DG_SLOTS = 6, BREW_MAX = 20;
 // здоровье героя в убежище (его решение 2026-11-19): гибель в походе отнимает 20, лечат чаи из амбара; при нуле в поход нельзя
 export const HP_MAX = 100, HP_DEATH = 20, HP_TEA: Record<string, number> = { tea: 30, honeytea: 50 };
 function satOf(id: string) { const r = RECIPES[recipeOf(id)]; return id.startsWith("p:") && r && r.kind === "oven" ? r.points : 0; }
