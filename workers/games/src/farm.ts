@@ -2215,18 +2215,20 @@ export async function dgStart(u: any, size: string) {                      // в
 // Удар по алтарю — одна находка за поход, бросок на сервере: карта — чаще всего (иначе семя не будет редкостью), и карты бывают
 // редкие и легендарные (его правка 2026-11-19); ещё звёздный уголь или странное семя. Находка держится до конца похода:
 // погиб — пропала, вышел или зачистил — твоя (у алтаря её не делят пополам)
-export const ALTAR_LOOT: [string, number][] = [["rare", .40], ["legend", .15], ["coal", .30], ["seed", .15]];
+// его правка 2026-11-20: в бустере всегда карта (редкая или легендарная), а уголь или странное семя — с шансом добавкой к ней
+export const ALTAR_CARD: [string, number][] = [["rare", .73], ["legend", .27]], ALTAR_EXTRA: [string, number][] = [["coal", .30], ["seed", .15]];
+function altarRoll(t: [string, number][]) { let r = Math.random(); for (const [k, p] of t) { if (r < p) return k; r -= p; } return null; }
 export async function dgAltar(u: any, run: string) {
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   const h = await dgHero(u.id);
   if (!run || h.run !== run) return { error: "Поход уже закончен" };
   if (!(await q("SELECT 1 FROM d_secret WHERE user = ? AND run = ?", [u.id, run])).length) return { error: "Алтаря в этом походе нет" };
   const [had] = await q("SELECT loot FROM d_altar WHERE user = ? AND run = ?", [u.id, run]);
-  if (had) return { loot: String(had[0]) };                                  // уже ударил (повтор запроса) — та же находка
-  let r = Math.random(), loot = ALTAR_LOOT[ALTAR_LOOT.length - 1][0];
-  for (const [k, p] of ALTAR_LOOT) { if (r < p) { loot = k; break; } r -= p; }
+  const split = (v: string) => { const [card, extra] = v.split("+"); return { loot: card, extra: extra || null }; };
+  if (had) return split(String(had[0]));                                     // уже ударил (повтор запроса) — та же находка
+  const card = altarRoll(ALTAR_CARD) || "rare", extra = altarRoll(ALTAR_EXTRA), loot = card + (extra ? "+" + extra : "");
   await q("INSERT INTO d_altar (user, run, loot) VALUES (?, ?, ?) ON CONFLICT(user) DO UPDATE SET run = excluded.run, loot = excluded.loot", [u.id, run, loot]);
-  return { loot };
+  return split(loot);
 }
 async function altarGive(uid: number, loot: string) {                     // находка алтаря — на ферму; что выдано на самом деле
   const hasBarn = async () => (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [uid])).length > 0;
@@ -2250,7 +2252,8 @@ export async function dgFinish(u: any, run: string, bones: number, dead = false,
   await q("UPDATE d_hero SET bones = bones + ?, hp = MAX(0, hp - ?), run = NULL, size = NULL WHERE user = ? AND run = ?", [b, dead ? HP_DEATH : 0, u.id, run]);
   await q("DELETE FROM d_secret WHERE user = ? AND run = ?", [u.id, run]);
   const [al] = await q("DELETE FROM d_altar WHERE user = ? AND run = ? RETURNING loot", [u.id, run]);
-  const loot = al && !dead ? await altarGive(u.id, String(al[0])) : null;
+  let loot: string | null = null;                                            // «карта+добавка» — выдаётся всё
+  if (al && !dead) { const got = []; for (const k of String(al[0]).split("+")) got.push(await altarGive(u.id, k)); loot = got.join("+"); }
   return { ok: true, bones: b, total: h.bones + b, hp: dead ? Math.max(0, h.hp - HP_DEATH) : h.hp, loot };
 }
 export async function dgDrink(u: any, item: string) {                      // выпить чай из амбара — здоровье героя

@@ -184,6 +184,7 @@
     <button class="pan" type="button" data-size="s">Малое<small>3–4 зала · сытость 1</small></button>
     <button class="pan" type="button" data-size="m">Среднее<small>6–8 залов · сытость 2</small></button>
     <button class="pan" type="button" data-size="l">Большое<small>10–12 залов · сытость 4</small></button>
+    <button class="pan" type="button" id="srtest" hidden>Странная комната<small>проба · сразу к алтарю</small></button>
   </div></div>
   <div id="sheet"><div class="pan" id="sheetbox"></div></div>
 </div>
@@ -748,6 +749,7 @@
     var sat = D ? D.sat : 0, brew = D ? D.pack.filter(function (p) { return rec(p.item) === "brew"; }).reduce(function (a, p) { return a + p.sat; }, 0) : 0;
     $("pickneed").textContent = D ? "В рюкзаке сытость " + sat + (brew ? " — со Странной похлёбкой только в большое" : "") : "Пробный спуск — без фермы еда не нужна";
     var rs = $("resume"), live = !!(D && D.run); rs.hidden = !live; rs.disabled = false;
+    $("srtest").hidden = !(D && D.free); $("srtest").disabled = !!(D && dgCall && !fresh);   // проба хозяина (2026-11-20): сразу в странную комнату
     if (live) $("pickneed").textContent = "Есть начатый поход. Новый спуск — снова за еду, начатый пропадёт";
     var wait = !!D && !!dgCall && !fresh; if (wait) $("pickneed").textContent = "Проверяю рюкзак…";   // 2026-11-19: из памяти пустило в поход без еды
     if (live) $("resumes").textContent = { s: "малое", m: "среднее", l: "большое" }[D.size] + " · уже оплачен" + (D.secret ? " · тайная комната" : "");
@@ -768,6 +770,7 @@
   addEventListener("pageshow", function (e) { if (e.persisted) location.reload(); });
   pick.firstElementChild.appendChild(shx(function () { pick.classList.remove("on"); }));   // крестик выбора подземелья — свой обработчик, мимо кнопок спуска
   pick.addEventListener("click", function (e) { e.stopPropagation(); var b = e.target.closest("button"); if (!b || b.classList.contains("shx")) { pick.classList.remove("on"); return; }
+    if (b.id === "srtest") { pick.querySelectorAll("button").forEach(function (x) { x.disabled = true; }); goBattle("iso.html?size=l&pay=1&sr=1&v=" + Date.now()); return; }
     if (b.id === "resume") { b.disabled = true; goBattle("iso.html?size=" + D.size + "&run=" + D.run + (D.secret ? "&secret=1" : "") + "&v=" + Date.now()); return; }   // уже оплачен — без новой еды
     if (!dgCall) { location.href = "iso.html?size=" + b.dataset.size + "&v=" + Date.now(); return; }
     pick.querySelectorAll("button").forEach(function (x) { x.disabled = true; });

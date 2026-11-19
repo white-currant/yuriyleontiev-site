@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611200113";
+    var BUILD = "202611200206";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -6794,6 +6794,7 @@
   // подземелье — поверх мини-приложения, в своей рамке: внутри свои страницы (убежище ↔ бой), а вход Телеграма не теряется
   // подземелье в рамке зовёт сервер и рисует блюда через главное окно: вход Телеграма и значки еды — одни на всё мини-приложение
   window.dgCall = call; window.dgIcon = function (cv, id) { itemIcon(cv, id); };
+  window.dgSeedIcon = function (cv) { cropIcon(cv, (F.state && F.state.strains && F.state.strains.anomaly) || ODD, true); };   // странное семя — как в инвентаре фермы (для бустера подземелья, 2026-11-20)
   window.dgFarm = function () { if (F.state) loadFarm(); };                         // после похода ферма перечитывает амбар
   function openDungeon() {
     haptic("light");
