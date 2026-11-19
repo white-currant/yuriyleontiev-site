@@ -67,6 +67,12 @@
   .grid.w4 .cell canvas { width: calc(var(--u) * 16); }
   .cell b { position: absolute; right: calc(var(--u) * 1); bottom: calc(var(--u) * .4); font-size: calc(var(--u) * 3.2); font-weight: 800; text-shadow: 0 calc(var(--u) * .5) 0 #000; }
   .cell i { position: absolute; left: calc(var(--u) * 1); top: calc(var(--u) * .4); font-style: normal; font-size: calc(var(--u) * 3); font-weight: 800; color: #ffcf7a; text-shadow: 0 calc(var(--u) * .5) 0 #000; }
+  /* тайная карта (2026-11-19): золотая рамка, фиолет и плывущий туман */
+  .cell.card { aspect-ratio: 3 / 4; background: linear-gradient(#2a1a46, #3b2a5c); box-shadow: inset 0 0 0 calc(var(--u) * .8) #d9a441, inset 0 0 0 calc(var(--u) * 1.6) #5a3a12; overflow: hidden; }
+  .cell.card .fog { position: absolute; inset: -40%; background: radial-gradient(circle at 30% 40%, rgba(201,180,255,.55), transparent 40%), radial-gradient(circle at 70% 65%, rgba(143,106,216,.5), transparent 45%), radial-gradient(circle at 50% 20%, rgba(232,220,255,.35), transparent 35%);
+    animation: fog 6s ease-in-out infinite alternate; }
+  .cell.card::after { content: "?"; position: relative; font-size: calc(var(--u) * 6); font-weight: 800; color: #ffe7a3; text-shadow: 0 0 calc(var(--u) * 2) #8f6ad8; }
+  @keyframes fog { 0% { transform: translate(-8%, 4%) rotate(0deg); } 100% { transform: translate(8%, -6%) rotate(25deg); } }
   .meter { display: flex; gap: calc(var(--u) * 1); margin: calc(var(--u) * 2) 0 calc(var(--u) * 1); }
   .meter span { flex: 1; height: calc(var(--u) * 3); background: #15161c; }
   .meter span.f { background: linear-gradient(#ffcf7a 0 50%, #d08a2a 50%); }
@@ -542,13 +548,20 @@
     [["s", "малое"], ["m", "среднее"], ["l", "большое"]].forEach(function (z) { mk.appendChild(el("span", D.sat >= need[z[0]] ? "ok" : "", z[1] + " " + need[z[0]] + (D.sat >= need[z[0]] ? " ✓" : ""))); });
     box.appendChild(mk);
     box.appendChild(el("div", "sh-t", "Сытость в рюкзаке: " + D.sat + ". Число в углу ячейки — сытость блюда. На спуск съедается столько, сколько нужно, с наименьшим перебором; остальное остаётся в рюкзаке."));
+    if (D.cards && D.cards.length) {                                                // легендарные карты тайной комнаты — пока под туманом
+      box.appendChild(el("div", "sh-s", "Карты"));
+      var gc = el("div", "grid");
+      D.cards.forEach(function () { var b = el("button", "cell card"); b.type = "button"; b.setAttribute("aria-label", "Легендарная тайная карта");
+        b.appendChild(el("span", "fog")); b.onclick = function (e) { e.stopPropagation(); tell("Легендарная тайная карта — откроется позже"); }; gc.appendChild(b); });
+      box.appendChild(gc);
+    }
+    if (D.pack.some(function (p) { return rec(p.item) === "brew"; })) box.appendChild(el("div", "sh-t", "Странная похлёбка в рюкзаке: в большом подземелье за странной дверью ждёт тайная комната. Похлёбка съедается при спуске в большое, в малое и среднее она не берётся."));
     box.appendChild(el("div", "sh-s", "Амбар — еда"));
     if (!D.barn) { box.appendChild(el("div", "sh-t", "На ферме нет амбара — еду хранят в нём.")); return; }
     if (!D.food.length) { box.appendChild(el("div", "sh-t", "В амбаре нет еды. Приготовь её в печи на ферме или купи на рынке.")); return; }
     var g2 = el("div", "grid");
     D.food.forEach(function (f) {
       g2.appendChild(iconCell(f.item, f.count, f.sat, function () {                                    // в рюкзак — сразу, сервер следом
-        if (rec(f.item) === "brew") return tell("Пока это действие недоступно");                         // Странная похлёбка ждёт тайную комнату — остаётся в амбаре
         var used = D.pack.map(function (p) { return p.slot; }), free = -1;
         for (var j = 0; j < D.slots; j++) if (used.indexOf(j) < 0) { free = j; break; }
         if (free < 0) return tell("Рюкзак полон");
@@ -615,17 +628,18 @@
   }
 
   // спуск: размер и плата едой из рюкзака
-  function pickView() {
-    var sat = D ? D.sat : 0;
-    $("pickneed").textContent = D ? "В рюкзаке сытость " + sat : "Пробный спуск — без фермы еда не нужна";
-    pick.querySelectorAll("button").forEach(function (b) { b.disabled = !!D && sat < D.need[b.dataset.size]; });
+  function pickView() {                                // Странная похлёбка — только в большое (его решение 2026-11-19): в малом и среднем её сытость не считается
+    var sat = D ? D.sat : 0, brew = D ? D.pack.filter(function (p) { return rec(p.item) === "brew"; }).reduce(function (a, p) { return a + p.sat; }, 0) : 0;
+    $("pickneed").textContent = D ? "В рюкзаке сытость " + sat + (brew ? " — со Странной похлёбкой только в большое" : "") : "Пробный спуск — без фермы еда не нужна";
+    pick.querySelectorAll("button").forEach(function (b) { var z = b.dataset.size; b.disabled = !!D && (z === "l" ? sat : sat - brew) < D.need[z];
+      var sm = b.querySelector("small"); if (!sm.dataset.t) sm.dataset.t = sm.textContent; sm.textContent = sm.dataset.t + (z === "l" && brew ? " · тайная комната" : ""); });
   }
   pick.addEventListener("click", function (e) { e.stopPropagation(); var b = e.target.closest("button"); if (!b) { pick.classList.remove("on"); return; }
     if (!dgCall) { location.href = "iso.html?size=" + b.dataset.size + "&v=" + Date.now(); return; }
     pick.querySelectorAll("button").forEach(function (x) { x.disabled = true; }); b.lastChild.textContent = "спускаюсь…";
     dgCall("/api/dg/start", { size: b.dataset.size }).then(function (r) {
       if (r.error) { tell(r.error); pick.classList.remove("on"); return load(); }
-      location.href = "iso.html?size=" + r.size + "&run=" + r.run + "&v=" + Date.now();
+      location.href = "iso.html?size=" + r.size + "&run=" + r.run + (r.secret ? "&secret=1" : "") + "&v=" + Date.now();
     }).catch(function (e2) { tell(e2.message); pick.classList.remove("on"); });
   });
   document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation();

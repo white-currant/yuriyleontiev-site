@@ -2144,7 +2144,8 @@ export async function dgState(u: any, got = 0) {
   const hasBarn = (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length > 0;
   const [fs] = await q("SELECT listed FROM f_stall WHERE user = ? AND item = 'p:fert'", [u.id]), own = (await ownPrices(u.id))["p:fert"];
   const satmap = Object.fromEntries(Object.entries(RECIPES).filter(([, r]) => r.kind === "oven" && r.points > 0).map(([k, r]) => [k, r.points]));
-  return { hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
+  const cards = (await q("SELECT id, kind FROM d_cards WHERE user = ? ORDER BY id", [u.id])).map(([id, kind]) => ({ id: Number(id), kind: String(kind) }));
+  return { cards, hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
            fert_stall: Number(fs?.[0] || 0), fert_price: sellerPrice(stallPrice(PRODUCTS["p:fert"].dust), own), satmap,
            pack, slots: DG_SLOTS, food, sat: pack.reduce((a, p) => a + p.sat, 0), need: DG_NEED, products: pr.products,
            brew: { n: br.n, started: br.started, per: FERT_SEC, bones: FERT_BONES, max: BREW_MAX }, got: got + br.got, now: now() };
@@ -2157,7 +2158,6 @@ export async function dgPack(u: any, item: string, slot: number) {        // ite
     return dgState(u);
   }
   if (!satOf(item)) return { error: "В рюкзак кладут только еду" };
-  if (recipeOf(item) === "brew") return { error: "Пока это действие недоступно" };   // Странная похлёбка — для тайной комнаты, её ещё нет (его решение 2026-11-19); похлёбка остаётся в амбаре
   const used = new Set((await q("SELECT slot FROM d_pack WHERE user = ?", [u.id])).map((r) => Number(r[0])));
   let free = -1; for (let i = 0; i < DG_SLOTS; i++) if (!used.has(i)) { free = i; break; }
   if (free < 0) return { error: "Рюкзак полон" };
@@ -2169,27 +2169,36 @@ export async function dgStart(u: any, size: string) {                      // в
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   const need = DG_NEED[size]; if (!need) return { error: "Нет такого подземелья" };
   if ((await dgHero(u.id)).hp <= 0) return { error: "Герою нужно подлечиться — выпей чаю" };
-  const pack = (await q("SELECT slot, item FROM d_pack WHERE user = ?", [u.id])).map(([s, it]) => ({ slot: Number(s), sat: satOf(String(it)) }));
+  const pack = (await q("SELECT slot, item FROM d_pack WHERE user = ?", [u.id])).map(([s, it]) => ({ slot: Number(s), sat: satOf(String(it)), brew: recipeOf(String(it)) === "brew" }));
+  // Странная похлёбка (его решение 2026-11-19): открывает странную дверь в тайную комнату — и только в большом подземелье; там съедается всегда,
+  // её сытость тоже идёт в счёт. В малое и среднее похлёбка не берётся: остаётся в рюкзаке, платит другая еда
+  const bi = size === "l" ? pack.findIndex((p) => p.brew) : -1, must = bi < 0 ? 0 : 1 << bi, skip = pack.reduce((a, p, i) => p.brew && i !== bi ? a | 1 << i : a, 0);
   let best = -1, bs = 1e9, bc = 99;
   for (let m = 1; m < 1 << pack.length; m++) {
+    if ((m & must) !== must || (m & skip)) continue;
     let s = 0, c = 0; pack.forEach((p, i) => { if (m >> i & 1) { s += p.sat; c++; } });
     if (s >= need && (s < bs || (s === bs && c < bc))) { best = m; bs = s; bc = c; }
   }
-  if (best < 0) return { error: "Мало еды в рюкзаке: нужно сытости " + need };
+  if (best < 0) return { error: "Мало еды в рюкзаке: нужно сытости " + need + (skip ? " (Странная похлёбка — только для большого подземелья)" : "") };
   const eat = pack.filter((_, i) => best >> i & 1).map((p) => p.slot), run = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await dgHero(u.id);
   await DB.batch([
     ...eat.map((s) => DB.prepare("DELETE FROM d_pack WHERE user = ? AND slot = ?").bind(u.id, s)),
     DB.prepare("UPDATE d_hero SET run = ?, size = ?, started = ? WHERE user = ?").bind(run, size, now(), u.id),
+    DB.prepare("DELETE FROM d_secret WHERE user = ?").bind(u.id),
+    ...(must ? [DB.prepare("INSERT INTO d_secret (user, run) VALUES (?, ?)").bind(u.id, run)] : []),
   ]);
-  return { run, size, ate: bs };
+  return { run, size, ate: bs, secret: !!must };
 }
-export async function dgFinish(u: any, run: string, bones: number, dead = false) {      // итог похода: погиб — кости 0; закрыл игру посреди похода — итог не пришёл, всё пропало
+export async function dgFinish(u: any, run: string, bones: number, dead = false, card = false) {      // итог похода: погиб — кости 0; закрыл игру посреди похода — итог не пришёл, всё пропало
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   const h = await dgHero(u.id);
   if (!run || h.run !== run) return { error: "Поход уже закончен" };
   const b = dead ? 0 : Math.max(0, Math.min(DG_MAXB[h.size] || 0, Math.round(Number(bones) || 0)));
   await q("UPDATE d_hero SET bones = bones + ?, hp = MAX(0, hp - ?), run = NULL, size = NULL WHERE user = ? AND run = ?", [b, dead ? HP_DEATH : 0, u.id, run]);
+  // легендарная карта тайной комнаты — одна за поход со Странной похлёбкой; погиб — пропала, как и всё найденное. Пока скрыта: откроется в будущей игре
+  const sec = (await q("DELETE FROM d_secret WHERE user = ? AND run = ? RETURNING 1", [u.id, run])).length > 0;
+  if (sec && card && !dead) await q("INSERT INTO d_cards (user, kind, at) VALUES (?, 'legend', ?)", [u.id, now()]);
   return { ok: true, bones: b, total: h.bones + b, hp: dead ? Math.max(0, h.hp - HP_DEATH) : h.hp };
 }
 export async function dgDrink(u: any, item: string) {                      // выпить чай из амбара — здоровье героя

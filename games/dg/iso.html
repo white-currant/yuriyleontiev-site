@@ -109,6 +109,7 @@
   }
   // размер подземелья (его решение 2026-11-19): малое 3–4 зала, среднее 6–8, большое 10–12
   var SIZE = { s: [3, 2], m: [6, 3], l: [10, 3] }[(location.search.match(/size=([sml])/) || [])[1] || "m"];
+  var SECRET = /secret=1/.test(location.search), cardGot = false, banner = 0, SIZEK = (location.search.match(/size=([sml])/) || [])[1] || "m";
   function makeLevel(seed) {
     var r = rng(Math.imul(seed ^ 0x5bd1e995, 0x27d4eb2d) ^ (seed >>> 13)), map = {}, list = [], n = SIZE[0] + Math.floor(r() * SIZE[1]);
     function add(x, y) { var k = x + "," + y; if (!map[k]) { map[k] = { gx: x, gy: y, seed: Math.floor(r() * 1e9) }; list.push(map[k]); } return map[k]; }
@@ -122,9 +123,19 @@
     while (bq.length) { var q0 = bq.shift();
       [["pu", 1, 0], ["mu", -1, 0], ["pv", 0, 1], ["mv", 0, -1]].forEach(function (dd) { var nb = q0[dd[0]] && map[(q0.gx + dd[1]) + "," + (q0.gy + dd[2])];
         if (nb && nb.depth == null) { nb.depth = q0.depth + 1; bq.push(nb); } }); }
+    // тайная комната (его решение 2026-11-19): поход со Странной похлёбкой — у самой дальней комнаты странная дверь в задней стене,
+    // за ней пустой зал без слизней и на руне — легендарная карта (пока скрыта, откроется в будущей игре)
+    var host = null;
+    if (SECRET) {
+      var byDepth = list.slice().sort(function (a1, b1) { return b1.depth - a1.depth; });
+      for (var hk = 0; hk < byDepth.length && !host; hk++) { var hr = byDepth[hk];
+        if (!map[(hr.gx - 1) + "," + hr.gy]) { host = hr; host.secDir = "mu"; } else if (!map[hr.gx + "," + (hr.gy - 1)]) { host = hr; host.secDir = "mv"; } }
+      if (host) { var sr = host.secDir === "mu" ? add(host.gx - 1, host.gy) : add(host.gx, host.gy - 1); sr.secret = true; sr.depth = host.depth + 1;
+        if (host.secDir === "mu") { host.mu = true; sr.pu = true; } else { host.mv = true; sr.pv = true; } }
+    }
     var KINDS = ["rect", "L", "cross", "corridor", "ring", "cave", "hall", "L", "cave"];
     list.forEach(function (rm, k) {
-      var rr = rng(rm.seed), i, j, kind = k === 0 ? "rect" : KINDS[Math.floor(rr() * KINDS.length)];
+      var rr = rng(rm.seed), i, j, kind = k === 0 || rm.secret ? "rect" : KINDS[Math.floor(rr() * KINDS.length)];
       var sh = shape(rr, kind === "hall" ? "rect" : kind); rm.w = sh.w; rm.h = sh.h; rm.open = sh.open; rm.kind = kind;
       var ci = Math.floor(rm.w / 2), cj = Math.floor(rm.h / 2);
       if (kind === "ring") { ci = 1; cj = 1; }                                  // у кольца середина — провал, «центр» — на самом кольце
@@ -186,7 +197,7 @@
           if (TILEP[pk2]) { if (rm.floor[cc[1]][cc[0]] >= 6) pk2 = "crys_teal"; else rm.floor[cc[1]][cc[0]] = TILEP[pk2]; }   // на люк и руну плитку с предметом не кладём
           rm.props.push({ i: cc[0], j: cc[1], k: pk2 }); } }
       rm.decor = []; for (tt = 0; tt < 4; tt++) { var di = Math.floor(rr() * rm.w), dj = Math.floor(rr() * rm.h); if (rm.open[dj][di]) rm.decor.push({ u: di + .2 + rr() * .6, v: dj + .2 + rr() * .6, k: rr() < .5 ? "bones" : "skull" }); }
-      if (kind === "rect" && rr() < .5) rm.decor.push({ u: ci + .5, v: cj + .5, k: "circle", flat: true });
+      // круг с руной теперь только у платформ лечения и в тайном зале (его решение 2026-11-19) — чтобы не путать с украшением
       // слизни — на свободных клетках, не у входа
       // слизней — в разы больше (его правка 2026-11-19): доля свободных клеток растёт с глубиной — у входа 2, дальше 26% клеток + 8% за каждую
       // комнату вглубь, не больше 55%; так в больших дальних залах их по-настоящему много
@@ -195,7 +206,19 @@
       var nm = k === 0 ? 2 : Math.max(4, Math.round(free.length * Math.min(.55, .26 + .08 * rm.depth) * (.85 + rr() * .3)));
       for (tt = 0; tt < nm && free.length; tt++) { var f2 = free.splice(Math.floor(rr() * free.length), 1)[0]; rm.mobs.push({ u: f2[0] + .5, v: f2[1] + .5, hp: 3, t: rr() * 10, hit: 0, vu: 0, vv: 0, wu: 0, wv: 0, wt: 0 }); }
       rm.drops = []; rm.seen = k === 0;
+      // тайный зал — пустой и чистый: без слизней, предметов, люков и плиток с предметами
+      if (rm.secret) { rm.mobs = []; rm.props = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.floor[j][i] >= 5) rm.floor[j][i] = 0; rm.decor = [{ u: ci + .5, v: cj + .5, k: "circle", flat: true }]; rm.floor[cj][ci] = 7; rm.card = { u: ci + .5, v: cj + .5 };
+        rm.walls.forEach(function (wl) { if (wl.k === "door" || wl.k === "gate") { wl.k = "torch"; wl.img = (wl.side === "u" ? "wu_" : "wv_") + "torch"; } }); }
+      if (rm === host) rm.walls.forEach(function (wl) { if (wl.k === "arch" && wl.side === (host.secDir === "mu" ? "u" : "v") && (wl.side === "u" ? wl.j === rm.door.mu : wl.i === rm.door.mv)) wl.secret = true; });
     });
+    // платформы лечения (его решение 2026-11-19): в среднем одна — на середине пути, в большом две — посередине и в глубине, в малом нет.
+    // Встал на руну, простоял 3 секунды — здоровье полное, руна гаснет. Сошёл или получил удар — отсчёт сначала; при полном здоровье не начинается
+    var nh = SIZEK === "m" ? 1 : SIZEK === "l" ? 2 : 0, plain = list.filter(function (r1) { return !r1.secret && r1.depth > 0; });
+    if (nh && plain.length) { var md = Math.max.apply(0, plain.map(function (r1) { return r1.depth; })), want = nh === 1 ? [Math.max(1, Math.round(md / 2))] : [Math.max(1, Math.round(md / 2)), md];
+      want.forEach(function (dw) { var c1 = plain.filter(function (r1) { return !r1.heal; }).sort(function (a1, b1) { return Math.abs(a1.depth - dw) - Math.abs(b1.depth - dw); })[0];
+        if (!c1) return; c1.heal = { u: c1.ci + .5, v: c1.cj + .5, t: 0, used: false };
+        c1.decor = c1.decor.filter(function (d) { return Math.hypot(d.u - c1.heal.u, d.v - c1.heal.v) > 1.3; }); c1.decor.push({ u: c1.heal.u, v: c1.heal.v, k: "circle", flat: true });
+        c1.mobs = c1.mobs.filter(function (m) { return Math.hypot(m.u - c1.heal.u, m.v - c1.heal.v) > 1.2; }); }); }
     return list;
   }
   function floorAt(i, j) { var rm = cur;                                       // есть ли пол в клетке (с выходами за край комнаты)
@@ -212,7 +235,7 @@
   function reset() {
     rooms = makeLevel(Date.now() & 0xffffff); cur = rooms[0];
     hero = { u: cur.ci + .5, v: cur.cj + .5, dir: "front", flip: 1, st: "idle", t: 0, hp: 100, inv: 0, hitDone: false };
-    fx = []; bones = 0; done = false; trans = null; var p0 = P(hero.u, hero.v); camX = p0[0]; camY = p0[1];
+    fx = []; bones = 0; done = false; trans = null; cardGot = false; banner = 0; var p0 = P(hero.u, hero.v); camX = p0[0]; camY = p0[1];
     document.getElementById("over").classList.remove("on"); hud(); drawMap();
   }
   function hud() {
@@ -225,14 +248,15 @@
     mg.clearRect(0, 0, 40, 40);
     rooms.forEach(function (r2) { if (!r2.seen) return; var x = 2 + (r2.gx - mnx) * 8, y = 2 + (r2.gy - mny) * 8;
       var clear = !r2.mobs.some(function (m) { return m.hp > 0; }) && !r2.drops.length;
-      mg.fillStyle = r2 === cur ? "#ffc469" : clear ? "#6f6a86" : "#b7b0d6"; mg.fillRect(x, y, 6, 6);
+      mg.fillStyle = r2 === cur ? "#ffc469" : r2.secret ? "#b27bff" : clear ? "#6f6a86" : "#b7b0d6"; mg.fillRect(x, y, 6, 6);
+      if (r2.heal && !r2.heal.used) { mg.fillStyle = "#5ee0a0"; mg.fillRect(x + 2, y + 2, 2, 2); }
       mg.fillStyle = "#4b4560"; if (r2.pu) mg.fillRect(x + 6, y + 2, 2, 2); if (r2.pv) mg.fillRect(x + 2, y + 6, 2, 2);
     });
   }
   // поход на сервере (2026-11-19): вход оплачен едой в убежище, итог — один запрос при выходе. Погиб — кости 0; вышел сам или зачистил — кости твои.
   // Без сервера (страница открыта сама по себе) — как раньше, пробный бой.
   var RUN = (location.search.match(/run=([0-9a-f]+)/) || [])[1] || "", dgCall = (function () { try { return parent !== window && parent.dgCall; } catch (e) { return null; } })(), sent = null;
-  function report(got) { if (!RUN || !dgCall) return Promise.resolve(); if (!sent) sent = dgCall("/api/dg/finish", { run: RUN, bones: got, dead: hero.st === "dead" }).catch(function () {}); return sent; }
+  function report(got) { if (!RUN || !dgCall) return Promise.resolve(); if (!sent) sent = dgCall("/api/dg/finish", { run: RUN, bones: got, dead: hero.st === "dead", card: cardGot }).catch(function () {}); return sent; }
   function home() { var b = document.getElementById("leave"); b.disabled = true; report(hero.st === "dead" ? 0 : bones).then(function () { location.href = "hub.html?v=" + Date.now(); }); }
   function finish(title, sub) { done = true; report(hero.st === "dead" ? 0 : bones);
     document.getElementById("overt").textContent = title; document.getElementById("overs").textContent = sub; setTimeout(function () { document.getElementById("over").classList.add("on"); }, 700); }
@@ -323,7 +347,7 @@
       if (hero.st !== "dead" && d < .3 && hero.inv <= 0) {
         hero.hp -= 12; hero.inv = .9; hero.st = "hurt"; hero.t = 0; hero.dir = "side"; hero.flip = S(m.u, m.v)[0] > S(hero.u, hero.v)[0] ? 1 : -1;
         var nu2 = hero.u - du2 / d * .18, nv2 = hero.v - dv2 / d * .18; if (!blocked(nu2, nv2)) { hero.u = nu2; hero.v = nv2; } hud();
-        if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", RUN ? "Всё найденное потеряно, здоровье в убежище −20" : "Всё найденное потеряно"); }
+        if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", (cardGot ? "Карта и всё найденное потеряны" : "Всё найденное потеряно") + (RUN ? ", здоровье в убежище −20" : "")); }
       }
     });
     for (i = 0; i < mobs.length; i++) for (var j = i + 1; j < mobs.length; j++) {
@@ -331,9 +355,15 @@
       if (ed < .32) { var push = (.32 - ed) / 2; a2.u -= eu / ed * push; a2.v -= ev / ed * push; b2.u += eu / ed * push; b2.v += ev / ed * push; }
     }
     cur.drops = cur.drops.filter(function (d2) { d2.t += dt; if (hero.st !== "dead" && d2.t > .3 && Math.hypot(d2.u - hero.u, d2.v - hero.v) < .3) { bones++; hud(); fx.push({ k: "plus", u: d2.u, v: d2.v, t: 0 }); drawMap(); return false; } return true; });
-    fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : .32); });
-    var left = rooms.some(function (r2) { return r2.mobs.some(function (m) { return m.hp > 0; }) || r2.drops.length; });
-    if (!done && hero.st !== "dead" && !left) finish("Подземелье зачищено", "Добыча: костей " + bones);
+    fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : f.k === "heal" ? .9 : .32); });
+    if (cur.card && hero.st !== "dead" && Math.hypot(cur.card.u - hero.u, cur.card.v - hero.v) < .45) {      // легендарная карта — в руки
+      fx.push({ k: "poof", u: cur.card.u, v: cur.card.v, t: 0 }); cur.card = null; cardGot = true; banner = 2.6; drawMap(); }
+    banner = Math.max(0, banner - dt);
+    var hl = cur.heal;
+    if (hl && !hl.used) { var onIt = hero.st !== "dead" && hero.hp < 100 && Math.hypot(hl.u - hero.u, hl.v - hero.v) < .6;
+      if (!onIt || hero.st === "hurt") hl.t = 0; else { hl.t += dt; if (hl.t >= 3) { hl.used = true; hl.t = 0; hero.hp = 100; hud(); fx.push({ k: "heal", u: hl.u, v: hl.v, t: 0 }); drawMap(); } } }
+    var left = rooms.some(function (r2) { return r2.mobs.some(function (m) { return m.hp > 0; }) || r2.drops.length || r2.card; });
+    if (!done && hero.st !== "dead" && !left) finish("Подземелье зачищено", "Добыча: костей " + bones + (cardGot ? " и легендарная карта" : ""));
     // камера держит героя на месте (без догоняния: оно давало ползущий по пикселю мир при остановке)
     var hp2 = P(hero.u, hero.v); camX = hp2[0]; camY = hp2[1];
   }
@@ -341,6 +371,15 @@
   // ---------- рисование ----------
   var lightC = mk(W / 4, H / 4), L = lightC.getContext("2d");
   function glow(x, y, r, col, k) { var g = L.createRadialGradient(x / 4, y / 4, 0, x / 4, y / 4, r / 4); g.addColorStop(0, col.replace("A", k)); g.addColorStop(1, col.replace("A", 0)); L.fillStyle = g; L.fillRect(0, 0, W / 4, H / 4); }
+  // странная дверь: тёмный проём арки залит фиолетовым светом, в нём клубится туман (рисуется по форме его проёма)
+  var secC = mk(128, 128), secG = secC.getContext("2d");
+  function secretIn(wl, at) {
+    var im = IMG[wl.img + "in"]; secG.globalCompositeOperation = "source-over"; secG.clearRect(0, 0, 128, 128); secG.drawImage(im, 0, 0);
+    secG.globalCompositeOperation = "source-atop"; var g = secG.createLinearGradient(0, 30, 0, 110); g.addColorStop(0, "#2a1450"); g.addColorStop(1, "#7a4fd0"); secG.fillStyle = g; secG.fillRect(0, 0, 128, 128);
+    for (var q = 0; q < 26; q++) { var ph = (T * .25 + q * .0385) % 1, x = 64 + Math.sin(T * .9 + q * 2.4) * 22, y = 110 - ph * 80;
+      secG.fillStyle = q % 3 ? "rgba(201,180,255," + (0.7 * (1 - ph)) + ")" : "rgba(255,240,255," + (0.8 * (1 - ph)) + ")"; secG.fillRect(Math.round(x), Math.round(y), 3, 2); }
+    var a = S(wl.i, wl.j); ctx.drawImage(secC, Math.round(a[0]) - 64, Math.round(a[1]) - 66);
+  }
   function heroFrame() {
     var name, i;
     if (hero.st === "dead") { name = "die"; i = Math.min(2, Math.floor(hero.t / .22)); }
@@ -429,7 +468,7 @@
       var z0 = wl.i + wl.j - .01;
       var at = function (name) { var a = S(wl.i, wl.j); ctx.drawImage(IMG[name], Math.round(a[0]) - 64, Math.round(a[1]) - 66); };
       // арка: темнота проёма — позади всего (и героя, ушедшего в проход), стена с дырой — на своём месте
-      if (wl.k === "arch") list.push({ z: -10, f: function () { at(wl.img + "in"); } });
+      if (wl.k === "arch") list.push({ z: -10, f: function () { if (wl.secret) secretIn(wl, at); else at(wl.img + "in"); } });
       var cut = !wl.far && !wl.corner ? "_x" : "";                                 // дальний конец без продолжения и без угла — плита срезана по второй оси, а не клином
       if (!wl.near && !floorAt(wl.side === "u" ? wl.i : wl.i + 1, wl.side === "u" ? wl.j + 1 : wl.j)) cut += "t";   // ближний конец, за которым пола нет — торец плиты под колонной (его правка 2026-11-19)
       if (cut === "t") cut = "_t";
@@ -442,6 +481,14 @@
       if (k.charAt(1) === "_") { var s0 = S(p.i, p.j), tx = Math.round(s0[0] - TW / 2), ty = Math.round(s0[1] - 36); img(k, tx, ty); return tileFx(k, tx, ty, T, p.i * 3.1 + p.j * 1.7); }   // предмет со своей плитки — точно над ней
       var s = S(p.i + .5, p.j + .5), im = IMG[k], x0 = Math.round(s[0] - im.width / 2), y0 = Math.round(s[1] - im.height + 16); img(k, x0, y0); } }); });
     cur.drops.forEach(function (d) { list.push({ z: d.u + d.v, f: function () { var s = S(d.u, d.v), bob = Math.round(Math.sin(d.t * 5) * 2); px(ctx, s[0] - 5, s[1], 10, 2, "rgba(8,6,10,.4)"); ctx.drawImage(boneC, Math.round(s[0] - 6), Math.round(s[1] - 12 + bob)); } }); });
+    if (cur.card) list.push({ z: cur.card.u + cur.card.v, f: function () {            // легендарная карта над руной: золото, фиолет, туман
+      var s = S(cur.card.u, cur.card.v), bob = Math.round(Math.sin(t * 2.4) * 2), x = Math.round(s[0] - 6), y = Math.round(s[1] - 26 + bob);
+      px(ctx, s[0] - 6, s[1] - 1, 12, 2, "rgba(8,6,10,.4)");
+      px(ctx, x, y, 12, 17, "#5a3a12"); px(ctx, x + 1, y + 1, 10, 15, "#d9a441"); px(ctx, x + 2, y + 2, 8, 13, "#2a1a46");
+      for (var q = 0; q < 6; q++) { var fy = (t * 6 + q * 2.3) % 13, fxp = 2 + Math.round((Math.sin(t * 1.7 + q * 1.9) * .5 + .5) * 6); px(ctx, x + fxp, y + 14 - fy, 2, 1, q % 2 ? "#8f6ad8" : "#c9b4ff"); }
+      px(ctx, x + 5, y + 7, 2, 3, "#ffe7a3"); px(ctx, x + 4, y + 8, 4, 1, "#ffe7a3");
+      for (var e = 0; e < 4; e++) { var ph = (t * .6 + e * .25) % 1; px(ctx, s[0] + Math.sin(t * 2 + e * 1.6) * 9, s[1] - 10 - ph * 26, 1, 1, ph < .5 ? "#e8dcff" : "#9f7ae6"); }
+    } });
     cur.mobs.forEach(function (m) { if (m.hp <= 0) return; list.push({ z: m.u + m.v, f: function () {
       var s = S(m.u, m.v), fr = Math.sin(m.t * 5.5) > 0 ? 0 : 1, jump = Math.round(Math.max(0, Math.sin(m.t * 5.5)) * 4);
       px(ctx, s[0] - 8, s[1] - 1, 16, 3, "rgba(8,6,10,.45)");
@@ -467,6 +514,9 @@
       glow(s[0], s[1] - 20, 100, c2, .55 * gk); });
     for (j = 0; j < cur.h; j++) for (i = 0; i < cur.w; i++) if (cur.floor[j][i] === 7 && cur.open[j][i]) { var rs2 = S(i + .5, j + .5); glow(rs2[0], rs2[1], 80, "rgba(120,180,255,A)", .55 + .2 * Math.sin(t * 2.2 + i)); }   // руна светится
     var hs = S(hero.u, hero.v); glow(hs[0], hs[1] - 18, 90, "rgba(225,215,255,A)", .7);
+    cur.walls.forEach(function (wl) { if (!wl.secret) return; var s = wl.side === "v" ? S(wl.i + .5, wl.j) : S(wl.i, wl.j + .5); glow(s[0], s[1] - 30, 150, "rgba(190,130,255,A)", 1.1 + Math.sin(t * 1.8) * .15); });   // странная дверь
+    if (cur.heal) { var hs3 = S(cur.heal.u, cur.heal.v), hk = cur.heal.used ? .12 : .45 + .15 * Math.sin(t * 2) + cur.heal.t / 3 * .9; glow(hs3[0], hs3[1] - 4, 110, "rgba(110,230,170,A)", hk); }   // платформа: разгорается, пока стоишь
+    if (cur.card) { var cs = S(cur.card.u, cur.card.v); glow(cs[0], cs[1] - 18, 110, "rgba(180,130,255,A)", .8 + Math.sin(t * 2.4) * .1); }
     cur.drops.forEach(function (d) { var s = S(d.u, d.v); glow(s[0], s[1] - 6, 20, "rgba(255,240,200,A)", .35); });
     ctx.globalCompositeOperation = "multiply"; ctx.drawImage(lightC, 0, 0, W + 1, H + 1); ctx.globalCompositeOperation = "source-over";
 
@@ -479,7 +529,22 @@
       else if (f.k === "poof") { for (i = 0; i < 8; i++) { var a4 = i * .785, d4 = 3 + k * 12; px(ctx, s[0] + Math.cos(a4) * d4 - 1, s[1] - 6 + Math.sin(a4) * d4 - 1 - k * 6, 3 - Math.floor(k * 2), 3 - Math.floor(k * 2), k < .5 ? "#bfeeff" : "#5cc0ee"); } }
       else if (f.k === "plus") { var yy = s[1] - 10 - f.t * 22; ctx.globalAlpha = 1 - f.t / .8; px(ctx, s[0] - 3, yy, 7, 1, "#efe8d6"); px(ctx, s[0], yy - 3, 1, 7, "#efe8d6"); ctx.drawImage(boneC, Math.round(s[0] + 6), Math.round(yy - 6)); ctx.globalAlpha = 1; }
     });
+    if (cur.heal && cur.heal.t > 0) { var hp3 = S(hero.u, hero.v), k3 = cur.heal.t / 3;                          // кольцо отсчёта над героем
+      ctx.lineWidth = 2; ctx.strokeStyle = "rgba(10,20,16,.6)"; ctx.beginPath(); ctx.arc(hp3[0], hp3[1] - 52, 7, 0, 7); ctx.stroke();
+      ctx.strokeStyle = "#8ff0bf"; ctx.beginPath(); ctx.arc(hp3[0], hp3[1] - 52, 7, -Math.PI / 2, -Math.PI / 2 + k3 * Math.PI * 2); ctx.stroke();
+      px(ctx, hp3[0] - 1, hp3[1] - 55, 2, 6, "#8ff0bf"); px(ctx, hp3[0] - 3, hp3[1] - 53, 6, 2, "#8ff0bf"); }
+    fx.forEach(function (f) { if (f.k !== "heal") return; var s9 = S(f.u, f.v), k9 = f.t / .9;                       // вылечился: зелёные крестики вверх
+      for (var q9 = 0; q9 < 8; q9++) { var a9 = q9 * .785, d9 = 6 + k9 * 18; ctx.globalAlpha = 1 - k9; px(ctx, s9[0] + Math.cos(a9) * d9 - 1, s9[1] - 14 + Math.sin(a9) * d9 * .5 - k9 * 20, 2, 2, q9 % 2 ? "#c8ffe0" : "#5ee0a0"); }
+      ctx.globalAlpha = 1; });
+    cur.walls.forEach(function (wl) { if (!wl.secret) return; var s = wl.side === "v" ? S(wl.i + .5, wl.j) : S(wl.i, wl.j + .5);   // туман из странной двери
+      for (var q2 = 0; q2 < 14; q2++) { var ph2 = (t * .3 + q2 * .071) % 1; ctx.globalAlpha = (1 - ph2) * .85;   // выползает на пол комнаты
+        var ox = Math.sin(t * 1.3 + q2 * 2.1) * 9 + (wl.side === "v" ? -ph2 * 14 : ph2 * 14);
+        ctx.fillStyle = q2 % 2 ? "#c9b4ff" : "#8a66dc"; ctx.fillRect(Math.round(s[0] + ox), Math.round(s[1] - 4 + ph2 * 8 - Math.sin(ph2 * 3) * 6), 2, 2); }
+      ctx.globalAlpha = 1; });
     ctx.setTransform(Z, 0, 0, Z, 0, 0);
+    if (banner > 0) { ctx.globalAlpha = Math.min(1, banner * 2); ctx.fillStyle = "rgba(20,12,36,.82)"; ctx.fillRect(18, 96, W - 36, 34);
+      ctx.fillStyle = "#e4d4ff"; ctx.font = "800 10px -apple-system, sans-serif"; ctx.textAlign = "center"; ctx.fillText("Легендарная тайная карта", W / 2, 110);
+      ctx.fillStyle = "#a99ccc"; ctx.font = "600 8px -apple-system, sans-serif"; ctx.fillText("откроется позже", W / 2, 122); ctx.globalAlpha = 1; ctx.textAlign = "start"; }
     // джойстик: основание и ручка
     ctx.globalAlpha = joy.on ? .34 : .22; ctx.fillStyle = "#efe6d2"; ctx.beginPath(); ctx.arc(joy.bx, joy.by, JR + 4, 0, 7); ctx.fill();
     ctx.globalAlpha = .5; ctx.strokeStyle = "#efe6d2"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(joy.bx, joy.by, JR + 4, 0, 7); ctx.stroke();
