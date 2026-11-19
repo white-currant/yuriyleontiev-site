@@ -290,7 +290,8 @@ async function playerCard(ref: string) {
 // коллекция: предметы всех игр, которые выпали игроку (профиль гильдии показывает их вместе)
 async function items(u: any) {
   const rows = await q("SELECT game, kind, item, tier, finish, count, first_at FROM g_items WHERE user = ? ORDER BY first_at DESC", [u.id]);
-  return { items: rows.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
+  const cards = await farm.cardsOf(u.id);                                    // карты подземелья — в коллекцию, у каждой свой номер (2026-11-20)   // карты подземелья — в коллекцию (2026-11-20)
+  return { cards, items: rows.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
 }
 
 // ---------- HTTP ----------
@@ -393,6 +394,11 @@ async function handle(req: Request): Promise<Response> {
   if (url.pathname.startsWith("/bot/")) {
     const key = ENV.GAMES_KEY;
     if (!key || req.headers.get("x-games-key") !== key) return json({ error: "key" }, 403);
+    if (req.method === "GET" && url.pathname === "/bot/cards/ledger") {    // журнал карт целиком — копия-свидетель на Proxima (его просьба 2026-11-20)
+      await farm.cardsOf(0);                                                // досоздать первые записи старым картам
+      const rows = await q("SELECT seq, card, ev, from_user, to_user, at, info, prev, hash FROM d_card_log ORDER BY seq LIMIT 20000");
+      return json(rows.map(([seq, card, ev, from, to, at, info, prev, hash]) => ({ seq: Number(seq), card: Number(card), ev, from: from == null ? null : Number(from), to: to == null ? null : Number(to), at: Number(at), info, prev, hash })));
+    }
     if (req.method === "GET" && url.pathname === "/bot/events") {
       const after = Number(url.searchParams.get("after") || 0);
       const ev = await q("SELECT id, user, name, delta, reason FROM g_events WHERE id > ? ORDER BY id LIMIT 500", [after]);
@@ -519,6 +525,7 @@ async function handle(req: Request): Promise<Response> {
     case "/api/dg/pack": return json(await farm.dgPack(user, String(body.item || "").slice(0, 80), body.slot == null ? -1 : Number(body.slot)));
     case "/api/dg/start": return json(await farm.dgStart(user, String(body.size || "")));
     case "/api/dg/finish": return json(await farm.dgFinish(user, String(body.run || "").slice(0, 32), Number(body.bones) || 0, !!body.dead, !!body.left));
+    case "/api/cards/history": return json(await farm.cardHistory(user, Number(body.id) || 0));
     case "/api/dg/altar": return json(await farm.dgAltar(user, String(body.run || "").slice(0, 32)));
     case "/api/dg/drink": return json(await farm.dgDrink(user, String(body.item || "").slice(0, 80)));
     case "/api/dg/brew": return json(await farm.dgBrew(user, Number(body.n) || 1));

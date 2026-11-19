@@ -2235,13 +2235,47 @@ async function altarGive(uid: number, loot: string) {                     // н�
   const coal = async () => { if (await hasBarn()) await q("INSERT INTO f_barn (user, strain, count) VALUES (?, 'p:coal', 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [uid]);
     else await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [COAL_DUST, uid]); return "coal"; };
   if (loot === "rare" || loot === "legend" || loot === "card") { const k = loot === "rare" ? "rare" : "legend";   // «card» — старое имя легендарной
-    await q("INSERT INTO d_cards (user, kind, at) VALUES (?, ?, ?)", [uid, k, now()]); return k; }
+    const [[cid]] = await q("INSERT INTO d_cards (user, kind, at) VALUES (?, ?, ?) RETURNING id", [uid, k, now()]);
+    await cardLog(Number(cid), "found", null, uid, "странная комната подземелья"); return k; }
   if (loot === "seed") {                                                   // правило «не больше двух странных у игрока»: третье вытесняет одно из мешка;
     if ((await oddHeld(uid)) >= ODD_PER_USER && !(await oddEvict(uid))) return coal();   // оба растут — вместо семени уголь
     await q("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, 'anomaly', 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [uid]);
     await oddFresh(uid); return "seed";
   }
   return coal();
+}
+// ---------- журнал карт: единственные экземпляры и неподделываемая история (его просьба 2026-11-20) ----------
+// Номер карты — d_cards.id, сквозной по всей игре. События — в d_card_log: «found» (нашёл), потом «transfer» (передал, когда будет обмен).
+// Цепочка общая на все карты: hash = SHA-256 от [prev, card, ev, from, to, at, info]; проверка пересчитывает её целиком
+const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+async function sha(s: string) { return hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s))); }
+const GENESIS = "0".repeat(64);
+export async function cardLog(card: number, ev: string, from: number | null, to: number | null, info = "", at = now()) {
+  const [last] = await q("SELECT hash FROM d_card_log ORDER BY seq DESC LIMIT 1"); const prev = last ? String(last[0]) : GENESIS;
+  const hash = await sha(JSON.stringify([prev, card, ev, from, to, at, info]));
+  await q("INSERT INTO d_card_log (card, ev, from_user, to_user, at, info, prev, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [card, ev, from, to, at, info, prev, hash]);
+}
+async function cardLedgerSync() {                                          // карты, найденные до журнала, — первая запись «нашёл» с их датой
+  for (const [id, user, at] of await q("SELECT c.id, c.user, c.at FROM d_cards c WHERE NOT EXISTS (SELECT 1 FROM d_card_log l WHERE l.card = c.id) ORDER BY c.id"))
+    await cardLog(Number(id), "found", null, Number(user), "странная комната подземелья", Number(at));
+}
+export async function cardsOf(uid: number) {
+  await cardLedgerSync();
+  return (await q("SELECT id, kind, at FROM d_cards WHERE user = ? ORDER BY at DESC", [uid])).map(([id, kind, at]) => ({ id: Number(id), serial: String(id).padStart(6, "0"), kind: String(kind), at: Number(at) }));
+}
+export async function cardHistory(u: any, id: number) {
+  await cardLedgerSync();
+  const [c] = await q("SELECT user, kind, at FROM d_cards WHERE id = ?", [id]); if (!c) return { error: "Такой карты нет" };
+  if (String(c[0]) !== String(u.id)) return { error: "Это не твоя карта" };
+  const all = await q("SELECT seq, card, ev, from_user, to_user, at, info, prev, hash FROM d_card_log ORDER BY seq");
+  let prev = GENESIS, ok = true;
+  for (const [, card, ev, from, to, at, info, p, h] of all) {              // цепочка целиком: каждая запись ссылается на предыдущую и совпадает со своим отпечатком
+    if (String(p) !== prev || (await sha(JSON.stringify([prev, Number(card), String(ev), from == null ? null : Number(from), to == null ? null : Number(to), Number(at), String(info)]))) !== String(h)) { ok = false; break; }
+    prev = String(h);
+  }
+  const events = all.filter((r) => Number(r[1]) === id).map(([seq, , ev, from, to, at, info, , h]) => ({ seq: Number(seq), ev: String(ev), at: Number(at), info: String(info),
+    mine_from: from != null && String(from) === String(u.id), mine_to: to != null && String(to) === String(u.id), hash: String(h).slice(0, 12) }));
+  return { id, serial: String(id).padStart(6, "0"), kind: String(c[1]), at: Number(c[2]), ok, chain: all.length, events };
 }
 export async function dgFinish(u: any, run: string, bones: number, dead = false, left = false) {      // итог похода: погиб — кости 0; закрыл игру посреди похода — итог не пришёл, всё пропало
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };

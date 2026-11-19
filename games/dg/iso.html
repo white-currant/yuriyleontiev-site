@@ -530,8 +530,9 @@
   function cardImg(face, k) {                                    // карта на этот кадр: рубашка или лицо с бликом фольги
     cardG.clearRect(0, 0, 360, 544); if (!face) { cardG.drawImage(IMG.cardback, 0, 0, 360, 544); return cardC; }
     cardG.drawImage(faceOf(k), 0, 0); var sw = ((T * .62) % 1.6) / 1.6;
-    if (sw < .7) { var bx = -120 + sw / .7 * 600; cardG.globalCompositeOperation = "source-atop"; var gl = cardG.createLinearGradient(bx - 60, 0, bx + 60, 544);
-      gl.addColorStop(0, "rgba(255,255,255,0)"); gl.addColorStop(.5, "rgba(255,255,255,.32)"); gl.addColorStop(1, "rgba(255,255,255,0)"); cardG.fillStyle = gl; cardG.fillRect(0, 0, 360, 544); cardG.globalCompositeOperation = "source-over"; }
+    if (sw < .7) { var q = sw / .7, bx = -700 + q * 1320, fa = Math.sin(q * Math.PI);   // полоса целиком проходит карту, не обрывается (его правка 2026-11-20)
+      cardG.globalCompositeOperation = "source-atop"; var gl = cardG.createLinearGradient(bx - 70, 160, bx + 70, 0);
+      gl.addColorStop(0, "rgba(255,255,255,0)"); gl.addColorStop(.5, "rgba(255,255,255," + (.32 * fa).toFixed(3) + ")"); gl.addColorStop(1, "rgba(255,255,255,0)"); cardG.fillStyle = gl; cardG.fillRect(0, 0, 360, 544); cardG.globalCompositeOperation = "source-over"; }
     return cardC;
   }
   var rayC = mk(Math.ceil(W / 6) + 1, Math.ceil(H / 6) + 1), rayG = rayC.getContext("2d");
@@ -663,7 +664,7 @@
   var TC = ["#0c0412", "#300c5c", "#56189c", "#9646dc"];          // цвета его щупальца: контур, тень, тело, блик
   function altarDraw(a, t) {                                  // его алтарь: щупальца, книга, свечи — на четырёх средних клетках; от удара вздрагивает
     var an = cur.sr ? cur.sr.altar : SR.altar[0], s0 = S(a.u, a.v), im = IMG[an], sh = a.hitT && a.hitT < .5 ? Math.round(Math.sin(a.hitT * 70) * 2 * (1 - a.hitT / .5)) : 0;
-    srDraw(an, Math.round(s0[0] - im.width / 2) + sh, Math.round(s0[1] + TH + 2 - im.height));
+    srDraw(an, Math.round(s0[0] - im.width / 2) + sh, Math.round(s0[1] + TH + 2 - im.height), 97);
     if (a.hitT && a.hitT < .35) { ctx.globalAlpha = (1 - a.hitT / .35) * .5; ctx.globalCompositeOperation = "lighter"; ctx.drawImage(im, Math.round(s0[0] - im.width / 2) + sh, Math.round(s0[1] + TH + 2 - im.height)); ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1; }   // вспышка удара
   }
   // ---------- оживление странной комнаты (его просьба 2026-11-20): его картинки неподвижные — оживляю кодом, не перерисовывая ----------
@@ -695,7 +696,11 @@
       if (!shut) continue;                                            // пустота рядом — пламя или руна на краю, не глаз
       x0 = Math.max(0, x0 - 1); y0 = Math.max(0, y0 - 1); x1 = Math.min(w - 1, x1 + 1); y1 = Math.min(h - 1, y1 + 1);
       var lo = y0 > 0 ? at(Math.round((x0 + x1) / 2), y0 - 1) : -1, lid = lo >= 0 && d[lo + 3] ? "rgb(" + d[lo] + "," + d[lo + 1] + "," + d[lo + 2] + ")" : "#2a1030";
-      A.eyes.push({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, lid: lid }); }
+      var rows = [];                                                  // форма глаза по строкам: где в рисунке белок, радужка или зрачок (веко — точно по ней)
+      for (var ry = y0; ry <= y1; ry++) { var ra = -1, rb = -1; for (var rx = x0; rx <= x1; rx++) { var oe = at(rx, ry);
+          if (d[oe + 3] && (iris(oe) || (d[oe] > 150 && d[oe + 1] > 90 && d[oe + 2] > 80) || (d[oe] > 120 && d[oe] - d[oe + 1] > 60))) { if (ra < 0) ra = rx; rb = rx; } }
+        rows.push(ra < 0 ? null : [ra - x0, rb - x0]); }
+      A.eyes.push({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, lid: lid, rows: rows }); }
     if (/candles|stand|altar/.test(name)) { var hc = mk(w, h), hg = hc.getContext("2d"), hd = hg.createImageData(w, h), cnt = 0;   // пламя и руны: яркий красный
       var light = new Uint8Array(w * h); for (i = 0; i < d.length; i += 4) if (d[i + 3] && Math.min(d[i], d[i + 1], d[i + 2]) > 150) light[i >> 2] = 1;
       var nearPage = function (p0) { var px0 = p0 % w, py0 = (p0 / w) | 0; for (var yy = Math.max(0, py0 - 4); yy <= Math.min(h - 1, py0 + 4); yy++) for (var xx = Math.max(0, px0 - 4); xx <= Math.min(w - 1, px0 + 4); xx++) if (light[yy * w + xx]) return true; return false; };
@@ -718,7 +723,7 @@
       if (A.runs.length) { lg.putImageData(ld, 0, 0); var bc = mk(w, h); bc.getContext("2d").putImageData(bd, 0, 0); A.base = bc; A.layer = lay; A.lim = lim; } }
     return (SRA[name] = A);
   }
-  function srDraw(name, x, y) {                                 // его картинка + оживление; x, y — левый верх
+  function srDraw(name, x, y, key) {                            // его картинка + оживление; x, y — левый верх; key — место в комнате (ритм моргания не зависит от камеры)
     var A = srPrep(name), im = IMG[name]; x = Math.round(x); y = Math.round(y);
     if (!A) { ctx.drawImage(im, x, y); return; }
     ctx.drawImage(A.base || im, x, y);
@@ -726,11 +731,14 @@
       ctx.drawImage(A.layer, r[1], r[0], r[2] - r[1] + 1, 1, x + r[1] + dx, y + r[0], r[2] - r[1] + 1, 1); });
     if (A.hot) { var fl = .5 + .5 * Math.sin(T * 11 + x * .7) * Math.sin(T * 7.3 + y * .3);   // мерцание: два быстрых колебания
       ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = .18 + .32 * fl; ctx.drawImage(A.hot, x, y - (fl > .8 ? 1 : 0)); ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over"; }
-    A.eyes.forEach(function (e, n) {                            // моргание: веки сходятся к середине и расходятся, ~0,2 с раз в 3–7 с
-      var per = 3 + hz(n * 3.1 + x * .17 + y * .29) * 4, ph = ((T + hz(n * 7.7 + x * .3) * per) % per) / per, b = ph < .045 ? Math.sin(ph / .045 * Math.PI) : 0;
-      if (b <= 0) return; var cov = Math.ceil(e.h / 2 * b); ctx.fillStyle = e.lid;
-      ctx.fillRect(x + e.x, y + e.y, e.w, cov); ctx.fillRect(x + e.x, y + e.y + e.h - cov, e.w, cov);
-      if (b > .85) { ctx.fillStyle = "#12040a"; ctx.fillRect(x + e.x, y + e.y + Math.floor(e.h / 2), e.w, 1); } });
+    key = key || 0;
+    A.eyes.forEach(function (e, n) {                            // моргание (его правка 2026-11-20): веки по овалу глаза — сходятся сверху и снизу, ~0,2 с раз в 3–7 с
+      var per = 3 + hz(n * 3.1 + key * .37) * 4, ph = ((T + hz(n * 7.7 + key * .53) * per) % per) / per, b = ph < .045 ? Math.sin(ph / .045 * Math.PI) : 0;
+      if (b <= 0) return; var hh = e.h / 2, cx = x + e.x + e.w / 2; ctx.fillStyle = e.lid;
+      for (var r = 0; r < e.h; r++) { var dy = (r + .5 - hh) / hh, rr = e.rows[r]; if (!rr || Math.abs(dy) < 1 - b) continue;
+        ctx.fillRect(x + e.x + rr[0], y + e.y + r, rr[1] - rr[0] + 1, 1); }                                  // строка века — ровно по ширине глаза в этой строке
+      var mr = e.rows[Math.floor(hh)];
+      if (b > .85 && mr) { ctx.fillStyle = "#12040a"; ctx.fillRect(x + e.x + mr[0] + 1, y + e.y + Math.floor(hh), Math.max(1, mr[1] - mr[0] - 1), 1); } });
   }
   // сборка странной комнаты из его набора: алтарь, угол, плиты стен и пола, убранство по местам — для этого похода (зерно комнаты)
   function srBuild(rm, rr) {
@@ -924,7 +932,7 @@
     cur.walls.forEach(function (wl, n4) {
       var z0 = wl.i + wl.j - .01;
       var at = function (name) { var a = S(wl.i, wl.j); if (cur.secret && !/in$/.test(name)) {   // все стены зала — его плиты (кроме тёмной глубины арок, «…in»; «plain» — тоже стена, 2026-11-19)
-         srDraw(srWall(wl), Math.round(a[0]) - 64, Math.round(a[1]) - 66 - 48); return; } ctx.drawImage(IMG[name], Math.round(a[0]) - 64, Math.round(a[1]) - 66); };
+         srDraw(srWall(wl), Math.round(a[0]) - 64, Math.round(a[1]) - 66 - 48, wl.i * 31 + wl.j * 7 + (wl.side === "u" ? 3 : 0)); return; } ctx.drawImage(IMG[name], Math.round(a[0]) - 64, Math.round(a[1]) - 66); };
       // арка: темнота проёма — позади всего (и героя, ушедшего в проход), стена с дырой — на своём месте
       if (wl.k === "arch") list.push({ z: -10, f: function () { at(wl.img + "in"); } });
       var cut = !wl.far && !wl.corner ? "_x" : "";                                 // дальний конец без продолжения и без угла — плита срезана по второй оси, а не клином
@@ -933,7 +941,7 @@
       list.push({ z: z0, f: function () { at((wl.k === "torch" ? wl.img + [1, 2, 3, 2][Math.floor(T * 7 + n4) % 4] : wl.img) + cut); if (wl.secret) secretDoor(wl); if (wl.burn) burnDoor(wl); } });   // у факела меняется только пламя; странная дверь — поверх арки
       if (wl.corner && wl.side === "u" && !cur.secret) list.push({ z: z0 + .001, f: function () { at("w_corner"); } });                  // внутренний угол — полоса кладки поверх стыка
     });
-    cur.decor.forEach(function (d) { if (d.flat) return; list.push({ z: d.u + d.v - (d.solid ? 0 : .5), f: function () { var s = S(d.u, d.v), im = IMG[d.k]; if (cur.secret) srDraw(d.k, s[0] - im.width / 2, s[1] - im.height + 6); else img(d.k, s[0] - im.width / 2, s[1] - im.height + 6); } }); });
+    cur.decor.forEach(function (d) { if (d.flat) return; list.push({ z: d.u + d.v - (d.solid ? 0 : .5), f: function () { var s = S(d.u, d.v), im = IMG[d.k]; if (cur.secret) srDraw(d.k, s[0] - im.width / 2, s[1] - im.height + 6, d.u * 13 + d.v * 7); else img(d.k, s[0] - im.width / 2, s[1] - im.height + 6); } }); });
     cur.props.forEach(function (p) { list.push({ z: p.i + p.j + 1, f: function () {
       var k = p.k === "brazier" ? "brazier_f" + (Math.floor(T * 9 + p.i * 3 + p.j) % 9) : p.k;     // жаровня — его 9 кадров огня, тумба неподвижна
       if (k.charAt(1) === "_") { var s0 = S(p.i, p.j), tx = Math.round(s0[0] - TW / 2), ty = Math.round(s0[1] - 36); img(k, tx, ty); return tileFx(k, tx, ty, T, p.i * 3.1 + p.j * 1.7); }   // предмет со своей плитки — точно над ней
