@@ -65,8 +65,8 @@
   .cell.on { background: #2b2430; box-shadow: inset 0 0 0 calc(var(--u) * .8) #d9a441; }
   .cell canvas { width: calc(var(--u) * 11); image-rendering: pixelated; }
   .grid.w4 .cell canvas { width: calc(var(--u) * 16); }
-  .cell b { position: absolute; right: calc(var(--u) * 1); bottom: calc(var(--u) * .4); font-size: calc(var(--u) * 3.2); font-weight: 800; text-shadow: 0 calc(var(--u) * .5) 0 #000; }
-  .cell i { position: absolute; left: calc(var(--u) * 1); top: calc(var(--u) * .4); font-style: normal; font-size: calc(var(--u) * 3); font-weight: 800; color: #ffcf7a; text-shadow: 0 calc(var(--u) * .5) 0 #000; }
+  .cell b { position: absolute; right: calc(var(--u) * 1); bottom: calc(var(--u) * .2); font-size: calc(var(--u) * 4.6); font-weight: 800; text-shadow: 0 calc(var(--u) * .5) 0 #000; }
+  .cell i { position: absolute; left: calc(var(--u) * 1.2); top: calc(var(--u) * .2); font-style: normal; font-size: calc(var(--u) * 4.6); font-weight: 800; color: #ffcf7a; text-shadow: 0 calc(var(--u) * .5) 0 #000; }
   /* тайная карта (2026-11-19): золотая рамка, фиолет и плывущий туман */
   .cell.card { aspect-ratio: 3 / 4; background: linear-gradient(#2a1a46, #3b2a5c); box-shadow: inset 0 0 0 calc(var(--u) * .8) #d9a441, inset 0 0 0 calc(var(--u) * 1.6) #5a3a12; overflow: hidden; }
   .cell.card .fog { position: absolute; inset: -40%; background: radial-gradient(circle at 30% 40%, rgba(201,180,255,.55), transparent 40%), radial-gradient(circle at 70% 65%, rgba(143,106,216,.5), transparent 45%), radial-gradient(circle at 50% 20%, rgba(232,220,255,.35), transparent 35%);
@@ -75,6 +75,7 @@
   @keyframes fog { 0% { transform: translate(-8%, 4%) rotate(0deg); } 100% { transform: translate(8%, -6%) rotate(25deg); } }
   .meter { display: flex; gap: calc(var(--u) * 1); margin: calc(var(--u) * 2) 0 calc(var(--u) * 1); }
   .meter span { flex: 1; height: calc(var(--u) * 3); background: #15161c; }
+  .meter em { flex: none; font-style: normal; font-size: calc(var(--u) * 3.6); font-weight: 800; color: #ffcf7a; line-height: calc(var(--u) * 3); margin-left: calc(var(--u) * 1); }
   .meter span.f { background: linear-gradient(#ffcf7a 0 50%, #d08a2a 50%); }
   .marks { display: flex; justify-content: space-between; font-size: calc(var(--u) * 3.2); font-weight: 700; opacity: .8; }
   .marks .ok { color: #8fe3a8; opacity: 1; }
@@ -115,6 +116,7 @@
   <div id="say" class="pan"></div>
   <div id="pick"><div class="pan"><p>Куда спускаемся?</p>
     <div class="need" id="pickneed"></div>
+    <button class="pan" type="button" id="resume" hidden>Продолжить поход<small id="resumes"></small></button>
     <button class="pan" type="button" data-size="s">Малое<small>3–4 зала · сытость 1</small></button>
     <button class="pan" type="button" data-size="m">Среднее<small>6–8 залов · сытость 2</small></button>
     <button class="pan" type="button" data-size="l">Большое<small>10–12 залов · сытость 4</small></button>
@@ -513,7 +515,7 @@
     var one = el("div", "two");
     teas.slice(0, 2).forEach(function (f) {
       var b = el("button", "btn", "+" + f.heal + " · " + nameOf(f.item).toLowerCase()); b.type = "button"; b.disabled = D.hp >= D.hp_max;
-      b.onclick = function (e) { e.stopPropagation(); D.hp = Math.min(D.hp_max, D.hp + f.heal); addFood(f.item, -1); hud(); hpView(); apply(dgCall("/api/dg/drink", { item: f.item })); };
+      b.onclick = function (e) { e.stopPropagation(); D.hp = Math.min(D.hp_max, D.hp + f.heal); addFood(f.item, -1); hud(); hpView(); apply(seq("/api/dg/drink", { item: f.item })); };
       one.appendChild(b);
     });
     box.appendChild(one);
@@ -521,9 +523,12 @@
   }
   $("hpbar").addEventListener("click", function (e) { e.stopPropagation(); if (open === hpView) return hide(); show(hpView); });
   function load() { if (!dgCall) return Promise.resolve(); return dgCall("/api/dg").then(function (r) { if (r.error) { tell(r.error); return; } D = r; D.t0 = Date.now() / 1000 - r.now; hud(); if (open) open(); }).catch(function (e) { tell(e.message); }); }
+  // запросы убежища — строго по очереди: быстрые нажатия не обгоняют друг друга на сервере
+  var chain = Promise.resolve();
+  function seq(path, body) { var p = chain.then(function () { return dgCall(path, body); }); chain = p.catch(function () {}); return p; }
   function apply(p) { return p.then(function (r) { if (r && r.error) tell(r.error); if (r && "bones" in r && "pack" in r) { D = r; D.t0 = Date.now() / 1000 - r.now; hud(); if (open) open(); } else return load(); }).catch(function (e) { tell(e.message); load(); }); }
   var sheet = $("sheet"), box = $("sheetbox");
-  function show(fn) { open = fn; sheet.classList.add("on"); fn(); }
+  function show(fn) { pick.classList.remove("on"); open = fn; sheet.classList.add("on"); fn(); }   // окно одно: выбор спуска закрывается
   function hide() { open = null; sheet.classList.remove("on"); clearInterval(tick); }
   sheet.addEventListener("click", function (e) { if (e.target === sheet) hide(); });
   function head(t) { box.innerHTML = ""; box.appendChild(el("div", "sh-h", t)); }
@@ -537,17 +542,19 @@
       var it = D.pack.filter(function (p) { return p.slot === i; })[0];
       g.appendChild(iconCell(it && it.item, null, it && it.sat, it ? function () {                 // из рюкзака — обратно в амбар
         D.pack = D.pack.filter(function (p) { return p.slot !== i; }); D.sat -= it.sat; addFood(it.item, 1); packView();
-        apply(dgCall("/api/dg/pack", { slot: i }));
+        apply(seq("/api/dg/pack", { slot: i }));
       } : null));
     })(i);
     box.appendChild(g);
-    var need = D.need, max = Math.max(need.l, D.sat), m = el("div", "meter");
-    for (var k = 0; k < max; k++) m.appendChild(el("span", k < D.sat ? "f" : ""));
+    // шкала — до большого подземелья (4 деления); лишняя еда не теряется, она лежит в рюкзаке до следующих спусков — справа «запас +N»
+    var need = D.need, m = el("div", "meter");
+    for (var k = 0; k < need.l; k++) m.appendChild(el("span", k < D.sat ? "f" : ""));
+    if (D.sat > need.l) m.appendChild(el("em", "", "+" + (D.sat - need.l)));
     box.appendChild(m);
     var mk = el("div", "marks");
     [["s", "малое"], ["m", "среднее"], ["l", "большое"]].forEach(function (z) { mk.appendChild(el("span", D.sat >= need[z[0]] ? "ok" : "", z[1] + " " + need[z[0]] + (D.sat >= need[z[0]] ? " ✓" : ""))); });
     box.appendChild(mk);
-    box.appendChild(el("div", "sh-t", "Сытость в рюкзаке: " + D.sat + ". Число в углу ячейки — сытость блюда. На спуск съедается столько, сколько нужно, с наименьшим перебором; остальное остаётся в рюкзаке."));
+    box.appendChild(el("div", "sh-t", "Сытость в рюкзаке: " + D.sat + ". Число в углу ячейки — сытость блюда. На спуск съедается столько, сколько нужно, с наименьшим перебором; остальное остаётся в рюкзаке до следующего спуска — лишнее не пропадает."));
     if (D.cards && D.cards.length) {                                                // легендарные карты тайной комнаты — пока под туманом
       box.appendChild(el("div", "sh-s", "Карты"));
       var gc = el("div", "grid");
@@ -566,7 +573,7 @@
         for (var j = 0; j < D.slots; j++) if (used.indexOf(j) < 0) { free = j; break; }
         if (free < 0) return tell("Рюкзак полон");
         D.pack.push({ slot: free, item: f.item, sat: f.sat }); D.sat += f.sat; addFood(f.item, -1); packView();
-        apply(dgCall("/api/dg/pack", { item: f.item }));
+        apply(seq("/api/dg/pack", { item: f.item }));
       }));
     });
     box.appendChild(g2);
@@ -602,8 +609,8 @@
     box.appendChild(el("div", "sh-t", "В амбаре " + D.fert + ", на прилавке " + D.fert_stall + ". Цена ✦ " + D.fert_price + " за штуку — её можно поменять в лавке фермы, раздел «Удобрение»."));
     var two = el("div", "two"), put = el("button", "btn", "Выставить"), take = el("button", "btn alt", "Убрать");
     put.type = take.type = "button"; put.disabled = !D.fert; take.disabled = !D.fert_stall;
-    put.onclick = function (e) { e.stopPropagation(); D.fert--; D.fert_stall++; hud(); marketView(); apply(dgCall("/api/farm/stall", { item: "p:fert", delta: 1 })); };
-    take.onclick = function (e) { e.stopPropagation(); D.fert++; D.fert_stall--; hud(); marketView(); apply(dgCall("/api/farm/stall", { item: "p:fert", delta: -1 })); };
+    put.onclick = function (e) { e.stopPropagation(); D.fert--; D.fert_stall++; hud(); marketView(); apply(seq("/api/farm/stall", { item: "p:fert", delta: 1 })); };
+    take.onclick = function (e) { e.stopPropagation(); D.fert++; D.fert_stall--; hud(); marketView(); apply(seq("/api/farm/stall", { item: "p:fert", delta: -1 })); };
     two.appendChild(put); two.appendChild(take); box.appendChild(two);
   }
 
@@ -621,7 +628,7 @@
     if (D.got) { box.appendChild(el("div", "sh-t", "Готово и уже в амбаре: " + D.got)); D.got = 0; }
     var two = el("div", "two"), b1 = el("button", "btn", "Переплавить 1"), b2 = el("button", "btn alt", "Всё — " + Math.max(can, 0));
     b1.type = b2.type = "button"; b1.disabled = can < 1; b2.disabled = can < 2;
-    var go = function (n) { return function (e) { e.stopPropagation(); D.bones -= n * br.bones; if (!br.n) br.started = Date.now() / 1000 - D.t0; br.n += n; hud(); brewView(); apply(dgCall("/api/dg/brew", { n: n })); }; };
+    var go = function (n) { return function (e) { e.stopPropagation(); D.bones -= n * br.bones; if (!br.n) br.started = Date.now() / 1000 - D.t0; br.n += n; hud(); brewView(); apply(seq("/api/dg/brew", { n: n })); }; };
     b1.onclick = go(1); b2.onclick = go(can); two.appendChild(b1); two.appendChild(b2); box.appendChild(two);
     if (!D.barn) box.appendChild(el("div", "sh-t", "Сначала построй амбар на ферме: удобрение ложится в него."));
     clearInterval(tick); tick = setInterval(function () { if (open === brewView) brewView(); else clearInterval(tick); }, 1000);
@@ -631,10 +638,14 @@
   function pickView() {                                // Странная похлёбка — только в большое (его решение 2026-11-19): в малом и среднем её сытость не считается
     var sat = D ? D.sat : 0, brew = D ? D.pack.filter(function (p) { return rec(p.item) === "brew"; }).reduce(function (a, p) { return a + p.sat; }, 0) : 0;
     $("pickneed").textContent = D ? "В рюкзаке сытость " + sat + (brew ? " — со Странной похлёбкой только в большое" : "") : "Пробный спуск — без фермы еда не нужна";
-    pick.querySelectorAll("button").forEach(function (b) { var z = b.dataset.size; b.disabled = !!D && (z === "l" ? sat : sat - brew) < D.need[z];
+    var rs = $("resume"), live = !!(D && D.run); rs.hidden = !live;
+    if (live) $("pickneed").textContent = "Есть начатый поход. Новый спуск — снова за еду, начатый пропадёт";
+    if (live) $("resumes").textContent = { s: "малое", m: "среднее", l: "большое" }[D.size] + " · уже оплачен" + (D.secret ? " · тайная комната" : "");
+    pick.querySelectorAll("button[data-size]").forEach(function (b) { var z = b.dataset.size; b.disabled = !!D && (z === "l" ? sat : sat - brew) < D.need[z];
       var sm = b.querySelector("small"); if (!sm.dataset.t) sm.dataset.t = sm.textContent; sm.textContent = sm.dataset.t + (z === "l" && brew ? " · тайная комната" : ""); });
   }
   pick.addEventListener("click", function (e) { e.stopPropagation(); var b = e.target.closest("button"); if (!b) { pick.classList.remove("on"); return; }
+    if (b.id === "resume") { location.href = "iso.html?size=" + D.size + "&run=" + D.run + (D.secret ? "&secret=1" : "") + "&v=" + Date.now(); return; }   // уже оплачен — без новой еды
     if (!dgCall) { location.href = "iso.html?size=" + b.dataset.size + "&v=" + Date.now(); return; }
     pick.querySelectorAll("button").forEach(function (x) { x.disabled = true; }); b.lastChild.textContent = "спускаюсь…";
     dgCall("/api/dg/start", { size: b.dataset.size }).then(function (r) {
@@ -643,7 +654,7 @@
     }).catch(function (e2) { tell(e2.message); pick.classList.remove("on"); });
   });
   document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation();
-    if (bn.classList.contains("go")) { if (D && D.hp <= 0) return show(hpView), tell("Герою нужно подлечиться"); if (D && !D.sat) return show(packView), tell("Положи еду в рюкзак"); pickView(); pick.classList.add("on"); return; }
+    if (bn.classList.contains("go")) { if (D && D.run) { hide(); pickView(); pick.classList.add("on"); return; } if (D && D.hp <= 0) return show(hpView), tell("Герою нужно подлечиться"); if (D && !D.sat) return show(packView), tell("Положи еду в рюкзак"); hide(); pickView(); pick.classList.add("on"); return; }
     var fn = bn.dataset.sheet === "pack" ? packView : marketView; if (open === fn) return hide(); if (fn === marketView) M = null; show(fn); }); });   // второе нажатие закрывает
   load();
   document.getElementById("gear").addEventListener("click", function (e) { e.stopPropagation(); tell("Настройки"); });

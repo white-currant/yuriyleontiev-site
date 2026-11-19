@@ -2145,7 +2145,8 @@ export async function dgState(u: any, got = 0) {
   const [fs] = await q("SELECT listed FROM f_stall WHERE user = ? AND item = 'p:fert'", [u.id]), own = (await ownPrices(u.id))["p:fert"];
   const satmap = Object.fromEntries(Object.entries(RECIPES).filter(([, r]) => r.kind === "oven" && r.points > 0).map(([k, r]) => [k, r.points]));
   const cards = (await q("SELECT id, kind FROM d_cards WHERE user = ? ORDER BY id", [u.id])).map(([id, kind]) => ({ id: Number(id), kind: String(kind) }));
-  return { cards, hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
+  const secret = !!h.run && (await q("SELECT 1 FROM d_secret WHERE user = ? AND run = ?", [u.id, h.run])).length > 0;   // начатый поход — можно продолжить (страница не загрузилась, связь пропала)
+  return { secret, cards, hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
            fert_stall: Number(fs?.[0] || 0), fert_price: sellerPrice(stallPrice(PRODUCTS["p:fert"].dust), own), satmap,
            pack, slots: DG_SLOTS, food, sat: pack.reduce((a, p) => a + p.sat, 0), need: DG_NEED, products: pr.products,
            brew: { n: br.n, started: br.started, per: FERT_SEC, bones: FERT_BONES, max: BREW_MAX }, got: got + br.got, now: now() };
@@ -2158,11 +2159,16 @@ export async function dgPack(u: any, item: string, slot: number) {        // ite
     return dgState(u);
   }
   if (!satOf(item)) return { error: "В рюкзак кладут только еду" };
-  const used = new Set((await q("SELECT slot FROM d_pack WHERE user = ?", [u.id])).map((r) => Number(r[0])));
-  let free = -1; for (let i = 0; i < DG_SLOTS; i++) if (!used.has(i)) { free = i; break; }
+  // сначала занять ячейку (INSERT OR IGNORE: два быстрых нажатия не упадут на одной ячейке — второе займёт следующую), потом списать из амбара;
+  // в амбаре не оказалось — ячейку освободить. Так блюдо не пропадёт (баг 2026-11-19: при гонке блюдо списывалось, а в рюкзак не ложилось)
+  let free = -1;
+  for (let i = 0; i < DG_SLOTS && free < 0; i++)
+    if ((await q("INSERT OR IGNORE INTO d_pack (user, slot, item) VALUES (?, ?, ?) RETURNING 1", [u.id, i, item])).length) free = i;
   if (free < 0) return { error: "Рюкзак полон" };
-  if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = ? AND count > 0 RETURNING 1", [u.id, item])).length) return { error: "В амбаре этого нет" };
-  await q("INSERT INTO d_pack (user, slot, item) VALUES (?, ?, ?)", [u.id, free, item]);
+  if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = ? AND count > 0 RETURNING 1", [u.id, item])).length) {
+    await q("DELETE FROM d_pack WHERE user = ? AND slot = ? AND item = ?", [u.id, free, item]);
+    return { error: "В амбаре этого нет" };
+  }
   return dgState(u);
 }
 export async function dgStart(u: any, size: string) {                      // вход: съесть из рюкзака сытость с наименьшим перебором
