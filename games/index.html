@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611200011";
+    var BUILD = "202611200015";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -426,6 +426,7 @@
   #farmbanners .banner button { background: rgba(255, 255, 255, .16); text-shadow: none; }
   .farm-actions { margin-top: 16px; }
   .pills { display: flex; gap: 8px; }
+  .farm-top.noexit .pills { flex: 1; justify-content: space-between; }        /* без «← Гильдия» значки ферм — во всю ширину (2026-11-20) */
   .dust-pill.blue, .cost.blue { color: #9ddcff; }
   .plot .lbl.water { color: #1d5f9e; }
   .plot .lbl.dead { color: #7a4a20; }
@@ -1000,7 +1001,7 @@
   <!-- «Лунная ферма»: свой участок, гости, пластинки -->
   <section class="screen" id="farm" hidden>
     <div class="scene">
-      <div class="farm-top"><button class="exit" type="button" data-go="home">← Гильдия</button><div class="pills"><button type="button" class="dust-pill gempill" id="gempill" aria-label="Самоцветная пыль" hidden><canvas class="pix" id="gemicon"></canvas><span id="gemn"></span></button><button type="button" class="dust-pill gempill" id="fertpill" aria-label="Удобрение" hidden><canvas class="pix" id="ferticon"></canvas><span id="fertn"></span></button><button type="button" class="dust-pill decorbtn" id="decorbtn" aria-label="Вид фермы"><canvas class="pix" id="decoricon"></canvas></button><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
+      <div class="farm-top" id="farmtop"><button class="exit" type="button" data-go="home" id="farmexit">← Гильдия</button><div class="pills"><button type="button" class="dust-pill gempill" id="gempill" aria-label="Самоцветная пыль" hidden><canvas class="pix" id="gemicon"></canvas><span id="gemn"></span></button><button type="button" class="dust-pill gempill" id="fertpill" aria-label="Удобрение" hidden><canvas class="pix" id="ferticon"></canvas><span id="fertn"></span></button><button type="button" class="dust-pill decorbtn" id="decorbtn" aria-label="Вид фермы"><canvas class="pix" id="decoricon"></canvas></button><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
       <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div><div class="toolbox" id="toolbox"></div>
     </div>
     <div id="farmbanners"></div>
@@ -1053,6 +1054,8 @@
   if (local && new URLSearchParams(location.search).get("api")) API = new URLSearchParams(location.search).get("api");
 
   var tg = window.Telegram && Telegram.WebApp;
+  // «← Гильдия» на ферме убрана (его просьба 2026-11-20): то же делает круглая «‹» Телеграма слева вверху. Вне Телеграма (у браузера своей «назад» нет) — остаётся
+  if (tg && tg.BackButton && tg.platform && tg.platform !== "unknown") { var fe = document.getElementById("farmexit"); if (fe) { fe.remove(); document.getElementById("farmtop").classList.add("noexit"); } }
   var initData = (tg && tg.initData) || (local && new URLSearchParams(location.search).get("init")) || "";
   if (tg) {
     tg.ready(); tg.expand();
