@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611200023";
+    var BUILD = "202611200049";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1055,6 +1055,7 @@
   if (local && new URLSearchParams(location.search).get("api")) API = new URLSearchParams(location.search).get("api");
 
   var tg = window.Telegram && Telegram.WebApp;
+  try { if (localStorage.getItem("dg-owner") === "1") document.getElementById("dgcard").hidden = false; } catch (e) {}   // подземелье хозяину видно всегда, не дожидаясь профиля (его просьба 2026-11-20)
   // «← Гильдия» на ферме убрана (его просьба 2026-11-20): то же делает круглая «‹» Телеграма слева вверху. Вне Телеграма (у браузера своей «назад» нет) — остаётся
   if (tg && tg.BackButton && tg.platform && tg.platform !== "unknown") { var fe = document.getElementById("farmexit"); if (fe) { fe.remove(); document.getElementById("farmtop").classList.add("noexit"); } }
   var initData = (tg && tg.initData) || (local && new URLSearchParams(location.search).get("init")) || "";
@@ -1113,7 +1114,8 @@
     $("title").textContent = p.title; $("name").textContent = p.name;
     $("sigil").textContent = initial(p.name);
     setPhoto($("sigil"), p.avatar); rankFrame($("sigil"), p.title, 36);
-    $("dgcard").hidden = !("link" in p && p.link === null); fertTab(!$("dgcard").hidden);   // удобрение в лавке — только хозяину (его срочная правка 2026-11-19): у остальных вкладки нет вовсе                 // подземелье — пока только хозяину: у него одного нет привязки канала
+    $("dgcard").hidden = !("link" in p && p.link === null); fertTab(!$("dgcard").hidden);
+    try { if ($("dgcard").hidden) localStorage.removeItem("dg-owner"); else localStorage.setItem("dg-owner", "1"); } catch (e) {}   // хозяин — запомнить: карточка подземелья сразу при старте (2026-11-20)   // удобрение в лавке — только хозяину (его срочная правка 2026-11-19): у остальных вкладки нет вовсе                 // подземелье — пока только хозяину: у него одного нет привязки канала
     $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
     $("karma").textContent = p.karma; $("place").textContent = p.place || "—";
     var lad = [0, 30, 100, 250, 500, 1000, 2000, 5000, 12000, 25000, 50000], prev = 0;
@@ -3866,6 +3868,7 @@
     return 450;                                                                             // Огненная ночь: грядки вспыхивают сами (evSpot)
   }
   if (local) window.__monoIntro = function (m) { return monoIntro(m); };                    // проверка у себя: показать вступление события
+  if (local) window.__farmF = function () { return F; };                                      // проверка у себя: состояние фермы (погода и т. п.)
   function sceneShake(ms) { var b = $("scenecv") && $("scenecv").parentNode; if (!b || !b.animate) return;
     b.animate([0, 1, 2, 3, 4, 5, 6].map(function (k) { var a = (6 - k) / 6 * 3; return { transform: "translate(" + (k % 2 ? a : -a) + "px," + (k % 3 - 1) * a * .6 + "px)" }; }), { duration: ms }); }
   function drawEvFx(c, ev, t, kx, ky, dpr, spark) {

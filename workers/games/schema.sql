@@ -116,6 +116,8 @@ CREATE TABLE IF NOT EXISTS d_pack (user INTEGER NOT NULL, slot INTEGER NOT NULL,
 CREATE TABLE IF NOT EXISTS d_brew (user INTEGER PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, started INTEGER NOT NULL DEFAULT 0);
 -- тайная комната (2026-11-19): поход со Странной похлёбкой и легендарные карты для будущей карточной игры (пока скрыты)
 CREATE TABLE IF NOT EXISTS d_secret (user INTEGER PRIMARY KEY, run TEXT NOT NULL);
+-- находка алтаря странной комнаты: card / coal / seed; выдаётся на ферму при итоге похода, погиб — пропала (2026-11-19)
+CREATE TABLE IF NOT EXISTS d_altar (user INTEGER PRIMARY KEY, run TEXT NOT NULL, loot TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS d_cards (id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS d_cards_u ON d_cards (user);
 -- удобрение на грядке (2026-11-19): сколько пакетиков на этой посадке и сколько секунд роста они дали (по ним урезаются очки за сбор)

@@ -2155,7 +2155,7 @@ export async function dgState(u: any, got = 0) {
   const satmap = Object.fromEntries(Object.entries(RECIPES).filter(([, r]) => r.kind === "oven" && r.points > 0).map(([k, r]) => [k, r.points]));
   const cards = (await q("SELECT id, kind FROM d_cards WHERE user = ? ORDER BY id", [u.id])).map(([id, kind]) => ({ id: Number(id), kind: String(kind) }));
   const secret = !!h.run && (await q("SELECT 1 FROM d_secret WHERE user = ? AND run = ?", [u.id, h.run])).length > 0;   // начатый поход — можно продолжить (страница не загрузилась, связь пропала)
-  return { secret, cards, hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
+  return { free: DG_FREE, secret, cards, hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
            fert_stall: Number(fs?.[0] || 0), fert_price: sellerPrice(stallPrice(PRODUCTS["p:fert"].dust), own), satmap,
            pack, slots: DG_SLOTS, food, sat: pack.reduce((a, p) => a + p.sat, 0), need: DG_NEED, products: pr.products,
            brew: { n: br.n, started: br.started, per: FERT_SEC, bones: FERT_BONES, max: BREW_MAX }, got: got + br.got, now: now() };
@@ -2180,6 +2180,9 @@ export async function dgPack(u: any, item: string, slot: number) {        // ite
   }
   return dgState(u);
 }
+// проба для хозяина (его просьба 2026-11-20): спуск бесплатный — еда из рюкзака не тратится; Странная похлёбка в рюкзаке
+// по-прежнему открывает странную дверь в большом подземелье, но тоже не съедается. Подземелье пока видит только он — перед открытием всем выключить
+export const DG_FREE = true;
 export async function dgStart(u: any, size: string) {                      // вход: съесть из рюкзака сытость с наименьшим перебором
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   const need = DG_NEED[size]; if (!need) return { error: "Нет такого подземелья" };
@@ -2194,6 +2197,7 @@ export async function dgStart(u: any, size: string) {                      // в
     let s = 0, c = 0; pack.forEach((p, i) => { if (m >> i & 1) { s += p.sat; c++; } });
     if (s >= need && (s < bs || (s === bs && c < bc))) { best = m; bs = s; bc = c; }
   }
+  if (DG_FREE) { best = 0; bs = 0; }                                         // проба: ничего не съедается
   if (best < 0) return { error: "Мало еды в рюкзаке: нужно сытости " + need + (skip ? " (Странная похлёбка — только для большого подземелья)" : "") };
   const eat = pack.filter((_, i) => best >> i & 1).map((p) => p.slot), run = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await dgHero(u.id);
@@ -2201,20 +2205,52 @@ export async function dgStart(u: any, size: string) {                      // в
     ...eat.map((s) => DB.prepare("DELETE FROM d_pack WHERE user = ? AND slot = ?").bind(u.id, s)),
     DB.prepare("UPDATE d_hero SET run = ?, size = ?, started = ? WHERE user = ?").bind(run, size, now(), u.id),
     DB.prepare("DELETE FROM d_secret WHERE user = ?").bind(u.id),
+    DB.prepare("DELETE FROM d_altar WHERE user = ?").bind(u.id),            // находка брошенного похода пропала
     ...(must ? [DB.prepare("INSERT INTO d_secret (user, run) VALUES (?, ?)").bind(u.id, run)] : []),
   ]);
   return { run, size, ate: bs, secret: !!must };
 }
-export async function dgFinish(u: any, run: string, bones: number, dead = false, card = false) {      // итог похода: погиб — кости 0; закрыл игру посреди похода — итог не пришёл, всё пропало
+// странная комната (его решения 2026-11-19): поход со Странной похлёбкой — за дверью с глазом красный зал, в центре алтарь, обвитый щупальцем.
+// Удар по алтарю — одна находка за поход, бросок на сервере: карта — чаще всего (иначе семя не будет редкостью), и карты бывают
+// редкие и легендарные (его правка 2026-11-19); ещё звёздный уголь или странное семя. Находка держится до конца похода:
+// погиб — пропала, вышел или зачистил — твоя (у алтаря её не делят пополам)
+export const ALTAR_LOOT: [string, number][] = [["rare", .40], ["legend", .15], ["coal", .30], ["seed", .15]];
+export async function dgAltar(u: any, run: string) {
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   const h = await dgHero(u.id);
   if (!run || h.run !== run) return { error: "Поход уже закончен" };
-  const b = dead ? 0 : Math.max(0, Math.min(DG_MAXB[h.size] || 0, Math.round(Number(bones) || 0)));
+  if (!(await q("SELECT 1 FROM d_secret WHERE user = ? AND run = ?", [u.id, run])).length) return { error: "Алтаря в этом походе нет" };
+  const [had] = await q("SELECT loot FROM d_altar WHERE user = ? AND run = ?", [u.id, run]);
+  if (had) return { loot: String(had[0]) };                                  // уже ударил (повтор запроса) — та же находка
+  let r = Math.random(), loot = ALTAR_LOOT[ALTAR_LOOT.length - 1][0];
+  for (const [k, p] of ALTAR_LOOT) { if (r < p) { loot = k; break; } r -= p; }
+  await q("INSERT INTO d_altar (user, run, loot) VALUES (?, ?, ?) ON CONFLICT(user) DO UPDATE SET run = excluded.run, loot = excluded.loot", [u.id, run, loot]);
+  return { loot };
+}
+async function altarGive(uid: number, loot: string) {                     // находка алтаря — на ферму; что выдано на самом деле
+  const hasBarn = async () => (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [uid])).length > 0;
+  const coal = async () => { if (await hasBarn()) await q("INSERT INTO f_barn (user, strain, count) VALUES (?, 'p:coal', 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [uid]);
+    else await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [COAL_DUST, uid]); return "coal"; };
+  if (loot === "rare" || loot === "legend" || loot === "card") { const k = loot === "rare" ? "rare" : "legend";   // «card» — старое имя легендарной
+    await q("INSERT INTO d_cards (user, kind, at) VALUES (?, ?, ?)", [uid, k, now()]); return k; }
+  if (loot === "seed") {                                                   // правило «не больше двух странных у игрока»: третье вытесняет одно из мешка;
+    if ((await oddHeld(uid)) >= ODD_PER_USER && !(await oddEvict(uid))) return coal();   // оба растут — вместо семени уголь
+    await q("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, 'anomaly', 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [uid]);
+    await oddFresh(uid); return "seed";
+  }
+  return coal();
+}
+export async function dgFinish(u: any, run: string, bones: number, dead = false, left = false) {      // итог похода: погиб — кости 0; закрыл игру посреди похода — итог не пришёл, всё пропало
+  if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
+  const h = await dgHero(u.id);
+  if (!run || h.run !== run) return { error: "Поход уже закончен" };
+  let b = dead ? 0 : Math.max(0, Math.min(DG_MAXB[h.size] || 0, Math.round(Number(bones) || 0)));
+  if (left && !dead) b = Math.floor(b / 2);                                 // вышел, не дойдя до конца, — половина костей (его решение 2026-11-19)
   await q("UPDATE d_hero SET bones = bones + ?, hp = MAX(0, hp - ?), run = NULL, size = NULL WHERE user = ? AND run = ?", [b, dead ? HP_DEATH : 0, u.id, run]);
-  // легендарная карта тайной комнаты — одна за поход со Странной похлёбкой; погиб — пропала, как и всё найденное. Пока скрыта: откроется в будущей игре
-  const sec = (await q("DELETE FROM d_secret WHERE user = ? AND run = ? RETURNING 1", [u.id, run])).length > 0;
-  if (sec && card && !dead) await q("INSERT INTO d_cards (user, kind, at) VALUES (?, 'legend', ?)", [u.id, now()]);
-  return { ok: true, bones: b, total: h.bones + b, hp: dead ? Math.max(0, h.hp - HP_DEATH) : h.hp };
+  await q("DELETE FROM d_secret WHERE user = ? AND run = ?", [u.id, run]);
+  const [al] = await q("DELETE FROM d_altar WHERE user = ? AND run = ? RETURNING loot", [u.id, run]);
+  const loot = al && !dead ? await altarGive(u.id, String(al[0])) : null;
+  return { ok: true, bones: b, total: h.bones + b, hp: dead ? Math.max(0, h.hp - HP_DEATH) : h.hp, loot };
 }
 export async function dgDrink(u: any, item: string) {                      // выпить чай из амбара — здоровье героя
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
