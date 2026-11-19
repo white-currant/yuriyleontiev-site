@@ -45,19 +45,19 @@
   #pick { position: absolute; inset: 0; display: none; place-items: center; background: rgba(6, 5, 9, .55); }
   #pick.on { display: grid; }
   #pick > div { width: 74%; padding: calc(var(--u) * 5); display: grid; gap: calc(var(--u) * 3); text-align: center; }
-  #pick p { margin: 0 0 calc(var(--u) * 1); font-size: calc(var(--u) * 5); font-weight: 800; }
-  #pick button { height: calc(var(--u) * 15); border: 0; color: inherit; font: inherit; font-size: calc(var(--u) * 4.4); font-weight: 800; cursor: pointer; display: grid; place-items: center; line-height: 1.15; }
-  #pick button small { display: block; font-size: calc(var(--u) * 3.4); font-weight: 600; opacity: .75; }
+  #pick p { margin: 0 0 calc(var(--u) * 1); font-size: calc(var(--u) * 6.4); font-weight: 800; }
+  #pick button { height: calc(var(--u) * 17); border: 0; color: inherit; font: inherit; font-size: calc(var(--u) * 5.6); font-weight: 800; cursor: pointer; display: grid; place-items: center; line-height: 1.15; }
+  #pick button small { display: block; font-size: calc(var(--u) * 4.2); font-weight: 600; opacity: .75; }
   #pick button:active { filter: brightness(1.25); }
   #pick button:disabled { opacity: .45; }
-  #pick .need { font-size: calc(var(--u) * 3.6); font-weight: 600; opacity: .8; margin-top: calc(var(--u) * -1); }
+  #pick .need { font-size: calc(var(--u) * 4.4); font-weight: 600; opacity: .8; margin-top: calc(var(--u) * -1); }
   /* окна убежища (2026-11-19): рюкзак, рынок, котёл — снизу, над кнопками */
   #sheet { position: absolute; left: 0; right: 0; top: 0; bottom: calc(var(--u) * 32 + env(safe-area-inset-bottom)); display: none; align-items: flex-end; justify-content: center; background: rgba(6, 5, 9, .6); }
   #sheet.on { display: flex; }
   #sheetbox { width: calc(100% - var(--u) * 8); max-height: 74%; overflow-y: auto; margin-bottom: calc(var(--u) * 3); padding: calc(var(--u) * 5); }
-  .sh-h { font-size: calc(var(--u) * 5.4); font-weight: 800; text-align: center; margin-bottom: calc(var(--u) * 3); }
-  .sh-s { font-size: calc(var(--u) * 4); font-weight: 800; margin: calc(var(--u) * 4) 0 calc(var(--u) * 2); }
-  .sh-t { font-size: calc(var(--u) * 3.6); font-weight: 600; line-height: 1.35; opacity: .78; margin: calc(var(--u) * 2) 0; }
+  .sh-h { font-size: calc(var(--u) * 6.8); font-weight: 800; text-align: center; margin-bottom: calc(var(--u) * 3); }
+  .sh-s { font-size: calc(var(--u) * 5.2); font-weight: 800; margin: calc(var(--u) * 4) 0 calc(var(--u) * 2); }
+  .sh-t { font-size: calc(var(--u) * 4.6); font-weight: 600; line-height: 1.35; opacity: .85; margin: calc(var(--u) * 2) 0; }
   .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: calc(var(--u) * 2); }
   .grid.w4 { grid-template-columns: repeat(4, 1fr); }
   .cell { position: relative; aspect-ratio: 1; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; display: grid; place-items: center; background: #15161c;
@@ -73,15 +73,30 @@
     animation: fog 6s ease-in-out infinite alternate; }
   .cell.card::after { content: "?"; position: relative; font-size: calc(var(--u) * 6); font-weight: 800; color: #ffe7a3; text-shadow: 0 0 calc(var(--u) * 2) #8f6ad8; }
   @keyframes fog { 0% { transform: translate(-8%, 4%) rotate(0deg); } 100% { transform: translate(8%, -6%) rotate(25deg); } }
+  /* рынок на полках с ценниками, как лавка фермы, но в цветах подземелья (его просьба 2026-11-19): железная полка с заклёпками, сланцевые ценники */
+  .wares { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: calc(var(--u) * 3); margin-top: calc(var(--u) * 2); }
+  .ware { position: relative; height: calc(var(--u) * 34); display: flex; align-items: flex-end; justify-content: center; padding: 0 0 calc(var(--u) * 10); border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+  .ware::after { content: ""; position: absolute; left: 0; right: 0; bottom: calc(var(--u) * 7); height: calc(var(--u) * 3); background: linear-gradient(#6a7080, #3c404c 60%, #23262e);
+    box-shadow: 0 calc(var(--u) * 1.2) 0 rgba(0, 0, 0, .45); }
+  .ware:nth-child(4n + 1)::after { left: calc(var(--u) * 1.2); }
+  .ware:nth-child(4n)::after, .ware:last-child::after { right: calc(var(--u) * 1.2); }
+  .ware canvas { width: 64%; image-rendering: pixelated; filter: drop-shadow(0 calc(var(--u) * 1) 0 rgba(0, 0, 0, .45)); transition: transform .15s, filter .15s; }
+  .ware.on canvas { transform: translateY(calc(var(--u) * -1.2)) scale(1.06); filter: drop-shadow(0 0 calc(var(--u) * 3) rgba(255, 200, 110, .8)); }
+  .ware .tag { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%) rotate(-3deg); z-index: 1; padding: calc(var(--u) * .4) calc(var(--u) * 2); white-space: nowrap;
+    background: #20222b; color: #ffcf7a; font-size: calc(var(--u) * 4.2); font-weight: 800; box-shadow: 0 0 0 calc(var(--u) * .6) #565b6c, 0 calc(var(--u) * .6) 0 calc(var(--u) * .6) #0b0b10; }
+  .ware.on .tag { background: #d9a441; color: #4a2a0c; text-shadow: none; box-shadow: 0 0 0 calc(var(--u) * .6) #ffe7a3, 0 calc(var(--u) * .6) 0 calc(var(--u) * .6) #0b0b10; }   /* выбранный — золотая табличка, цифры коричневые, без свечения (его правка 2026-11-19) */
+  .ware .sat { position: absolute; left: calc(var(--u) * 1.5); top: calc(var(--u) * 1); font-size: calc(var(--u) * 4.6); font-weight: 800; color: #ffcf7a; text-shadow: 0 calc(var(--u) * .5) 0 #000; }
+  .ware .q { position: absolute; right: calc(var(--u) * 1.5); top: calc(var(--u) * 1); font-size: calc(var(--u) * 4.4); font-weight: 800; text-shadow: 0 calc(var(--u) * .5) 0 #000; }
+  .ware .q.sale { color: #8fe3a8; }
   .meter { display: flex; gap: calc(var(--u) * 1); margin: calc(var(--u) * 2) 0 calc(var(--u) * 1); }
   .meter span { flex: 1; height: calc(var(--u) * 3); background: #15161c; }
   .meter em { flex: none; font-style: normal; font-size: calc(var(--u) * 3.6); font-weight: 800; color: #ffcf7a; line-height: calc(var(--u) * 3); margin-left: calc(var(--u) * 1); }
   .meter span.f { background: linear-gradient(#ffcf7a 0 50%, #d08a2a 50%); }
-  .marks { display: flex; justify-content: space-between; font-size: calc(var(--u) * 3.2); font-weight: 700; opacity: .8; }
+  .marks { display: flex; justify-content: space-between; font-size: calc(var(--u) * 4.2); font-weight: 700; opacity: .8; }
   .marks .ok { color: #8fe3a8; opacity: 1; }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * 3); margin-top: calc(var(--u) * 3); }
   .one { display: grid; margin-top: calc(var(--u) * 3); }
-  .btn { height: calc(var(--u) * 13); border: 0; color: #f2fff8; font: inherit; font-size: calc(var(--u) * 4); font-weight: 800; cursor: pointer; background: #3f9e7c;
+  .btn { height: calc(var(--u) * 13); border: 0; color: #f2fff8; font: inherit; font-size: calc(var(--u) * 5.2); font-weight: 800; cursor: pointer; background: #3f9e7c;
     box-shadow: 0 0 0 calc(var(--u) * .8) #14151b, inset 0 calc(var(--u) * -1.2) 0 #2a7058, inset 0 calc(var(--u) * .8) 0 #6fd0a8; }
   .btn.alt { background: #3a3e4b; box-shadow: 0 0 0 calc(var(--u) * .8) #14151b, inset 0 calc(var(--u) * -1.2) 0 #23252e, inset 0 calc(var(--u) * .8) 0 #5a5f70; color: var(--cream); }
   .btn:disabled { opacity: .45; }
@@ -555,11 +570,13 @@
     if (D.hp >= D.hp_max) box.appendChild(el("div", "sh-t", "Герой здоров — чай пока не нужен."));
   }
   $("hpbar").addEventListener("click", function (e) { e.stopPropagation(); if (open === hpView) return hide(); show(hpView); });
-  function load() { if (!dgCall) return Promise.resolve(); return dgCall("/api/dg").then(function (r) { if (r.error) { tell(r.error); return; } D = r; D.t0 = Date.now() / 1000 - r.now; hud(); if (open) open(); }).catch(function (e) { tell(e.message); }); }
+  function load() { if (!dgCall) return Promise.resolve(); return dgCall("/api/dg").then(function (r) { if (r.error) { tell(r.error); return; } D = r; D.t0 = Date.now() / 1000 - r.now; try { parent.__dgD = D; } catch (e) {} hud(); if (open) open(); }).catch(function (e) { tell(e.message); }); }
+  // прошлое состояние убежища — из памяти главного окна: окна открываются сразу, а сервер обновляет их в фоне (его жалоба 2026-11-19)
+  try { if (dgCall && parent.__dgD) { D = parent.__dgD; } if (dgCall && parent.__dgM) M = parent.__dgM; } catch (e) {}
   // запросы убежища — строго по очереди: быстрые нажатия не обгоняют друг друга на сервере
   var chain = Promise.resolve();
   function seq(path, body) { var p = chain.then(function () { return dgCall(path, body); }); chain = p.catch(function () {}); return p; }
-  function apply(p) { return p.then(function (r) { if (r && r.error) tell(r.error); if (r && "bones" in r && "pack" in r) { D = r; D.t0 = Date.now() / 1000 - r.now; hud(); if (open) open(); } else return load(); }).catch(function (e) { tell(e.message); load(); }); }
+  function apply(p) { return p.then(function (r) { if (r && r.error) tell(r.error); if (r && "bones" in r && "pack" in r) { D = r; D.t0 = Date.now() / 1000 - r.now; try { parent.__dgD = D; } catch (e) {} hud(); if (open) open(); } else return load(); }).catch(function (e) { tell(e.message); load(); }); }
   var sheet = $("sheet"), box = $("sheetbox");
   function show(fn) { pick.classList.remove("on"); open = fn; sheet.classList.add("on"); fn(); }   // окно одно: выбор спуска закрывается
   function hide() { open = null; sheet.classList.remove("on"); clearInterval(tick); }
@@ -613,39 +630,50 @@
   }
   function addFood(id, n) { var f = D.food.filter(function (x) { return x.item === id; })[0]; if (f) f.count += n; else if (n > 0) D.food.push({ item: id, count: n, sat: satOf(id) }); D.food = D.food.filter(function (x) { return x.count > 0; }); }
 
-  // рынок: еда, которую выставили игроки на ферме, и продажа своего удобрения
+  // рынок (2026-11-19): полки с ценниками, как в лавке фермы; удобрение — пакетиками на полке, а не строчкой текста
   var mSel = null;
+  function ware(id, o) {
+    var b = el("button", "ware" + (o.on ? " on" : "")); b.type = "button"; var c = el("canvas"); c.width = 16; c.height = 12; if (dgIcon) try { dgIcon(c, id); } catch (e) {} b.appendChild(c);
+    if (o.sat) b.appendChild(el("span", "sat", String(o.sat))); if (o.q) b.appendChild(el("span", "q" + (o.sale ? " sale" : ""), o.q)); if (o.tag) b.appendChild(el("span", "tag", o.tag));
+    b.onclick = function (e) { e.stopPropagation(); if (o.click) o.click(); }; return b;
+  }
   function marketView() {
     head("Рынок"); if (!D) return noServer();
-    box.appendChild(el("div", "sh-t", "Звёздной пыли: ✦ " + D.dust));
+    box.appendChild(el("div", "sh-t c", "звёздной пыли ✦ " + D.dust));
     box.appendChild(el("div", "sh-s", "Еда от игроков"));
-    if (!M) { box.appendChild(el("div", "sh-t", "Загружаю…")); dgCall("/api/farm/market").then(function (m) { M = m; if (open === marketView) marketView(); }).catch(function (e) { tell(e.message); }); }
+    if (!M) box.appendChild(el("div", "sh-t", "Загружаю…"));
     else {
       var food = (M.items || []).filter(function (o) { return satOf(o.item) > 0; });
-      if (!food.length) box.appendChild(el("div", "sh-t", "Еды на рынке сейчас нет. Её выставляют игроки со своих ферм."));
+      if (!food.length) box.appendChild(el("div", "sh-t", "Еды на рынке сейчас нет."));
       else {
-        var g = el("div", "grid w4");
-        food.forEach(function (o, i) { g.appendChild(iconCell(o.item, o.count, satOf(o.item), function () { mSel = i; marketView(); }, mSel === i)); });
+        var g = el("div", "wares");
+        food.forEach(function (o, i) { g.appendChild(ware(o.item, { on: mSel === i, sat: satOf(o.item), q: o.count > 1 ? "×" + o.count : "", tag: "✦ " + o.price, click: function () { mSel = mSel === i ? null : i; marketView(); } })); });
         box.appendChild(g);
         var o = food[mSel];
         if (o) {
-          box.appendChild(el("div", "sh-t", nameOf(o.item, M.products) + " · сытость " + satOf(o.item) + " · продаёт " + o.seller + ". Ляжет в амбар — оттуда в рюкзак."));
+          box.appendChild(el("div", "sh-t c", nameOf(o.item, M.products) + " · сытость " + satOf(o.item) + " · " + o.seller));
           var one = el("div", "one"), b = el("button", "btn", "Купить за ✦ " + o.price); b.type = "button"; b.disabled = D.dust < o.price;
-          b.onclick = function (e) { e.stopPropagation(); b.disabled = true; b.textContent = "Покупаю…"; D.dust -= o.price;
-            dgCall("/api/farm/buy", { pub: o.pub, strain: o.item, kind: "item" }).then(function (r) { if (r.error) tell(r.error); else tell("Куплено — в амбаре"); M = null; mSel = null; return load(); })
+          b.onclick = function (e) { e.stopPropagation(); b.disabled = true; b.textContent = "Покупаю…"; D.dust -= o.price; addFood(o.item, 1); o.count--; if (!o.count) M.items.splice(M.items.indexOf(o), 1); mSel = null; marketView();
+            seq("/api/farm/buy", { pub: o.pub, strain: o.item, kind: "item" }).then(function (r) { if (r.error) tell(r.error); else tell("Куплено — в амбаре"); mRefresh(); return load(); })
               .catch(function (e2) { tell(e2.message); load(); }); };
           one.appendChild(b); box.appendChild(one);
-        } else box.appendChild(el("div", "sh-t", "Нажми на блюдо, чтобы купить. Число в углу — сытость."));
+        }
       }
     }
-    box.appendChild(el("div", "sh-s", "Продать удобрение"));
-    box.appendChild(el("div", "sh-t", "В амбаре " + D.fert + ", на прилавке " + D.fert_stall + ". Цена ✦ " + D.fert_price + " за штуку — её можно поменять в лавке фермы, раздел «Удобрение»."));
+    box.appendChild(el("div", "sh-s", "Твоё удобрение"));
+    var g2 = el("div", "wares");
+    g2.appendChild(ware("p:fert", { q: "×" + D.fert }));
+    g2.appendChild(ware("p:fert", { q: "×" + D.fert_stall, sale: true, tag: "✦ " + D.fert_price }));
+    box.appendChild(g2);
+    var lb = el("div", "two"); lb.appendChild(el("div", "sh-t c", "в амбаре")); lb.appendChild(el("div", "sh-t c", "на прилавке")); lb.style.width = "50%"; lb.style.marginTop = "0"; box.appendChild(lb);
     var two = el("div", "two"), put = el("button", "btn", "Выставить"), take = el("button", "btn alt", "Убрать");
     put.type = take.type = "button"; put.disabled = !D.fert; take.disabled = !D.fert_stall;
     put.onclick = function (e) { e.stopPropagation(); D.fert--; D.fert_stall++; hud(); marketView(); apply(seq("/api/farm/stall", { item: "p:fert", delta: 1 })); };
     take.onclick = function (e) { e.stopPropagation(); D.fert++; D.fert_stall--; hud(); marketView(); apply(seq("/api/farm/stall", { item: "p:fert", delta: -1 })); };
     two.appendChild(put); two.appendChild(take); box.appendChild(two);
   }
+  // рынок — заранее и в памяти главного окна: окно открывается сразу, свежие данные подтягиваются в фоне
+  function mRefresh() { if (!dgCall) return; dgCall("/api/farm/market").then(function (m) { M = m; try { parent.__dgM = m; } catch (e) {} if (open === marketView) marketView(); }).catch(function () {}); }
 
   // котёл (его правка 2026-11-19): ячейка с костями → стрелка → ячейка с удобрением, счётчик сколько варить, меньше текста
   var brewN = 1;
@@ -706,8 +734,8 @@
   });
   document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation();
     if (bn.classList.contains("go")) { if (D && D.run) { hide(); pickView(); pick.classList.add("on"); return; } if (D && D.hp <= 0) return show(hpView), tell("Герою нужно подлечиться"); if (D && !D.sat) return show(packView), tell("Положи еду в рюкзак"); hide(); pickView(); pick.classList.add("on"); return; }
-    var fn = bn.dataset.sheet === "pack" ? packView : marketView; if (open === fn) return hide(); if (fn === marketView) M = null; show(fn); }); });   // второе нажатие закрывает
-  load();
+    var fn = bn.dataset.sheet === "pack" ? packView : marketView; if (open === fn) return hide(); if (fn === marketView) mRefresh(); show(fn); }); });   // второе нажатие закрывает
+  if (D) hud(); load(); mRefresh();                                             // из памяти — сразу, свежее с сервера — следом; рынок — заранее
   document.getElementById("gear").addEventListener("click", function (e) { e.stopPropagation(); tell("Настройки"); });
   cv.addEventListener("pointerdown", function (e) {
     var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;   // доли экрана — места на его фоне
