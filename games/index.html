@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611192156";
+    var BUILD = "202611200011";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -4392,11 +4392,27 @@
   // Маленький холст над кромкой окна, пиксели ×3 (как ферма), 15 кадров в секунду и только пока окно открыто — телефону не тяжело.
   function rainOnSheet(w, sh) {
     var scr = document.body.dataset.screen; if ((scr !== "farm" && scr !== "farm-visit") || (weatherNow() || {}).id !== "shower") return;
-    var S = 3, H = 16, cv = document.createElement("canvas"), c = cv.getContext("2d"), drops = [], bits = [], W = 0;
-    cv.className = "sheetrain"; cv.style.cssText = "position:fixed;pointer-events:none;z-index:5;image-rendering:pixelated;"; w.appendChild(cv);
-    var tick = setInterval(function () {
-      if (!sh.isConnected) { clearInterval(tick); return; }
-      var r = sh.getBoundingClientRect(), nw = Math.max(1, Math.round(r.width / S));
+    var cv = document.createElement("canvas"); cv.className = "sheetrain"; w.appendChild(cv);
+    var tick = edgeRain(cv, function () { if (!sh.isConnected) { clearInterval(tick); return null; } var r = sh.getBoundingClientRect(); return { left: r.left, width: r.width, top: r.top }; });
+  }
+  // те же брызги на верхнем крае нижнего меню фермы — там, где кончается сцена (его просьба 2026-11-20); только в ливень,
+  // на ферме или в гостях и пока не открыто окно (у окна свои капли)
+  (function () {
+    var cv = document.createElement("canvas"); cv.className = "barrain"; cv.style.display = "none"; document.body.appendChild(cv);
+    edgeRain(cv, function () {
+      var scr = document.body.dataset.screen, sc = (scr === "farm" || scr === "farm-visit") && document.querySelector("#" + scr + " .scene");
+      var on = !!sc && (weatherNow() || {}).id === "shower" && !document.querySelector(".sheet-wrap") && !document.hidden;
+      cv.style.display = on ? "" : "none"; if (!on) return null;
+      var r = sc.getBoundingClientRect(); return { left: r.left, width: r.width, top: r.bottom };
+    });
+  })();
+  // капли бьют в кромку (rect().top) и разлетаются брызгами; rect() вернул null — в этот раз не рисуем
+  function edgeRain(cv, rect) {
+    var S = 3, H = 16, c = cv.getContext("2d"), drops = [], bits = [], W = 0;
+    cv.style.cssText += ";position:fixed;pointer-events:none;z-index:5;image-rendering:pixelated;";
+    return setInterval(function () {
+      var r = rect(); if (!r) { drops = []; bits = []; return; }
+      var nw = Math.max(1, Math.round(r.width / S));
       if (nw !== W) { W = nw; cv.width = W; cv.height = H; cv.style.width = W * S + "px"; cv.style.height = H * S + "px"; }
       cv.style.left = r.left + "px"; cv.style.top = (r.top - H * S + S) + "px";
       if (drops.length < 7 && Math.random() < .55) drops.push({ x: Math.random() * W, y: -2, v: 2.2 + Math.random() * 1.2 });
