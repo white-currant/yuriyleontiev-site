@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611191957";
+    var BUILD = "202611192000";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1018,7 +1018,7 @@
     <div class="farm-top"><button class="exit" type="button" data-go="farm">← На ферму</button><div class="dust-pill" id="shopdust">✦ 0</div></div>
     <h2 style="margin-top:16px;font-size:24px;letter-spacing:-.02em">Лавка</h2>
     <div class="tabs" id="shoptabs"><button type="button" data-st="buy" aria-pressed="true">Купить</button><button type="button" data-st="sell" aria-pressed="false">Продать</button></div>
-    <div class="seg cats" id="shopcats"><button type="button" data-cat="seed" aria-pressed="true">Семена</button><button type="button" data-cat="crop" aria-pressed="false">Урожай</button><button type="button" data-cat="food" aria-pressed="false">Блюда</button><button type="button" data-cat="fert" aria-pressed="false" id="fertcat" hidden>Удобрение</button></div>
+    <div class="seg cats" id="shopcats"><button type="button" data-cat="seed" aria-pressed="true">Семена</button><button type="button" data-cat="crop" aria-pressed="false">Урожай</button><button type="button" data-cat="food" aria-pressed="false">Блюда</button></div>
     <div id="shopview"></div>
   </section>
 
@@ -1109,7 +1109,7 @@
     $("title").textContent = p.title; $("name").textContent = p.name;
     $("sigil").textContent = initial(p.name);
     setPhoto($("sigil"), p.avatar); rankFrame($("sigil"), p.title, 36);
-    $("dgcard").hidden = !("link" in p && p.link === null); $("fertcat").hidden = $("dgcard").hidden;   // удобрение в лавке — тоже пока только хозяину                 // подземелье — пока только хозяину: у него одного нет привязки канала
+    $("dgcard").hidden = !("link" in p && p.link === null); fertTab(!$("dgcard").hidden);   // удобрение в лавке — только хозяину (его срочная правка 2026-11-19): у остальных вкладки нет вовсе                 // подземелье — пока только хозяину: у него одного нет привязки канала
     $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
     $("karma").textContent = p.karma; $("place").textContent = p.place || "—";
     var lad = [0, 30, 100, 250, 500, 1000, 2000, 5000, 12000, 25000, 50000], prev = 0;
@@ -6187,6 +6187,11 @@
   // Разделы: семена · урожай · продукты (мука и еда). Цена урожая и продуктов у игроков — в 1,5 раза выше, чем дать пыль в амбаре.
   F.shopCat = "seed";
   function stallPrice(dust) { return Math.max(1, Math.ceil(dust * ((F.state && F.state.stall_markup) || 1.5))); }
+  function fertTab(on) {                                                  // вкладка «Удобрение» создаётся только у хозяина
+    var b = $("fertcat"); if (!on) { if (b) b.remove(); if (F.shopCat === "fert") F.shopCat = "seed"; return; } if (b) return;
+    b = document.createElement("button"); b.type = "button"; b.id = "fertcat"; b.dataset.cat = "fert"; b.setAttribute("aria-pressed", "false"); b.textContent = "Удобрение";
+    b.onclick = function () { haptic("light"); F.shopCat = "fert"; F.shopSel = null; renderShopTab(); }; $("shopcats").appendChild(b);
+  }
   function catOf(id) { return id === "p:fert" ? "fert" : id.indexOf("p:") === 0 && id !== "p:eye" ? "food" : "crop"; }   // глаз — урожай, хоть и хранится как продукт; удобрение — свой раздел   // глаз — урожай, хоть и хранится как продукт
   function extend(r) {                                         // чужие сорта и продукты — чтобы рисовать и называть их товары
     F.ext = F.ext || { strains: {}, products: {} };
