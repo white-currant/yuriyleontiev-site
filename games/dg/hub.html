@@ -39,6 +39,14 @@
   #say { position: absolute; left: 50%; top: 47%; transform: translate(-50%, -50%); max-width: 84%; padding: calc(var(--u) * 3) calc(var(--u) * 5); font-size: calc(var(--u) * 4.6); font-weight: 700; line-height: 1.3; text-align: center;
     opacity: 0; transition: opacity .2s; pointer-events: none; }
   #say.on { opacity: 1; }
+  /* выбор подземелья (его решение 2026-11-19): размер и плата едой — «сытость» = очки блюда */
+  #pick { position: absolute; inset: 0; display: none; place-items: center; background: rgba(6, 5, 9, .55); }
+  #pick.on { display: grid; }
+  #pick > div { width: 74%; padding: calc(var(--u) * 5); display: grid; gap: calc(var(--u) * 3); text-align: center; }
+  #pick p { margin: 0 0 calc(var(--u) * 1); font-size: calc(var(--u) * 5); font-weight: 800; }
+  #pick button { height: calc(var(--u) * 15); border: 0; color: inherit; font: inherit; font-size: calc(var(--u) * 4.4); font-weight: 800; cursor: pointer; display: grid; place-items: center; line-height: 1.15; }
+  #pick button small { display: block; font-size: calc(var(--u) * 3.4); font-weight: 600; opacity: .75; }
+  #pick button:active { filter: brightness(1.25); }
   .tag { position: absolute; transform: translate(-50%, -100%); font-size: calc(var(--u) * 3.6); font-weight: 800; letter-spacing: .03em; text-transform: lowercase; color: #f4ead0; text-shadow: 0 0 calc(var(--u) * 1.5) #000, 0 calc(var(--u) * .6) 0 #000; pointer-events: none; white-space: nowrap; }
 </style>
 </head>
@@ -67,6 +75,11 @@
     <button class="act pan" type="button" data-say="Карта — пройденные глубины" aria-label="Карта"><canvas class="ic" id="i-map" width="16" height="16"></canvas></button>
   </div>
   <div id="say" class="pan"></div>
+  <div id="pick"><div class="pan"><p>Куда спускаемся?</p>
+    <button class="pan" type="button" data-size="s">Малое<small>3–4 зала · сытость 1</small></button>
+    <button class="pan" type="button" data-size="m">Среднее<small>6–8 залов · сытость 2</small></button>
+    <button class="pan" type="button" data-size="l">Большое<small>10–12 залов · сытость 4</small></button>
+  </div></div>
 </div>
 <script>
 (function () {
@@ -420,8 +433,11 @@
 
   // ---------- нажатия ----------
   var say = document.getElementById("say"), sayT = 0;
+  var pick = document.getElementById("pick");
+  pick.addEventListener("click", function (e) { e.stopPropagation(); var b = e.target.closest("button"); if (!b) { pick.classList.remove("on"); return; }
+    location.href = "iso.html?size=" + b.dataset.size + "&v=" + Date.now(); });
   function tell(text) { say.textContent = text; say.classList.add("on"); clearTimeout(sayT); sayT = setTimeout(function () { say.classList.remove("on"); }, 1800); }
-  document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation(); if (bn.classList.contains("go")) { location.href = "iso.html?v=" + Date.now(); return; } tell(bn.dataset.say); }); });   // мечи — спуск в бой
+  document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation(); if (bn.classList.contains("go")) { pick.classList.add("on"); return; } tell(bn.dataset.say); }); });   // мечи — спуск в бой
   document.getElementById("gear").addEventListener("click", function (e) { e.stopPropagation(); tell("Настройки"); });
   cv.addEventListener("pointerdown", function (e) {
     var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;   // доли экрана — места на его фоне

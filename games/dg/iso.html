@@ -46,7 +46,9 @@
   // Изометрическое подземелье (его выбор 2026-11-17: «изометрия красивее»). Тайлы — из его листа (iso/*.png, нарезка исходники/нарезать_изометрию.py).
   // Мир считается в клетках пола (u, v); на экран клетка ложится ромбом 48×24. Комната 9×9, камера ведёт героя по горизонтали.
   var W = 216, H = 384, UW = 360, stage = document.getElementById("stage"), cv = document.getElementById("cv"), ctx = cv.getContext("2d");
-  ctx.imageSmoothingEnabled = false;
+  // внутреннее разрешение вчетверо больше (его правка 2026-11-19: камера шла рывками по целому пикселю) — мир сдвигается на четверть пикселя,
+  // а все рисунки по-прежнему стоят в своей пиксельной сетке
+  var Z = 4; cv.width = W * Z; cv.height = H * Z; ctx.imageSmoothingEnabled = false;
   function fit() { stage.style.setProperty("--u", stage.clientWidth / UW + "px"); } fit(); addEventListener("resize", fit);
   function rng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
   function px(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), w, h); }
@@ -63,7 +65,7 @@
   NAMES.slice().forEach(function (n) { if (/^w[uv]_/.test(n) && !/in$/.test(n)) NAMES.push(n + "_x", n + "_t", n + "_xt"); });   // _t — с цоколем под колонной ближнего конца (за ним нет пола)   // *_x — дальний конец одиночной стены с косым срезом плиты (его правка 2026-11-19)
   var wait = NAMES.length + 1;
   NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=17"; IMG[n] = im; });
-  var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png";
+  var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png?v=2";
   var CW = 64, CH = 56, AX = 32, AY = 53;
   var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
 
@@ -104,14 +106,21 @@
     while (i !== i1) { i += i1 > i ? 1 : -1; rm.open[j][i] = 1; }
     while (j !== j1) { j += j1 > j ? 1 : -1; rm.open[j][i] = 1; }
   }
+  // размер подземелья (его решение 2026-11-19): малое 3–4 зала, среднее 6–8, большое 10–12
+  var SIZE = { s: [3, 2], m: [6, 3], l: [10, 3] }[(location.search.match(/size=([sml])/) || [])[1] || "m"];
   function makeLevel(seed) {
-    var r = rng(seed), map = {}, list = [], n = 6 + Math.floor(r() * 3);
+    var r = rng(Math.imul(seed ^ 0x5bd1e995, 0x27d4eb2d) ^ (seed >>> 13)), map = {}, list = [], n = SIZE[0] + Math.floor(r() * SIZE[1]);
     function add(x, y) { var k = x + "," + y; if (!map[k]) { map[k] = { gx: x, gy: y, seed: Math.floor(r() * 1e9) }; list.push(map[k]); } return map[k]; }
     add(0, 0);
     while (list.length < n) {
       var from = list[Math.floor(r() * list.length)], d = [[1, 0], [-1, 0], [0, -1], [0, 1]][Math.floor(r() * 4)], to = add(from.gx + d[0], from.gy + d[1]);
       if (d[0] === 1) from.pu = to.mu = true; else if (d[0] === -1) from.mu = to.pu = true; else if (d[1] === 1) from.pv = to.mv = true; else from.mv = to.pv = true;
     }
+    // глубина комнаты — сколько комнат от входа (его решение 2026-11-19: «чем глубже, тем монстров больше»)
+    list[0].depth = 0; var bq = [list[0]];
+    while (bq.length) { var q0 = bq.shift();
+      [["pu", 1, 0], ["mu", -1, 0], ["pv", 0, 1], ["mv", 0, -1]].forEach(function (dd) { var nb = q0[dd[0]] && map[(q0.gx + dd[1]) + "," + (q0.gy + dd[2])];
+        if (nb && nb.depth == null) { nb.depth = q0.depth + 1; bq.push(nb); } }); }
     var KINDS = ["rect", "L", "cross", "corridor", "ring", "cave", "hall", "L", "cave"];
     list.forEach(function (rm, k) {
       var rr = rng(rm.seed), i, j, kind = k === 0 ? "rect" : KINDS[Math.floor(rr() * KINDS.length)];
@@ -178,8 +187,11 @@
       rm.decor = []; for (tt = 0; tt < 4; tt++) { var di = Math.floor(rr() * rm.w), dj = Math.floor(rr() * rm.h); if (rm.open[dj][di]) rm.decor.push({ u: di + .2 + rr() * .6, v: dj + .2 + rr() * .6, k: rr() < .5 ? "bones" : "skull" }); }
       if (kind === "rect" && rr() < .5) rm.decor.push({ u: ci + .5, v: cj + .5, k: "circle", flat: true });
       // слизни — на свободных клетках, не у входа
-      rm.mobs = []; var nm = k === 0 ? 1 : 2 + Math.floor(rr() * 3), free = [];
+      // слизней — в разы больше (его правка 2026-11-19): доля свободных клеток растёт с глубиной — у входа 2, дальше 26% клеток + 8% за каждую
+      // комнату вглубь, не больше 55%; так в больших дальних залах их по-настоящему много
+      rm.mobs = []; var free = [];
       for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !rm.props.some(function (p) { return p.i === i && p.j === j; }) && Math.hypot(i - ci, j - cj) > 1.5) free.push([i, j]);
+      var nm = k === 0 ? 2 : Math.max(4, Math.round(free.length * Math.min(.55, .26 + .08 * rm.depth) * (.85 + rr() * .3)));
       for (tt = 0; tt < nm && free.length; tt++) { var f2 = free.splice(Math.floor(rr() * free.length), 1)[0]; rm.mobs.push({ u: f2[0] + .5, v: f2[1] + .5, hp: 3, t: rr() * 10, hit: 0, vu: 0, vv: 0, wu: 0, wv: 0, wt: 0 }); }
       rm.drops = []; rm.seen = k === 0;
     });
@@ -240,8 +252,9 @@
   addEventListener("keydown", function (e) { keys[e.code] = true; if (e.code === "Space") { wantHit = true; hitFlash = .15; e.preventDefault(); } });
   addEventListener("keyup", function (e) { keys[e.code] = false; });
 
-  var camX = 0, camY = 0;
-  function S(u, v) { var p = P(u, v); return [p[0] - Math.round(camX) + W / 2, p[1] - Math.round(camY) + Math.round(H * .56)]; }   // мир → экран; герой чуть ниже середины
+  var camX = 0, camY = 0, camIX = 0, camIY = 0, camFX = 0, camFY = 0;   // камера: целая часть — в S(), дробная (шаг 1/Z) — сдвигом всего мира
+  function camSet() { var x = Math.round(camX * Z) / Z, y = Math.round(camY * Z) / Z; camIX = Math.floor(x); camIY = Math.floor(y); camFX = x - camIX; camFY = y - camIY; }
+  function S(u, v) { var p = P(u, v); return [p[0] - camIX + W / 2, p[1] - camIY + Math.round(H * .56)]; }   // мир → экран; герой чуть ниже середины
   function nearest(maxPx) { var best = null, bd = maxPx, hs = S(hero.u, hero.v); cur.mobs.forEach(function (m) { if (m.hp <= 0) return; var s2 = S(m.u, m.v), d = Math.hypot(s2[0] - hs[0], s2[1] - hs[1]); if (d < bd) { bd = d; best = m; } }); return best; }
 
   function go(du, dv) { var nx = room(cur.gx + du, cur.gy + dv); if (!nx || trans) return; trans = { t: 0, to: nx, du: du, dv: dv }; }
@@ -254,15 +267,14 @@
   }
 
   // ---------- шаг игры ----------
-  var SPEED = 1.3;
+  var SPEED = 90, VY = .8;                                      // скорость в пикселях экрана: вбок 90, вверх-вниз 72 — по диагонали больше не ползёт (2026-11-19)
   function update(dt) {
     if (trans) { trans.t += dt; if (trans.t >= .16 && !trans.done) { trans.done = true; enter(trans); } if (trans.t >= .32) trans = null; return; }
     var mobs = cur.mobs, i;
     if (hero.st !== "dead") {
       var jx = joy.dx + ((keys.ArrowRight || keys.KeyD) ? 1 : 0) - ((keys.ArrowLeft || keys.KeyA) ? 1 : 0), jy = joy.dy + ((keys.ArrowDown || keys.KeyS) ? 1 : 0) - ((keys.ArrowUp || keys.KeyW) ? 1 : 0), jl = Math.hypot(jx, jy);
       if (jl > 1) { jx /= jl; jy /= jl; jl = 1; }
-      var du = jx / TW * 2 + jy / TH * 2, dv = jy / TH * 2 - jx / TW * 2, dl = Math.hypot(du, dv) || 1;      // экранное направление → направление по клеткам
-      du = du / dl * jl; dv = dv / dl * jl;
+      var vx = jx * SPEED, vy = jy * SPEED * VY, du = vx / TW + vy / TH, dv = vy / TH - vx / TW;      // скорость на экране → клеток в секунду (точная обратная к P)
       hero.inv = Math.max(0, hero.inv - dt);
       if (hero.st === "hit") {
         hero.t += dt;
@@ -270,14 +282,17 @@
           mobs.forEach(function (m) { if (m.hp <= 0) return; var s2 = S(m.u, m.v), dx = (s2[0] - hs[0]) * hero.flip, dy = s2[1] - hs[1];
             if (dx > -10 && dx < 44 && Math.abs(dy) < 24) { m.hp--; m.hit = .18; var kd = Math.hypot(m.u - hero.u, m.v - hero.v) || 1; m.vu = (m.u - hero.u) / kd * 2; m.vv = (m.v - hero.v) / kd * 2;
               fx.push({ k: "spark", u: m.u, v: m.v, t: 0 });
-              if (m.hp <= 0) { fx.push({ k: "poof", u: m.u, v: m.v, t: 0 }); cur.drops.push({ u: m.u, v: m.v, t: 0 }); drawMap(); } } });
+              if (m.hp <= 0) { fx.push({ k: "poof", u: m.u, v: m.v, t: 0 });
+                var nb = cur.depth <= 1 ? 1 : cur.depth <= 3 ? 2 : 3;                // глубже — больше костей с одного слизня (2026-11-19)
+                for (var b9 = 0; b9 < nb; b9++) { var a9 = b9 * 2.1 + m.u * 7, r9 = nb > 1 ? .22 : 0; cur.drops.push({ u: m.u + Math.cos(a9) * r9, v: m.v + Math.sin(a9) * r9, t: -b9 * .08 }); }
+                drawMap(); } } });
         }
         if (hero.t > .3) { hero.st = "idle"; hero.t = 0; }
       } else if (hero.st === "hurt") { hero.t += dt; if (hero.t > .28) { hero.st = "idle"; hero.t = 0; } }
       else {
         if (wantHit) { var tg = nearest(80); if (tg) hero.flip = S(tg.u, tg.v)[0] >= S(hero.u, hero.v)[0] ? 1 : -1; hero.dir = "side"; hero.st = "hit"; hero.t = 0; hero.hitDone = false; }
         else if (jl > .15) {
-          var nu = hero.u + du * SPEED * dt, nv = hero.v + dv * SPEED * dt;
+          var nu = hero.u + du * dt, nv = hero.v + dv * dt;
           if (!blocked(nu, hero.v)) hero.u = nu; if (!blocked(hero.u, nv)) hero.v = nv;
           hero.st = "walk"; hero.t += dt;
           if (Math.abs(jx) > Math.abs(jy) * .9) { hero.dir = "side"; hero.flip = jx > 0 ? 1 : -1; } else hero.dir = jy > 0 ? "front" : "back";
@@ -311,8 +326,8 @@
     fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : .32); });
     var left = rooms.some(function (r2) { return r2.mobs.some(function (m) { return m.hp > 0; }) || r2.drops.length; });
     if (!done && hero.st !== "dead" && !left) finish("Подземелье зачищено", "Добыча: костей " + bones);
-    // камера: плавно за героем по горизонтали, в пределах комнаты
-    var hp2 = P(hero.u, hero.v); camX += (hp2[0] - camX) * Math.min(1, dt * 6); camY += (hp2[1] - camY) * Math.min(1, dt * 6);
+    // камера держит героя на месте (без догоняния: оно давало ползущий по пикселю мир при остановке)
+    var hp2 = P(hero.u, hero.v); camX = hp2[0]; camY = hp2[1];
   }
 
   // ---------- рисование ----------
@@ -383,8 +398,9 @@
   function img(name, x, y) { var im = IMG[name]; ctx.drawImage(im, Math.round(x), Math.round(y)); }
   var T = 0;
   function draw(ts) {
-    var t = ts / 1000, i, j; T = t;
-    ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#0b0912"; ctx.fillRect(0, 0, W, H);
+    var t = ts / 1000, i, j; T = t; camSet();
+    ctx.setTransform(Z, 0, 0, Z, 0, 0); ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#0b0912"; ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(Z, 0, 0, Z, -camFX * Z, -camFY * Z);
     // пол комнаты — готовая картинка (рисуется один раз на комнату): плитки и плоский узор не «плывут» друг относительно друга, а кадр дешевле
     if (!cur.floorC) {
       var tiles = [], mnX = 1e9, mnY = 1e9, mxX = -1e9, mxY = -1e9;
@@ -427,9 +443,10 @@
     // герой за линией задней стены (уходит в арку) — рисуется раньше стен, виден только в проёме
     list.push({ z: hero.u < 0 || hero.v < 0 ? -5 : hero.u + hero.v, f: function () {
       var s = S(hero.u, hero.v), fr = heroFrame(), blink = hero.inv > 0 && hero.st !== "dead" && Math.floor(t * 16) % 2;
-      px(ctx, s[0] - 10, s[1] - 2, 20, 4, "rgba(8,6,10,.5)"); px(ctx, s[0] - 7, s[1] - 3, 14, 6, "rgba(8,6,10,.35)");
+      var hx = Math.round(s[0] * Z) / Z, hy = Math.round(s[1] * Z) / Z;       // герой — точно в середине кадра, в сетке 1/Z, вместе с камерой
+      ctx.fillStyle = "rgba(8,6,10,.5)"; ctx.fillRect(hx - 10, hy - 2, 20, 4); ctx.fillStyle = "rgba(8,6,10,.35)"; ctx.fillRect(hx - 7, hy - 3, 14, 6);
       if (blink) return;
-      ctx.save(); ctx.translate(Math.round(s[0]), Math.round(s[1])); ctx.scale(hero.flip < 0 && (hero.dir === "side" || hero.st === "dead") ? -1 : 1, 1);
+      ctx.save(); ctx.translate(hx, hy); ctx.scale(hero.flip < 0 && (hero.dir === "side" || hero.st === "dead") ? -1 : 1, 1);
       ctx.drawImage(HERO, fr[1] * CW, fr[0] * CH, CW, CH, -AX, -AY + 2, CW, CH); ctx.restore();
     } });
     list.sort(function (p, q) { return p.z - q.z; }).forEach(function (o) { o.f(); });
@@ -443,7 +460,7 @@
     for (j = 0; j < cur.h; j++) for (i = 0; i < cur.w; i++) if (cur.floor[j][i] === 7 && cur.open[j][i]) { var rs2 = S(i + .5, j + .5); glow(rs2[0], rs2[1], 80, "rgba(120,180,255,A)", .55 + .2 * Math.sin(t * 2.2 + i)); }   // руна светится
     var hs = S(hero.u, hero.v); glow(hs[0], hs[1] - 18, 90, "rgba(225,215,255,A)", .7);
     cur.drops.forEach(function (d) { var s = S(d.u, d.v); glow(s[0], s[1] - 6, 20, "rgba(255,240,200,A)", .35); });
-    ctx.globalCompositeOperation = "multiply"; ctx.drawImage(lightC, 0, 0, W, H); ctx.globalCompositeOperation = "source-over";
+    ctx.globalCompositeOperation = "multiply"; ctx.drawImage(lightC, 0, 0, W + 1, H + 1); ctx.globalCompositeOperation = "source-over";
 
     var tg = hero.st !== "dead" ? nearest(100) : null;
     if (tg) { var ts2 = S(tg.u, tg.v), jx = Math.round(ts2[0]), jy = Math.round(ts2[1] - 7), sz = 13 + Math.round(Math.sin(t * 6)), c3 = "#f4ead0";
@@ -454,6 +471,7 @@
       else if (f.k === "poof") { for (i = 0; i < 8; i++) { var a4 = i * .785, d4 = 3 + k * 12; px(ctx, s[0] + Math.cos(a4) * d4 - 1, s[1] - 6 + Math.sin(a4) * d4 - 1 - k * 6, 3 - Math.floor(k * 2), 3 - Math.floor(k * 2), k < .5 ? "#bfeeff" : "#5cc0ee"); } }
       else if (f.k === "plus") { var yy = s[1] - 10 - f.t * 22; ctx.globalAlpha = 1 - f.t / .8; px(ctx, s[0] - 3, yy, 7, 1, "#efe8d6"); px(ctx, s[0], yy - 3, 1, 7, "#efe8d6"); ctx.drawImage(boneC, Math.round(s[0] + 6), Math.round(yy - 6)); ctx.globalAlpha = 1; }
     });
+    ctx.setTransform(Z, 0, 0, Z, 0, 0);
     // джойстик: основание и ручка
     ctx.globalAlpha = joy.on ? .34 : .22; ctx.fillStyle = "#efe6d2"; ctx.beginPath(); ctx.arc(joy.bx, joy.by, JR + 4, 0, 7); ctx.fill();
     ctx.globalAlpha = .5; ctx.strokeStyle = "#efe6d2"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(joy.bx, joy.by, JR + 4, 0, 7); ctx.stroke();
