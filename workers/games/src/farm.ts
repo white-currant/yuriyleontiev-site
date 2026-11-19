@@ -2180,8 +2180,8 @@ export async function dgPack(u: any, item: string, slot: number) {        // ite
   }
   return dgState(u);
 }
-// проба для хозяина (его просьба 2026-11-20): спуск бесплатный — еда из рюкзака не тратится; Странная похлёбка в рюкзаке
-// по-прежнему открывает странную дверь в большом подземелье, но тоже не съедается. Подземелье пока видит только он — перед открытием всем выключить
+// проба для хозяина (его просьбы 2026-11-20): спуск бесплатный — еда из рюкзака не тратится, а в большом подземелье странная дверь есть
+// всегда, даже без Странной похлёбки (похлёбка тоже не съедается). Подземелье пока видит только он — перед открытием всем выключить
 export const DG_FREE = true;
 export async function dgStart(u: any, size: string) {                      // вход: съесть из рюкзака сытость с наименьшим перебором
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
@@ -2198,6 +2198,7 @@ export async function dgStart(u: any, size: string) {                      // в
     if (s >= need && (s < bs || (s === bs && c < bc))) { best = m; bs = s; bc = c; }
   }
   if (DG_FREE) { best = 0; bs = 0; }                                         // проба: ничего не съедается
+  const secret = !!must || (DG_FREE && size === "l");                         // проба: в большом — странная дверь всегда
   if (best < 0) return { error: "Мало еды в рюкзаке: нужно сытости " + need + (skip ? " (Странная похлёбка — только для большого подземелья)" : "") };
   const eat = pack.filter((_, i) => best >> i & 1).map((p) => p.slot), run = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await dgHero(u.id);
@@ -2206,9 +2207,9 @@ export async function dgStart(u: any, size: string) {                      // в
     DB.prepare("UPDATE d_hero SET run = ?, size = ?, started = ? WHERE user = ?").bind(run, size, now(), u.id),
     DB.prepare("DELETE FROM d_secret WHERE user = ?").bind(u.id),
     DB.prepare("DELETE FROM d_altar WHERE user = ?").bind(u.id),            // находка брошенного похода пропала
-    ...(must ? [DB.prepare("INSERT INTO d_secret (user, run) VALUES (?, ?)").bind(u.id, run)] : []),
+    ...(secret ? [DB.prepare("INSERT INTO d_secret (user, run) VALUES (?, ?)").bind(u.id, run)] : []),
   ]);
-  return { run, size, ate: bs, secret: !!must };
+  return { run, size, ate: bs, secret };
 }
 // странная комната (его решения 2026-11-19): поход со Странной похлёбкой — за дверью с глазом красный зал, в центре алтарь, обвитый щупальцем.
 // Удар по алтарю — одна находка за поход, бросок на сервере: карта — чаще всего (иначе семя не будет редкостью), и карты бывают

@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611200049";
+    var BUILD = "202611200113";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -4921,6 +4921,9 @@
   function flourKey(g) { var d = g.myth ? g.dust / 3 : g.dust; return "g:" + g.color + ":" + (d <= 7 ? 2 : d <= 10 ? 1 : 0) + (g.myth ? ":m" : ""); }   // как на сервере
   var RAW_MAIN = { soup: "moss", stew: "mushroom", tea: "flower", jam: "cactus" }, RAW_REF = { moss: 4, mushroom: 8, flower: 8, cactus: 8 };   // как на сервере
   function rawKey(g) { var d = (g.myth ? g.dust / 3 : g.dust) / (RAW_REF[g.shape] || 8); return "r:" + g.color + ":" + (d <= 1.4 ? 2 : d <= 2 ? 1 : 0) + (g.myth ? ":m" : ""); }
+  // сытость блюда (его просьба 2026-11-20): у блюд из печи она равна очкам рецепта; у урожая и прочего — 0
+  function satOfItem(id) { var rs = (F.state && F.state.recipes) || {}, r = rs[recKey(id)]; return id.indexOf("p:") === 0 && r && r.kind === "oven" ? (r.points || 0) : 0; }
+  function satTxt(id) { var n = satOfItem(id); return n ? "Сытость " + n + "." : ""; }
   function itemName(id) { var it = itemOf(id); return it ? it.name + (it.sort_name ? " · " + it.sort_name.toLowerCase() : "") : ""; }   // сорт или продукт кухни
   // амбар разложен по видам (его просьба 2026-11-17, вручную там не переставить): сначала урожай по форме — ягоды к ягодам, колосья к колосьям;
   // потом мука и блюда по рецептам — булочки к булочкам; самоцветы и их пыль — в конце. Внутри вида — по названию.
@@ -5802,7 +5805,7 @@
         };
         if (picked.length === 1) {
           var sel = picked[0], st = itemOf(sel.strain);
-          footInfo.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли." + (BARN_MULTI ? " Можно выделить ещё ячейки." : "")));
+          footInfo.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли." + (satOfItem(sel.strain) ? " Сытость " + satOfItem(sel.strain) + "." : "") + (BARN_MULTI ? " Можно выделить ещё ячейки." : "")));
           if (recKey(sel.strain) === "brew") footInfo.appendChild(el("div", "sub", BREW_SAYS));   // у странной похлёбки — её свойство
           var wn = wetOf(sel.strain); if (wn > 0) footInfo.appendChild(el("div", "sub", "Мокрые после ливня: " + wn + " " + plural(wn, "сноп", "снопа", "снопов") + ". Смолоть их можно, когда просохнут, — через " + fmtLeft(wetLeft(sel.strain)) + ". Продать можно и мокрыми."));
           var bsel = sel;
@@ -6069,7 +6072,7 @@
         if (picked) {
           var v = picked, r = v.r, d = el("div", "ovpick");
           d.appendChild(el("b", "", itemName(v.pid) || r.name));
-          var s1 = el("small", "", v.parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + v.info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : ""));
+          var s1 = el("small", "", v.parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + v.info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : "") + (r.kind === "oven" && r.points ? " · сытость " + r.points : ""));
           d.appendChild(s1); d.appendChild(s2); if (v.k === "brew") d.appendChild(el("small", "", BREW_SAYS)); pl.appendChild(d);
           if (!slot) { var no = btn("Все ячейки заняты", "ghost", function () {}); no.disabled = true; pl.appendChild(no); }
           else qtyBox(pl, { key: "cook:" + v.k + ":" + v.sort, max: function () { return v.can; },
@@ -6144,7 +6147,7 @@
         var k = v.k, sort = v.sort, r = v.r, can = v.can, outKey = v.outKey, pid = v.pid, info = v.info, parts = v.parts;
         var row = el("div", "seed"), cv = el("canvas", "pix"); itemIcon(cv, pid); row.appendChild(cv);
         var tx = el("span"); tx.appendChild(el("b", "", itemName(pid) || r.name));
-        var s1 = el("small", "", parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : ""));
+        var s1 = el("small", "", parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : "") + (r.kind === "oven" && r.points ? " · сытость " + r.points : ""));
         s1.style.display = s2.style.display = "block"; tx.appendChild(s1); tx.appendChild(s2);
         row.appendChild(tx); sh.appendChild(row);
         var acts = el("div", "invacts");
@@ -6374,7 +6377,7 @@
           var key = "it:" + i + ":" + o.pub + ":" + o.item;
           wares.push({ key: key, icon: itemIconOf(o.item), tag: "✦ " + o.price, qty: "×" + o.count, seller: o.seller, have: ownItems(o.item) });
           act[key] = function () {
-            var d = infoBox(box, itemName(o.item), ["Продаёт " + o.seller + ". Ляжет к тебе в амбар.", "В пыль в амбаре — ✦ " + it.dust + "."]);
+            var d = infoBox(box, itemName(o.item), ["Продаёт " + o.seller + ". Ляжет к тебе в амбар.", "В пыль в амбаре — ✦ " + it.dust + "." + (satOfItem(o.item) ? " " + satTxt(o.item) : "")]);
             var acts = el("div", "invacts"), b = btn("Купить за ✦ " + o.price, "", function () {
               if (!hasBuild(F.state, "barn")) { haptic("error"); return toast("Урожай и блюда кладут в амбар — сначала построй его"); }
               buyWare(b, o.pub, o.item, "item", o.price, "+1 в амбар", "Куплено: " + itemName(o.item).toLowerCase() + " — в амбаре");
@@ -6423,7 +6426,7 @@
         var it = itemOf(id), inb = (barnOf(id) || { count: 0 }).count, ons = (stallOf(id) || { listed: 0 }).listed, base = stallPrice(it.dust), price = priceFor(id, base), key = "b:" + id;
         mine.push({ key: key, icon: itemIconOf(id), tag: "✦ " + price, qty: ons ? "в продаже\n" + ons + " из " + (inb + ons) : "×" + inb, sale: !!ons });
         acts2[key] = function () {
-          var d = infoBox(box, itemName(id), ["Игрокам — ✦ " + price + " за штуку, в пыль — ✦ " + it.dust + ".",
+          var d = infoBox(box, itemName(id), ["Игрокам — ✦ " + price + " за штуку, в пыль — ✦ " + it.dust + "." + (satOfItem(id) ? " " + satTxt(id) : ""),
             "Выставленное лежит на прилавке: его не смолоть, не испечь и не распылить, пока не уберёшь."]);
           saleBox(d, { key: "sale:" + id, listed: function () { return (stallOf(id) || { listed: 0 }).listed; },
             total: function () { return (barnOf(id) || { count: 0 }).count + (stallOf(id) || { listed: 0 }).listed; },
@@ -6624,7 +6627,7 @@
       var it = itemOf(x.item); if (!it) return;
       wares.push({ key: "i:" + x.item, icon: itemIconOf(x.item), tag: "✦ " + x.price, qty: "×" + x.count });
       act["i:" + x.item] = function () {
-        var d = infoBox(box, itemName(x.item), [(catOf(x.item) === "food" ? "Блюда" : catOf(x.item) === "fert" ? "Удобрение" : "Урожай") + " · ляжет к тебе в амбар", "В пыль в амбаре — ✦ " + it.dust + "."]);
+        var d = infoBox(box, itemName(x.item), [(catOf(x.item) === "food" ? "Блюда" : catOf(x.item) === "fert" ? "Удобрение" : "Урожай") + " · ляжет к тебе в амбар", "В пыль в амбаре — ✦ " + it.dust + "." + (satOfItem(x.item) ? " " + satTxt(x.item) : "")]);
         var a = el("div", "invacts"), b = btn("Купить за ✦ " + x.price, "", function () {
           if (!hasBuild(F.state, "barn")) { haptic("error"); return toast("Урожай и блюда кладут в амбар — сначала построй его"); }
           buyHere(b, x.item, "item", x.price, "Куплено: " + itemName(x.item).toLowerCase() + " — в амбаре");
