@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611190347";
+    var BUILD = "202611191028";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3478,9 +3478,11 @@
     drawShop(c, t, kit, own, mossOn(kit, now));
     drawPlazaFx(c, YK.plaza, PLAZA[0], PLAZA[1], t);                               // украшения двора: вода фонтана, искра статуи
     if (YK.bits.indexOf("vane") >= 0 && hasBuild(kit, "barn") && MOSSGEO.barn) drawVane(c, MOSSGEO.barn.R1, t);
-    if (L.glowPx.length) { var gw = (t / 45) % 60; L.glowPx.forEach(function (g) {
+    // светящиеся плиты: волна света проходит раз в 5–10 секунд, в случайный момент (его правки 2026-11-19)
+    var gseg = Math.floor(t / 7500), gel = t - gseg * 7500 - hash01(gseg * 7.7 + 1) * 2500, gw = gel >= 0 && gel < 2700 ? gel / 45 : -99;
+    if (L.glowPx.length) { L.glowPx.forEach(function (g) {
       if (g[2]) { var tw = Math.sin(t / 650 + g[0] * 1.7 + g[1] * .9); if (tw > .75) px(c, g[0], g[1], 1, 1, tw > .93 ? "#ffffff" : "#fff6df"); return; }   // лунная дорожка: искры мерцают
-      var d = (g[1] - YC[2][1] + 60 - gw + 600) % 60; if (d < 4) px(c, g[0], g[1], 1, 1, d < 2 ? "#c9fff1" : "#7ff0d6"); }); }   // по швам бежит свет от калитки
+      if (gw < 0) return; var d = (g[1] - YC[2][1] + 60 - gw + 600) % 60; if (d < 4) px(c, g[0], g[1], 1, 1, d < 2 ? "#c9fff1" : "#7ff0d6"); }); }   // по швам бежит свет от калитки
     drawMossOver(c, kit, now, t, L, seed + roofKey(kit) + ["barn", "mill", "oven", "shop"].map(function (b) { return hasBuild(kit, b) ? b[0] : "-"; }).join("") + (ARTS.ok ? "a" : ""));   // мох — поверх печки и башни мельницы
     if (CHEST_ON) drawChest(c, own);
     if (own) drawFx(c, t);
