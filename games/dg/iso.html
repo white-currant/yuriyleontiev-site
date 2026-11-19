@@ -487,6 +487,7 @@
   function lootLow() { return lootGot ? LOOT[lootGot].low + (lootEx ? " и " + LOOT[lootEx].low : "") : ""; }
   var lootDummy = null;     // шансы — как на сервере (ALTAR_LOOT); пробный бой без сервера бросает сам
   function say(a, b) { banT = a; banS = b || ""; banner = 2.6; }
+  var SRJ = /[?&]sr=1/.test(location.search);                 // запомнить сразу: после оплаты адрес страницы меняется и метка пропадает (его жалоба 2026-11-20)
   function srJump() {                                         // проба (его правка 2026-11-20): в зал, где странная дверь, — перед самой дверью
     var hk = Object.keys(rooms).filter(function (k) { return rooms[k].walls && rooms[k].walls.some(function (w) { return w.secret; }); })[0]; if (!hk) return; var R = rooms[hk];
     cur = R; cur.seen = true; if (R.door.mu != null && R.secDir === "mu") { hero.u = 1.3; hero.v = R.door.mu + .5; } else if (R.door.mv != null) { hero.u = R.door.mv + .5; hero.v = 1.3; } else { hero.u = R.ci + .5; hero.v = R.cj + .5; }
@@ -1031,11 +1032,11 @@
         if (r.error) { document.getElementById("overt").textContent = r.error; document.getElementById("home").hidden = false; return; }
         RUN = r.run; SECRET = !!r.secret;
         try { history.replaceState(null, "", "iso.html?size=" + r.size + "&run=" + r.run + (r.secret ? "&secret=1" : "") + "&v=" + Date.now()); } catch (e) {}
-        document.getElementById("home").hidden = false; reset(); if (/[?&]sr=1/.test(location.search)) srJump(); requestAnimationFrame(loop);
+        document.getElementById("home").hidden = false; reset(); if (SRJ) srJump(); requestAnimationFrame(loop);
       }).catch(function () { document.getElementById("overt").textContent = "Нет связи с сервером — еда не потрачена"; document.getElementById("home").hidden = false; });
       return;
     }
-    reset(); if (/[?&]sr=1/.test(location.search)) srJump(); requestAnimationFrame(loop);
+    reset(); if (SRJ) srJump(); requestAnimationFrame(loop);
   }
   setTimeout(hubPrefetch, 3000);                                               // убежище — заранее, в начале боя
   window.__game = { scr: function (u, v) { return S(u, v); }, hero: function () { return hero; }, room: function () { return cur; }, rooms: function () { return rooms; }, keys: keys, hit: function () { wantHit = true; }, frame: function (ts) { draw(ts); }, joy: function (x, y) { joy.dx = x; joy.dy = y; }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; var p2 = P(hero.u, hero.v); camX = p2[0]; camY = p2[1]; drawMap(); }, step: function (dt) { update(dt); draw(performance.now()); } };
