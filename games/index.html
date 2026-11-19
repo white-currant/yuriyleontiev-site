@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611190319";
+    var BUILD = "202611190323";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -690,8 +690,8 @@
   }
   .decorbtn canvas { border: 0; width: 22px; height: auto; image-rendering: pixelated; }
   .roofgrid .slot canvas { width: 70%; }
-  .tabs.dtabs { margin-top: 12px !important; gap: 6px !important; display: grid; grid-template-columns: repeat(3, 1fr); }
-  body[data-screen^="farm"] .tabs.dtabs button { font-size: 13px; padding: 0 2px; min-height: 36px; }
+  .sheet.decor-sh { max-height: 58vh; }                                    /* «Вид фермы»: ферма с примеркой остаётся видна над окном */
+  .dsec { margin-top: 18px; font-size: 18px; font-weight: 700; color: var(--cream, #f6efe3); }
   .tools { display: flex; gap: 6px; }
   .tools .slot { width: 36px; height: 36px; aspect-ratio: 1; }
   body[data-screen^="farm"] .tools .slot { box-shadow: 0 0 0 2px var(--ink), inset 2px 2px 0 #33200f, inset -2px -2px 0 #6b4428; }
@@ -1592,86 +1592,90 @@
   var DECOR_TABS = [["roof", "Крыши"], ["fence", "Забор"], ["path", "Дорожка"], ["plaza", "Площадка"], ["scare", "Пугало"], ["bits", "Мелочи"]];
   var DECOR_SUB = { roof: "Цвет крыш: дом, амбар, колодец и магазин.", fence: "Забор вокруг двора и столбы калитки.", path: "Дорожка от калитки к лугу.",
                     plaza: "Место на лугу между печью и дорожкой — для одной вещи.", scare: "Пугало стоит в правом углу двора.", bits: "Мелочи покупаются по одной; купленную можно спрятать и вернуть." };
+  // «Вид фермы» — одной лентой с прокруткой, без вкладок (его решение 2026-11-19): разделы друг под другом; выбрал вещь — она примеряется
+  // на ферме, а под её разделом появляются цена и кнопка. Окно невысокое, чтобы ферма с примеркой оставалась видна над ним.
   function decorSheet() {
     var s = F.state; if (!s) return;
     var cols = s.roof_colors || {}, keys = Object.keys(ROOF_PAL).filter(function (k) { return cols[k] || k === "orange"; }), price = s.roof_price || 300;
     F.roofTry = null; F.yardTry = null;
-    var tab = F.decorTab || "roof";
     sheet(function (sh, close) {
+      sh.classList.add("decor-sh");
       sh.appendChild(el("h3", "", "Вид фермы"));
-      var tabs = el("div", "tabs dtabs"); sh.appendChild(tabs);
-      var subEl = el("div", "sub"); sh.appendChild(subEl);
+      sh.appendChild(el("div", "sub", "Гости видят твой двор таким же."));
       var box = el("div"); sh.appendChild(box);
-      var pick = null;
-      var TABS = DECOR_TABS.filter(function (d) { return d[0] === "roof" || (s.yard_list || {})[d[0]]; });   // открытые игрокам места (сервер решает)
-      if (!TABS.some(function (d) { return d[0] === tab; })) tab = "roof";
-      tabs.style.gridTemplateColumns = "repeat(" + Math.min(3, TABS.length) + ", 1fr)";
-      var paintTabs = function () { tabs.innerHTML = ""; TABS.forEach(function (d) {
-        var b = el("button", "", d[1]); b.type = "button"; b.setAttribute("aria-pressed", d[0] === tab ? "true" : "false");
-        b.onclick = function () { if (tab === d[0]) return; haptic("light"); tab = F.decorTab = d[0]; pick = null; F.roofTry = null; F.yardTry = null; renderFarm(); paintTabs(); draw(); };
-        tabs.appendChild(b); }); };
+      var sel = null;                                                      // { sec, k } — что выбрано и примеряется
+      var SECS = DECOR_TABS.filter(function (d) { return d[0] === "roof" || (s.yard_list || {})[d[0]]; });   // открытые игрокам места (сервер решает)
+      var pickNow = function (sec, k, isCur) {
+        haptic("light"); sel = { sec: sec, k: k }; F.roofTry = null; F.yardTry = null;
+        if (!isCur) { if (sec === "roof") F.roofTry = k; else F.yardTry = { slot: sec, item: k }; }
+        renderFarm(); draw();
+      };
       var draw = function () {
+        var keepTop = sh.scrollTop;
         box.innerHTML = ""; s = F.state;                            // всегда свежее состояние: ответ сервера мог прийти, пока окно открыто
-        subEl.textContent = DECOR_SUB[tab] + " Гости видят твой двор таким же.";
-        var g = el("div", "invgrid roofgrid"), acts = el("div", "invacts"), b;
-        if (tab === "roof") {
-          if (!pick) pick = roofKey(s);
-          var owned = s.roofs_owned || ["orange"];
-          keys.forEach(function (k) {
-            var has = owned.indexOf(k) >= 0, cell = el("div", "slot" + (k === pick ? " on" : "")); cell.setAttribute("aria-label", cols[k] || k);
-            var cv = el("canvas", "pix"); roofSwatch(cv, ROOF_PAL[k]); cell.appendChild(cv);
-            if (k === s.roof || !has) cell.appendChild(el("span", "vars", k === s.roof ? "✓" : "✦ " + price));
-            cell.onclick = function () { haptic("light"); pick = k; F.roofTry = k === s.roof ? null : k; renderFarm(); draw(); };
+        SECS.forEach(function (d) {
+          var sec = d[0], g = el("div", "invgrid roofgrid"), acts = el("div", "invacts"), b;
+          box.appendChild(el("div", "dsec", d[1])); box.appendChild(el("div", "sub", DECOR_SUB[sec]));
+          if (sec === "roof") {
+            var owned = s.roofs_owned || ["orange"];
+            keys.forEach(function (k) {
+              var has = owned.indexOf(k) >= 0, isCur = k === s.roof, cell = el("div", "slot" + (sel && sel.sec === sec && sel.k === k ? " on" : "")); cell.setAttribute("aria-label", cols[k] || k);
+              var cv = el("canvas", "pix"); roofSwatch(cv, ROOF_PAL[k]); cell.appendChild(cv);
+              if (isCur || !has) cell.appendChild(el("span", "vars", isCur ? "✓" : "✦ " + price));
+              cell.onclick = function () { pickNow(sec, k, isCur); };
+              g.appendChild(cell);
+            });
+            box.appendChild(g);
+            if (!sel || sel.sec !== sec) return;
+            var pk = sel.k, hasR = owned.indexOf(pk) >= 0;
+            box.appendChild(el("div", "sub", (cols[pk] || "") + " крыша" + (pk === s.roof ? " — сейчас на ферме." : hasR ? " — уже куплена." : " — ✦ " + price + ".")));
+            if (pk === s.roof) { b = btn("Сейчас на ферме", "ghost", function () {}); b.disabled = true; }
+            else b = btn(hasR ? "Поставить" : "Купить за ✦ " + price, "", function (ev) {
+              if (!hasR && s.dust < price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
+              haptic("success");
+              if (!hasR) { s.dust -= price; s.roofs_owned = owned.concat([pk]); buyFx(ev.currentTarget, (cols[pk] || "") + " крыша", "−✦ " + price); }
+              s.roof = pk; F.roofTry = null; renderFarm(); draw();
+              toast(hasR ? "Крыши перекрашены" : "Куплено: " + (cols[pk] || "").toLowerCase() + " крыша");
+              farmCall("/api/farm/roof", { color: pk }).catch(function () {});
+            });
+            acts.appendChild(b); box.appendChild(acts);
+            return;
+          }
+          var L = (s.yard_list || {})[sec]; if (!L) return;
+          var items = L.items, ks = Object.keys(items), y = s.yard || {}, own = s.yard_owned || [];
+          var cur = function (k) { return sec === "bits" ? (y.bits || []).indexOf(k) >= 0 : (y[sec] || ks[0]) === k; };
+          var hasK = function (k) { return items[k].price === 0 || own.indexOf(sec + ":" + k) >= 0; };
+          ks.forEach(function (k) {
+            var cell = el("div", "slot" + (sel && sel.sec === sec && sel.k === k ? " on" : "")); cell.setAttribute("aria-label", items[k].name);
+            var cv = el("canvas", "pix"); yardIcon(cv, sec, k); cell.appendChild(cv);
+            if (cur(k) || !hasK(k)) cell.appendChild(el("span", "vars", cur(k) ? "✓" : "✦ " + items[k].price));
+            cell.onclick = function () { pickNow(sec, k, cur(k)); };
             g.appendChild(cell);
           });
           box.appendChild(g);
-          box.appendChild(el("div", "sub", (cols[pick] || "") + " крыша" + (pick === s.roof ? " — сейчас на ферме." : owned.indexOf(pick) >= 0 ? " — уже куплена." : " — ✦ " + price + ".")));
-          var hasR = owned.indexOf(pick) >= 0;
-          if (pick === s.roof) { b = btn("Сейчас на ферме", "ghost", function () {}); b.disabled = true; }
-          else b = btn(hasR ? "Поставить" : "Купить за ✦ " + price, "", function (ev) {
-            if (!hasR && s.dust < price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
+          if (!sel || sel.sec !== sec) return;
+          var pick = sel.k, it = items[pick], has = hasK(pick), on = cur(pick);
+          var note = pick === "vane" && !hasBuild(s, "barn") ? " Встанет на крышу амбара, когда он будет." : { fireflies: " Мерцают над лугом.", arch: " Над калиткой.", birdhouse: " У колодца.", planters: " У забора слева.", hay: " У мельницы." }[pick] || "";
+          box.appendChild(el("div", "sub", it.name + (on ? " — сейчас на ферме." : has ? " — уже куплено." : " — ✦ " + it.price + ".") + note));
+          var apply = function (ev, show) {
+            if (!has && s.dust < it.price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
             haptic("success");
-            if (!hasR) { s.dust -= price; s.roofs_owned = owned.concat([pick]); buyFx(ev.currentTarget, (cols[pick] || "") + " крыша", "−✦ " + price); }
-            s.roof = pick; F.roofTry = null; renderFarm(); draw();
-            toast(hasR ? "Крыши перекрашены" : "Куплено: " + (cols[pick] || "").toLowerCase() + " крыша");
-            farmCall("/api/farm/roof", { color: pick }).catch(function () {});
-          });
+            var y2 = s.yard = Object.assign({}, s.yard || {});
+            if (!has) { s.dust -= it.price; s.yard_owned = own.concat([sec + ":" + pick]); buyFx(ev.currentTarget, it.name, "−✦ " + it.price); }
+            if (sec === "bits") { var bl = (y2.bits || []).filter(function (x) { return x !== pick; }); if (show) bl.push(pick); y2.bits = bl; }
+            else y2[sec] = pick;
+            F.yardTry = null; renderFarm(); draw();
+            toast(!has ? "Куплено: " + it.name.toLowerCase() : show ? it.name + " — на ферме" : it.name + " — спрятано");
+            farmCall("/api/farm/decor", { slot: sec, item: pick, on: show }).catch(function () {});
+          };
+          if (sec === "bits") b = on ? btn("Спрятать", "ghost", function (ev) { apply(ev, false); }) : btn(has ? "Поставить" : "Купить за ✦ " + it.price, "", function (ev) { apply(ev, true); });
+          else if (on) { b = btn("Сейчас на ферме", "ghost", function () {}); b.disabled = true; }
+          else b = btn(has ? "Поставить" : "Купить за ✦ " + it.price, "", function (ev) { apply(ev, true); });
           acts.appendChild(b); box.appendChild(acts);
-          return;
-        }
-        var L = (s.yard_list || {})[tab]; if (!L) return;
-        var items = L.items, ks = Object.keys(items), y = s.yard || {}, own = s.yard_owned || [];
-        var cur = function (k) { return tab === "bits" ? (y.bits || []).indexOf(k) >= 0 : (y[tab] || ks[0]) === k; };
-        var hasK = function (k) { return items[k].price === 0 || own.indexOf(tab + ":" + k) >= 0; };
-        if (!pick) pick = tab === "bits" ? ks[0] : (y[tab] || ks[0]);
-        ks.forEach(function (k) {
-          var cell = el("div", "slot" + (k === pick ? " on" : "")); cell.setAttribute("aria-label", items[k].name);
-          var cv = el("canvas", "pix"); yardIcon(cv, tab, k); cell.appendChild(cv);
-          if (cur(k) || !hasK(k)) cell.appendChild(el("span", "vars", cur(k) ? "✓" : "✦ " + items[k].price));
-          cell.onclick = function () { haptic("light"); pick = k; F.yardTry = cur(k) ? null : { slot: tab, item: k }; renderFarm(); draw(); };
-          g.appendChild(cell);
         });
-        box.appendChild(g);
-        var it = items[pick], has = hasK(pick), on = cur(pick);
-        var note = pick === "vane" && !hasBuild(s, "barn") ? " Встанет на крышу амбара, когда он будет." : { fireflies: " Мерцают над лугом.", arch: " Над калиткой.", birdhouse: " У колодца.", planters: " У забора слева.", hay: " У мельницы." }[pick] || "";
-        box.appendChild(el("div", "sub", it.name + (on ? " — сейчас на ферме." : has ? " — уже куплено." : " — ✦ " + it.price + ".") + note));
-        var apply = function (ev, show) {
-          if (!has && s.dust < it.price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
-          haptic("success");
-          var k = pick, y2 = s.yard = Object.assign({}, s.yard || {});
-          if (!has) { s.dust -= it.price; s.yard_owned = own.concat([tab + ":" + k]); buyFx(ev.currentTarget, it.name, "−✦ " + it.price); }
-          if (tab === "bits") { var bl = (y2.bits || []).filter(function (x) { return x !== k; }); if (show) bl.push(k); y2.bits = bl; }
-          else y2[tab] = k;
-          F.yardTry = null; renderFarm(); draw();
-          toast(!has ? "Куплено: " + it.name.toLowerCase() : show ? it.name + " — на ферме" : it.name + " — спрятано");
-          farmCall("/api/farm/decor", { slot: tab, item: k, on: show }).catch(function () {});
-        };
-        if (tab === "bits") b = on ? btn("Спрятать", "ghost", function (ev) { apply(ev, false); }) : btn(has ? "Поставить" : "Купить за ✦ " + it.price, "", function (ev) { apply(ev, true); });
-        else if (on) { b = btn("Сейчас на ферме", "ghost", function () {}); b.disabled = true; }
-        else b = btn(has ? "Поставить" : "Купить за ✦ " + it.price, "", function (ev) { apply(ev, true); });
-        acts.appendChild(b); box.appendChild(acts);
+        sh.scrollTop = keepTop;                                              // перерисовка не сбрасывает прокрутку
       };
-      paintTabs(); draw();
+      draw();
       sh.appendChild(btn("Закрыть", "ghost", close));
       var tick = setInterval(function () { if (!sh.isConnected) { clearInterval(tick); if (F.roofTry || F.yardTry) { F.roofTry = null; F.yardTry = null; renderFarm(); } } }, 300);   // закрыли окно — примерка снимается
     });
