@@ -110,3 +110,7 @@ CREATE TABLE IF NOT EXISTS f_honey (user INTEGER NOT NULL, idx INTEGER NOT NULL,
 CREATE TABLE IF NOT EXISTS f_hive (user INTEGER NOT NULL, item TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, item));
 -- мокрые колосья (2026-11-19): собранные в лунный ливень сохнут в амбаре до dry_at, мельница их до того не мелет
 CREATE TABLE IF NOT EXISTS f_wet (user INTEGER NOT NULL, strain TEXT NOT NULL, n INTEGER NOT NULL, dry_at INTEGER NOT NULL);
+-- подземелье (2026-11-19): кости и текущий поход героя, рюкзак еды (ячейка — одно блюдо), очередь котла удобрений
+CREATE TABLE IF NOT EXISTS d_hero (user INTEGER PRIMARY KEY, bones INTEGER NOT NULL DEFAULT 0, run TEXT, size TEXT, started INTEGER, hp INTEGER NOT NULL DEFAULT 100);
+CREATE TABLE IF NOT EXISTS d_pack (user INTEGER NOT NULL, slot INTEGER NOT NULL, item TEXT NOT NULL, PRIMARY KEY (user, slot));
+CREATE TABLE IF NOT EXISTS d_brew (user INTEGER PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, started INTEGER NOT NULL DEFAULT 0);

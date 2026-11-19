@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611191826";
+    var BUILD = "202611191912";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1018,7 +1018,7 @@
     <div class="farm-top"><button class="exit" type="button" data-go="farm">← На ферму</button><div class="dust-pill" id="shopdust">✦ 0</div></div>
     <h2 style="margin-top:16px;font-size:24px;letter-spacing:-.02em">Лавка</h2>
     <div class="tabs" id="shoptabs"><button type="button" data-st="buy" aria-pressed="true">Купить</button><button type="button" data-st="sell" aria-pressed="false">Продать</button></div>
-    <div class="seg cats" id="shopcats"><button type="button" data-cat="seed" aria-pressed="true">Семена</button><button type="button" data-cat="crop" aria-pressed="false">Урожай</button><button type="button" data-cat="food" aria-pressed="false">Блюда</button></div>
+    <div class="seg cats" id="shopcats"><button type="button" data-cat="seed" aria-pressed="true">Семена</button><button type="button" data-cat="crop" aria-pressed="false">Урожай</button><button type="button" data-cat="food" aria-pressed="false">Блюда</button><button type="button" data-cat="fert" aria-pressed="false" id="fertcat" hidden>Удобрение</button></div>
     <div id="shopview"></div>
   </section>
 
@@ -1109,7 +1109,7 @@
     $("title").textContent = p.title; $("name").textContent = p.name;
     $("sigil").textContent = initial(p.name);
     setPhoto($("sigil"), p.avatar); rankFrame($("sigil"), p.title, 36);
-    $("dgcard").hidden = !("link" in p && p.link === null);                 // подземелье — пока только хозяину: у него одного нет привязки канала
+    $("dgcard").hidden = !("link" in p && p.link === null); $("fertcat").hidden = $("dgcard").hidden;   // удобрение в лавке — тоже пока только хозяину                 // подземелье — пока только хозяину: у него одного нет привязки канала
     $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
     $("karma").textContent = p.karma; $("place").textContent = p.place || "—";
     var lad = [0, 30, 100, 250, 500, 1000, 2000, 5000, 12000, 25000, 50000], prev = 0;
@@ -3694,6 +3694,7 @@
              o: "#ff9f43", O: "#c8661a", v: "#c4a3ff", V: "#7a52c8", n: "#a0683a", N: "#6e4425", s: "#f4f0ff",
              a: "#24242c", A: "#45454f", z: "#6c6c78", f: "#ff7a2e", F: "#ffd166", Q: "#ff2a3a", q: "#8a1420" };
   var DISH = {
+    "p:fert":    ["......eg......", ".....egGg.....", "......Gk......", "....kkmmkk....", "...knnnnnNk...", "..knnngnnnNk..", "..kngGgnnnNk..", "..knngnnnnNk..", "..knnnnnnNNk..", "...kkkkkkkk..."],   // удобрение из подземелья (2026-11-19): мешок с ростком
     "p:gem":     ["......kk......", ".....kssk.....", "....ksvvVk....", "...ksvvvvVk...", "..ksvsvvvVVk..", "..kvvvvvVVVk..", "...kVvvvVVk...", "....kVVVVk....", ".....kVVk.....", "......kk......"],
     "p:gemdust": ["...s......v...", ".v.....s....s.", "....kkkkkk....", "...kmVVVVmk...", "....kVVVVk....", "...kvvsvvvVk..", "..kvvvvvsvVVk.", "..kvsvvvvvVVk.", "..kvvvvvvVVVk.", "...kkkkkkkkk.."],
     "p:coal":    ["......F.......", ".....kfk......", "...kkAzkk.....", "..kAzzAaAkk...", ".kAzAaAfAzAk..", ".kaAaFaAaAaAk.", "kaAfaAaAzaAaAk", "kaaAaaAfaAaaak", ".kkaaaaaaaakk.", "...kkkkkkkk..."],
@@ -6186,7 +6187,7 @@
   // Разделы: семена · урожай · продукты (мука и еда). Цена урожая и продуктов у игроков — в 1,5 раза выше, чем дать пыль в амбаре.
   F.shopCat = "seed";
   function stallPrice(dust) { return Math.max(1, Math.ceil(dust * ((F.state && F.state.stall_markup) || 1.5))); }
-  function catOf(id) { return id.indexOf("p:") === 0 && id !== "p:eye" ? "food" : "crop"; }   // глаз — урожай, хоть и хранится как продукт
+  function catOf(id) { return id === "p:fert" ? "fert" : id.indexOf("p:") === 0 && id !== "p:eye" ? "food" : "crop"; }   // глаз — урожай, хоть и хранится как продукт; удобрение — свой раздел   // глаз — урожай, хоть и хранится как продукт
   function extend(r) {                                         // чужие сорта и продукты — чтобы рисовать и называть их товары
     F.ext = F.ext || { strains: {}, products: {} };
     Object.keys(r.strains || {}).forEach(function (k) { F.ext.strains[k] = r.strains[k]; });
@@ -6254,7 +6255,7 @@
     var s = F.state, box = $("shopview"); if (!s) return;
     box.innerHTML = ""; setText($("shopdust"), "✦ " + s.dust);
     // в «Купить» — кружок: сколько штук игроки выставили в разделе
-    var cnt = { seed: 0, crop: 0, food: 0 }, mk = F.market;
+    var cnt = { seed: 0, crop: 0, food: 0, fert: 0 }, mk = F.market;
     if (mk) { mk.offers.forEach(function (o) { cnt.seed += o.count; }); (mk.items || []).forEach(function (o) { cnt[catOf(o.item)] += o.count; }); }
     document.querySelectorAll("#shopcats button").forEach(function (b) {
       b.setAttribute("aria-pressed", String(b.dataset.cat === F.shopCat));
@@ -6321,7 +6322,7 @@
       }
       if (!m && cat !== "seed") { note("Загружаю…"); return; }
       if (!wares.length) {
-        note(cat === "crop" ? "Урожай пока никто не выставил. Свой можно выставить во вкладке «Продать» — это выгоднее, чем превращать его в пыль."
+        note(cat === "fert" ? "Удобрение пока никто не выставил. Его варят в подземелье из костей монстров." : cat === "crop" ? "Урожай пока никто не выставил. Свой можно выставить во вкладке «Продать» — это выгоднее, чем превращать его в пыль."
           : "Блюд пока никто не выставил. Муку мелет мельница, еду печёт печь — продать их игрокам выгоднее всего.");
         return;
       }
@@ -6375,7 +6376,7 @@
     if (!mine.length) {
       note(cat === "seed" ? "Своих сортов пока нет. Посади разные культуры на соседние грядки — когда созреют обе, при сборе может выпасть семя-гибрид."
         : !hasBuild(s, "barn") ? "Чтобы продавать урожай и блюда, нужен амбар: без него урожай сразу превращается в пыль."
-        : cat === "crop" ? "В амбаре нет урожая. Собери грядки — урожай ляжет в амбар." : "Блюд нет. Муку мелет мельница, еду печёт печь.");
+        : cat === "fert" ? "Удобрения нет. Его варит котёл в подземелье: 40 костей монстров — одно удобрение." : cat === "crop" ? "В амбаре нет урожая. Собери грядки — урожай ляжет в амбар." : "Блюд нет. Муку мелет мельница, еду печёт печь.");
       return;
     }
     if (sel && !acts2[sel]) sel = F.shopSel = null;
@@ -6560,7 +6561,7 @@
       var it = itemOf(x.item); if (!it) return;
       wares.push({ key: "i:" + x.item, icon: itemIconOf(x.item), tag: "✦ " + x.price, qty: "×" + x.count });
       act["i:" + x.item] = function () {
-        var d = infoBox(box, itemName(x.item), [(catOf(x.item) === "food" ? "Блюда" : "Урожай") + " · ляжет к тебе в амбар", "В пыль в амбаре — ✦ " + it.dust + "."]);
+        var d = infoBox(box, itemName(x.item), [(catOf(x.item) === "food" ? "Блюда" : catOf(x.item) === "fert" ? "Удобрение" : "Урожай") + " · ляжет к тебе в амбар", "В пыль в амбаре — ✦ " + it.dust + "."]);
         var a = el("div", "invacts"), b = btn("Купить за ✦ " + x.price, "", function () {
           if (!hasBuild(F.state, "barn")) { haptic("error"); return toast("Урожай и блюда кладут в амбар — сначала построй его"); }
           buyHere(b, x.item, "item", x.price, "Куплено: " + itemName(x.item).toLowerCase() + " — в амбаре");
@@ -6725,12 +6726,15 @@
 
   $("tofarm").onclick = openFarm;
   // подземелье — поверх мини-приложения, в своей рамке: внутри свои страницы (убежище ↔ бой), а вход Телеграма не теряется
+  // подземелье в рамке зовёт сервер и рисует блюда через главное окно: вход Телеграма и значки еды — одни на всё мини-приложение
+  window.dgCall = call; window.dgIcon = function (cv, id) { itemIcon(cv, id); };
+  window.dgFarm = function () { if (F.state) loadFarm(); };                         // после похода ферма перечитывает амбар
   function openDungeon() {
     haptic("light");
     var w = el("div", "dgwrap"), f = el("iframe"), x = el("button", "dgx", "✕");
     f.src = "dg/hub.html?v=" + Date.now(); f.setAttribute("allow", "autoplay"); x.type = "button"; x.setAttribute("aria-label", "Закрыть");
     attractor.stop();                                                               // фон главного экрана под подземельем не крутим — телефон тормозил (жалоба 2026-11-17)
-    var bb = tg && tg.BackButton, close = function () { haptic("light"); w.remove(); document.documentElement.classList.remove("locked"); if (bb && document.body.dataset.screen === "home") bb.hide(); if (document.body.dataset.screen === "home") attractor.start(); };
+    var bb = tg && tg.BackButton, close = function () { haptic("light"); w.remove(); window.dgFarm(); document.documentElement.classList.remove("locked"); if (bb && document.body.dataset.screen === "home") bb.hide(); if (document.body.dataset.screen === "home") attractor.start(); };
     w._close = close; x.onclick = close; w.appendChild(f);
     if (bb && bb.show) bb.show();
     if (!(bb && bb.isVisible)) w.appendChild(x);                                    // вне Телеграма (или старый клиент) «Назад» нет — свой крестик       // в Телеграме выход — его кнопка «Назад» в шапке (её ловит back()), свой крестик не налезает на кнопки игры

@@ -23,6 +23,7 @@
   #leave { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--u) * 10 + env(safe-area-inset-top)); height: calc(var(--u) * 20); padding: 0 calc(var(--u) * 10);
     font: inherit; font-size: calc(var(--u) * 11); font-weight: 800; color: #efe6d2; border: 0; cursor: pointer; }
   #over button + button { margin-left: calc(var(--u) * 8); }
+  #over button[hidden] + button { margin-left: 0; }
   #over div { padding: calc(var(--u) * 16) calc(var(--u) * 20); text-align: center; font-size: calc(var(--u) * 15); font-weight: 800; line-height: 1.35; }
   #over small { display: block; margin-top: calc(var(--u) * 4); font-size: calc(var(--u) * 12); font-weight: 600; opacity: .8; }
   #over button { margin-top: calc(var(--u) * 14); padding: calc(var(--u) * 9) calc(var(--u) * 22); border: 0; background: #3f9e7c; color: #f2fff8; font: inherit; font-size: calc(var(--u) * 14);
@@ -228,10 +229,17 @@
       mg.fillStyle = "#4b4560"; if (r2.pu) mg.fillRect(x + 6, y + 2, 2, 2); if (r2.pv) mg.fillRect(x + 2, y + 6, 2, 2);
     });
   }
-  function finish(title, sub) { done = true; document.getElementById("overt").textContent = title; document.getElementById("overs").textContent = sub; setTimeout(function () { document.getElementById("over").classList.add("on"); }, 700); }
+  // поход на сервере (2026-11-19): вход оплачен едой в убежище, итог — один запрос при выходе. Погиб — кости 0; вышел сам или зачистил — кости твои.
+  // Без сервера (страница открыта сама по себе) — как раньше, пробный бой.
+  var RUN = (location.search.match(/run=([0-9a-f]+)/) || [])[1] || "", dgCall = (function () { try { return parent !== window && parent.dgCall; } catch (e) { return null; } })(), sent = null;
+  function report(got) { if (!RUN || !dgCall) return Promise.resolve(); if (!sent) sent = dgCall("/api/dg/finish", { run: RUN, bones: got, dead: hero.st === "dead" }).catch(function () {}); return sent; }
+  function home() { var b = document.getElementById("leave"); b.disabled = true; report(hero.st === "dead" ? 0 : bones).then(function () { location.href = "hub.html?v=" + Date.now(); }); }
+  function finish(title, sub) { done = true; report(hero.st === "dead" ? 0 : bones);
+    document.getElementById("overt").textContent = title; document.getElementById("overs").textContent = sub; setTimeout(function () { document.getElementById("over").classList.add("on"); }, 700); }
+  if (RUN) document.getElementById("again").hidden = true;                    // новый поход — снова через убежище: он стоит еды
   document.getElementById("again").onclick = reset;
-  document.getElementById("home").onclick = function () { location.href = "hub.html?v=" + Date.now(); };
-  document.getElementById("leave").onclick = function () { location.href = "hub.html?v=" + Date.now(); };
+  document.getElementById("home").onclick = home;
+  document.getElementById("leave").onclick = home;
 
   // ---------- управление: джойстик по экрану, мир — по диагоналям ----------
   // джойстик слева внизу и кнопка удара справа внизу — видны всегда (его просьба 2026-11-17); палец ведёт ручку от центра основания
@@ -315,7 +323,7 @@
       if (hero.st !== "dead" && d < .3 && hero.inv <= 0) {
         hero.hp -= 12; hero.inv = .9; hero.st = "hurt"; hero.t = 0; hero.dir = "side"; hero.flip = S(m.u, m.v)[0] > S(hero.u, hero.v)[0] ? 1 : -1;
         var nu2 = hero.u - du2 / d * .18, nv2 = hero.v - dv2 / d * .18; if (!blocked(nu2, nv2)) { hero.u = nu2; hero.v = nv2; } hud();
-        if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", "Всё найденное потеряно"); }
+        if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", RUN ? "Всё найденное потеряно, здоровье в убежище −20" : "Всё найденное потеряно"); }
       }
     });
     for (i = 0; i < mobs.length; i++) for (var j = i + 1; j < mobs.length; j++) {

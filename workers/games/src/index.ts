@@ -514,6 +514,12 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/water": return json(await farm.water(user, Number(body.idx)));
     case "/api/farm/fill": return json(await farm.fill(user));
     case "/api/farm/book": return json(await farm.book(user));
+    case "/api/dg": return json(await farm.dgState(user));
+    case "/api/dg/pack": return json(await farm.dgPack(user, String(body.item || "").slice(0, 80), body.slot == null ? -1 : Number(body.slot)));
+    case "/api/dg/start": return json(await farm.dgStart(user, String(body.size || "")));
+    case "/api/dg/finish": return json(await farm.dgFinish(user, String(body.run || "").slice(0, 32), Number(body.bones) || 0, !!body.dead));
+    case "/api/dg/drink": return json(await farm.dgDrink(user, String(body.item || "").slice(0, 80)));
+    case "/api/dg/brew": return json(await farm.dgBrew(user, Number(body.n) || 1));
     case "/api/farm/market": return json(await farm.market(user, await hiddenIds()));
     case "/api/farm/seeds": return json(await farm.buySeeds(user, String(body.crop || ""), Number(body.n || 1)));
     case "/api/farm/list": return json(await farm.list(user, String(body.strain || ""), Number(body.delta || 0)));

@@ -2101,3 +2101,112 @@ export async function noticeSeen(u: any, id: string) {
   await q("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + ?", [u.id, n.gift.item, n.gift.n, n.gift.n]);
   return { ok: true, farm: await farmState(u) };
 }
+
+// ---------- Подземелье (его решения 2026-11-19) ----------
+// Кости — у героя (d_hero), рюкзак — 6 ячеек по одному блюду (d_pack), котёл — очередь удобрений (d_brew).
+// Вход стоит «сытость» = очки блюда (хлеб 1 … Странная похлёбка 5): малое 1, среднее 2, большое 4. Бой считается в игре,
+// сервер запоминает итог при выходе (два запроса на поход). Удобрение — товар амбара «p:fert», 40 костей, 30 минут штука.
+// Пока подземелье открыто только хозяину — и все запросы тоже.
+PRODUCTS["p:fert"] = { name: "Удобрение", dust: 20 };
+export const DG_NEED: Record<string, number> = { s: 1, m: 2, l: 4 };
+const DG_MAXB: Record<string, number> = { s: 150, m: 400, l: 700 };    // больше костей с уровня не набрать (замер 150 уровней: не больше 88 / 258 / 400)
+export const FERT_BONES = 40, FERT_SEC = 30 * 60, DG_SLOTS = 6, BREW_MAX = 20;
+// здоровье героя в убежище (его решение 2026-11-19): гибель в походе отнимает 20, лечат чаи из амбара; при нуле в поход нельзя
+export const HP_MAX = 100, HP_DEATH = 20, HP_TEA: Record<string, number> = { tea: 30, honeytea: 50 };
+function satOf(id: string) { const r = RECIPES[recipeOf(id)]; return id.startsWith("p:") && r && r.kind === "oven" ? r.points : 0; }
+async function dgOwner(u: any) { return String(u.id) === String((await q("SELECT value FROM g_meta WHERE key = 'owner'"))[0]?.[0] || "-"); }
+async function dgHero(uid: number) {
+  await q("INSERT OR IGNORE INTO d_hero (user, bones) VALUES (?, 0)", [uid]);
+  const [h] = await q("SELECT bones, run, size, hp FROM d_hero WHERE user = ?", [uid]);
+  return { bones: Number(h[0]), run: h[1] ? String(h[1]) : "", size: h[2] ? String(h[2]) : "", hp: Number(h[3]) };
+}
+async function brewTick(uid: number) {                                     // готовые удобрения — в амбар; очередь идёт дальше
+  const [b] = await q("SELECT n, started FROM d_brew WHERE user = ?", [uid]); if (!b) return { n: 0, started: 0, got: 0 };
+  let n = Number(b[0]), st = Number(b[1]); const ready = Math.min(n, Math.floor((now() - st) / FERT_SEC));
+  if (ready > 0) {
+    n -= ready; st += ready * FERT_SEC;
+    await DB.batch([
+      DB.prepare("UPDATE d_brew SET n = ?, started = ? WHERE user = ?").bind(n, st, uid),
+      DB.prepare("INSERT INTO f_barn (user, strain, count) VALUES (?, 'p:fert', ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count").bind(uid, ready),
+    ]);
+  }
+  return { n, started: st, got: ready };
+}
+export async function dgState(u: any, got = 0) {
+  if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
+  await ensureFarm(u);
+  const h = await dgHero(u.id), br = await brewTick(u.id);
+  const pack = (await q("SELECT slot, item FROM d_pack WHERE user = ? ORDER BY slot", [u.id])).map(([slot, item]) => ({ slot: Number(slot), item: String(item), sat: satOf(String(item)) }));
+  const barn = (await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])).map(([id, n]) => ({ item: String(id), count: Number(n) }));
+  const food = barn.filter((b) => satOf(b.item) > 0).map((b) => ({ ...b, sat: satOf(b.item), heal: HP_TEA[recipeOf(b.item)] || 0 }));
+  const pr = await productsFor([...food.map((f) => f.item), ...pack.map((p) => p.item), "p:fert"]);
+  const [d] = await q("SELECT dust FROM f_farms WHERE user = ?", [u.id]);
+  const hasBarn = (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length > 0;
+  const [fs] = await q("SELECT listed FROM f_stall WHERE user = ? AND item = 'p:fert'", [u.id]), own = (await ownPrices(u.id))["p:fert"];
+  const satmap = Object.fromEntries(Object.entries(RECIPES).filter(([, r]) => r.kind === "oven" && r.points > 0).map(([k, r]) => [k, r.points]));
+  return { hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
+           fert_stall: Number(fs?.[0] || 0), fert_price: sellerPrice(stallPrice(PRODUCTS["p:fert"].dust), own), satmap,
+           pack, slots: DG_SLOTS, food, sat: pack.reduce((a, p) => a + p.sat, 0), need: DG_NEED, products: pr.products,
+           brew: { n: br.n, started: br.started, per: FERT_SEC, bones: FERT_BONES, max: BREW_MAX }, got: got + br.got, now: now() };
+}
+export async function dgPack(u: any, item: string, slot: number) {        // item — из амбара в свободную ячейку; slot ≥ 0 — из ячейки обратно в амбар
+  if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
+  if (slot >= 0) {
+    const [p] = await q("DELETE FROM d_pack WHERE user = ? AND slot = ? RETURNING item", [u.id, slot]);
+    if (p) await q("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [u.id, String(p[0])]);
+    return dgState(u);
+  }
+  if (!satOf(item)) return { error: "В рюкзак кладут только еду" };
+  if (recipeOf(item) === "brew") return { error: "Пока это действие недоступно" };   // Странная похлёбка — для тайной комнаты, её ещё нет (его решение 2026-11-19); похлёбка остаётся в амбаре
+  const used = new Set((await q("SELECT slot FROM d_pack WHERE user = ?", [u.id])).map((r) => Number(r[0])));
+  let free = -1; for (let i = 0; i < DG_SLOTS; i++) if (!used.has(i)) { free = i; break; }
+  if (free < 0) return { error: "Рюкзак полон" };
+  if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = ? AND count > 0 RETURNING 1", [u.id, item])).length) return { error: "В амбаре этого нет" };
+  await q("INSERT INTO d_pack (user, slot, item) VALUES (?, ?, ?)", [u.id, free, item]);
+  return dgState(u);
+}
+export async function dgStart(u: any, size: string) {                      // вход: съесть из рюкзака сытость с наименьшим перебором
+  if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
+  const need = DG_NEED[size]; if (!need) return { error: "Нет такого подземелья" };
+  if ((await dgHero(u.id)).hp <= 0) return { error: "Герою нужно подлечиться — выпей чаю" };
+  const pack = (await q("SELECT slot, item FROM d_pack WHERE user = ?", [u.id])).map(([s, it]) => ({ slot: Number(s), sat: satOf(String(it)) }));
+  let best = -1, bs = 1e9, bc = 99;
+  for (let m = 1; m < 1 << pack.length; m++) {
+    let s = 0, c = 0; pack.forEach((p, i) => { if (m >> i & 1) { s += p.sat; c++; } });
+    if (s >= need && (s < bs || (s === bs && c < bc))) { best = m; bs = s; bc = c; }
+  }
+  if (best < 0) return { error: "Мало еды в рюкзаке: нужно сытости " + need };
+  const eat = pack.filter((_, i) => best >> i & 1).map((p) => p.slot), run = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  await dgHero(u.id);
+  await DB.batch([
+    ...eat.map((s) => DB.prepare("DELETE FROM d_pack WHERE user = ? AND slot = ?").bind(u.id, s)),
+    DB.prepare("UPDATE d_hero SET run = ?, size = ?, started = ? WHERE user = ?").bind(run, size, now(), u.id),
+  ]);
+  return { run, size, ate: bs };
+}
+export async function dgFinish(u: any, run: string, bones: number, dead = false) {      // итог похода: погиб — кости 0; закрыл игру посреди похода — итог не пришёл, всё пропало
+  if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
+  const h = await dgHero(u.id);
+  if (!run || h.run !== run) return { error: "Поход уже закончен" };
+  const b = dead ? 0 : Math.max(0, Math.min(DG_MAXB[h.size] || 0, Math.round(Number(bones) || 0)));
+  await q("UPDATE d_hero SET bones = bones + ?, hp = MAX(0, hp - ?), run = NULL, size = NULL WHERE user = ? AND run = ?", [b, dead ? HP_DEATH : 0, u.id, run]);
+  return { ok: true, bones: b, total: h.bones + b, hp: dead ? Math.max(0, h.hp - HP_DEATH) : h.hp };
+}
+export async function dgDrink(u: any, item: string) {                      // выпить чай из амбара — здоровье героя
+  if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
+  const heal = HP_TEA[recipeOf(item)]; if (!heal || !item.startsWith("p:")) return { error: "Лечит только чай" };
+  const h = await dgHero(u.id); if (h.hp >= HP_MAX) return { error: "Герой и так здоров" };
+  if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = ? AND count > 0 RETURNING 1", [u.id, item])).length) return { error: "В амбаре этого нет" };
+  await q("UPDATE d_hero SET hp = MIN(?, hp + ?) WHERE user = ?", [HP_MAX, heal, u.id]);
+  return dgState(u);
+}
+export async function dgBrew(u: any, n: number) {                          // в котёл: по 40 костей на удобрение, варятся по очереди
+  if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
+  if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Удобрение ложится в амбар — сначала построй его на ферме" };
+  const k = Math.max(1, Math.min(BREW_MAX, Math.round(n) || 1)), br = await brewTick(u.id);
+  if (br.n + k > BREW_MAX) return { error: "В котле не больше " + BREW_MAX };
+  if (!(await q("UPDATE d_hero SET bones = bones - ? WHERE user = ? AND bones >= ? RETURNING 1", [k * FERT_BONES, u.id, k * FERT_BONES])).length) return { error: "Не хватает костей" };
+  await q("INSERT INTO d_brew (user, n, started) VALUES (?, ?, ?) ON CONFLICT(user) DO UPDATE SET n = d_brew.n + excluded.n, started = CASE WHEN d_brew.n = 0 THEN excluded.started ELSE d_brew.started END",
+    [u.id, k, now()]);
+  return dgState(u, br.got);
+}
