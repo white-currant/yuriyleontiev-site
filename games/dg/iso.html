@@ -59,8 +59,10 @@
   // ---------- картинки из его листа ----------
   var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "floor6", "floor7", "floor8", "floor9", "floor10", "t_blue", "t_violet", "t_lava", "wu_plain1", "wu_plain2", "wu_plain3", "wu_pil1", "wu_pil2", "wu_pil3", "wu_end", "wu_gate", "wu_door", "wu_arch", "wu_archin", "wu_torch1", "wu_torch2", "wu_torch3",
     "wv_plain1", "wv_plain2", "wv_plain3", "wv_pil1", "wv_pil2", "wv_pil3", "wv_end", "wv_gate", "wv_door", "wv_arch", "wv_archin", "wv_torch1", "wv_torch2", "wv_torch3", "w_corner", "brazier_f0", "brazier_f1", "brazier_f2", "brazier_f3", "brazier_f4", "brazier_f5", "brazier_f6", "brazier_f7", "brazier_f8",
-    "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag"], wait = NAMES.length + 1;
-  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=15"; IMG[n] = im; });
+    "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag"];
+  NAMES.slice().forEach(function (n) { if (/^w[uv]_/.test(n) && !/in$/.test(n)) NAMES.push(n + "_x", n + "_t", n + "_xt"); });   // _t — с цоколем под колонной ближнего конца (за ним нет пола)   // *_x — дальний конец одиночной стены с косым срезом плиты (его правка 2026-11-19)
+  var wait = NAMES.length + 1;
+  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=17"; IMG[n] = im; });
   var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png";
   var CW = 64, CH = 56, AX = 32, AY = 53;
   var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
@@ -183,6 +185,9 @@
     });
     return list;
   }
+  function floorAt(i, j) { var rm = cur;                                       // есть ли пол в клетке (с выходами за край комнаты)
+    if (i >= 0 && j >= 0 && i < rm.w && j < rm.h) return !!rm.open[j][i];
+    return (i === rm.w && rm.pu && j === rm.door.pu) || (j === rm.h && rm.pv && i === rm.door.pv); }
   function room(gx, gy) { for (var i = 0; i < rooms.length; i++) if (rooms[i].gx === gx && rooms[i].gy === gy) return rooms[i]; return null; }
   function cellOpen(i, j) {                                                     // клетка проходима: пол без предмета, или выход за край в проходе
     var rm = cur;
@@ -401,7 +406,10 @@
       var at = function (name) { var a = S(wl.i, wl.j); ctx.drawImage(IMG[name], Math.round(a[0]) - 64, Math.round(a[1]) - 66); };
       // арка: темнота проёма — позади всего (и героя, ушедшего в проход), стена с дырой — на своём месте
       if (wl.k === "arch") list.push({ z: -10, f: function () { at(wl.img + "in"); } });
-      list.push({ z: z0, f: function () { at(wl.k === "torch" ? wl.img + [1, 2, 3, 2][Math.floor(T * 7 + n4) % 4] : wl.img); } });   // у факела меняется только пламя
+      var cut = !wl.far && !wl.corner ? "_x" : "";                                 // дальний конец без продолжения и без угла — плита срезана по второй оси, а не клином
+      if (!wl.near && !floorAt(wl.side === "u" ? wl.i : wl.i + 1, wl.side === "u" ? wl.j + 1 : wl.j)) cut += "t";   // ближний конец, за которым пола нет — торец плиты под колонной (его правка 2026-11-19)
+      if (cut === "t") cut = "_t";
+      list.push({ z: z0, f: function () { at((wl.k === "torch" ? wl.img + [1, 2, 3, 2][Math.floor(T * 7 + n4) % 4] : wl.img) + cut); } });   // у факела меняется только пламя
       if (wl.corner && wl.side === "u") list.push({ z: z0 + .001, f: function () { at("w_corner"); } });                  // внутренний угол — полоса кладки поверх стыка
     });
     cur.decor.forEach(function (d) { if (d.flat) return; list.push({ z: d.u + d.v - .5, f: function () { var s = S(d.u, d.v), im = IMG[d.k]; img(d.k, s[0] - im.width / 2, s[1] - im.height + 6); } }); });
@@ -461,7 +469,7 @@
 
   var last = 0; function loop(ts) { requestAnimationFrame(loop); var dt = Math.min(.05, (ts - last) / 1000 || 0); last = ts; update(dt); draw(ts); }
   function start() { reset(); requestAnimationFrame(loop); }
-  window.__game = { hero: function () { return hero; }, room: function () { return cur; }, rooms: function () { return rooms; }, keys: keys, hit: function () { wantHit = true; }, frame: function (ts) { draw(ts); }, joy: function (x, y) { joy.dx = x; joy.dy = y; }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; var p2 = P(hero.u, hero.v); camX = p2[0]; camY = p2[1]; drawMap(); }, step: function (dt) { update(dt); draw(performance.now()); } };
+  window.__game = { scr: function (u, v) { return S(u, v); }, hero: function () { return hero; }, room: function () { return cur; }, rooms: function () { return rooms; }, keys: keys, hit: function () { wantHit = true; }, frame: function (ts) { draw(ts); }, joy: function (x, y) { joy.dx = x; joy.dy = y; }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; var p2 = P(hero.u, hero.v); camX = p2[0]; camY = p2[1]; drawMap(); }, step: function (dt) { update(dt); draw(performance.now()); } };
 })();
 </script>
 </body>
