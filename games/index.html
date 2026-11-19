@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611190201";
+    var BUILD = "202611190302";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2233,10 +2233,12 @@
     }
     var s = inf.s, rows = CROP[s.shape] || CROP.moss, st = inf.f >= 1 ? 3 : inf.f > .6 ? 2 : inf.f > .25 ? 1 : 0;
     if (inf.dead) st = Math.max(2, st);
-    var odd = !!s.odd, gl = odd && st >= 2 && (Math.floor(t / 90) % 37 === i % 37 || Math.floor(t / 90) % 53 === 7) ? (Math.floor(t / 45) % 2 ? 1 : -1) : 0;   // аномалия дёргается
+    var veil = !own && pl.veil;                                                       // первое странное растение хозяина гостям — ростком (его решение 2026-11-19)
+    if (veil && !inf.dead) st = 0;
+    var odd = !!s.odd, gl = !veil && odd && st >= 2 && (Math.floor(t / 90) % 37 === i % 37 || Math.floor(t / 90) % 53 === 7) ? (Math.floor(t / 45) % 2 ? 1 : -1) : 0;   // аномалия дёргается
     for (var n = 0; n < (odd ? 1 : NSP); n++) {
       var p = odd ? [cx, cy + 3] : spot(i, n), sp = rows[st];
-      if (odd && !inf.dead && drawOddPlant(c, pl, i, cx, cy + 3, t, inf, own)) continue;   // кокон → щупальце, с переходами (его решение 2026-11-19)
+      if (odd && !inf.dead && !veil && drawOddPlant(c, pl, i, cx, cy + 3, t, inf, own)) continue;   // кокон → щупальце, с переходами (его решение 2026-11-19)
       if (odd) {                                                                    // аномалия — одна, вдвое крупнее, с тёмным контуром
         var ow = sp[0].length + 2, oh = sp.length + 2, oc = ODDC[st] || (ODDC[st] = (function () { var q = document.createElement("canvas"); q.width = ow; q.height = oh; return q; })()), og = oc.getContext("2d");
         og.clearRect(0, 0, ow, oh); sprS(og, 1, oh - 2, sp, s, inf.dead);

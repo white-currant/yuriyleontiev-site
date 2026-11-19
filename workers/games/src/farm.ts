@@ -959,6 +959,7 @@ export async function harvest(u: any, idx: number) {
   if (s && s.odd && !all.some((x) => Number(x[0]) !== idx && ss[x[1]]?.odd))                 // странное собрано (или убрано засохшим) — следующая посадка начнёт новые сутки
     await q("DELETE FROM f_evlog WHERE user = ? AND kind = 'odd:win'", [u.id]);
   if (st.dead) return { withered: true, farm: await farmState(u) };       // засохшее — просто убрали (звезда созвездия на грядке остаётся)
+  if (s && s.odd) await q("INSERT INTO f_evlog (user, kind, at) SELECT ?, 'odd:reaped', ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = ? AND kind = 'odd:reaped')", [u.id, t, u.id]);   // первое странное собрано — гости дальше видят его как есть
   const marks = (await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind IN ('star', 'myth', 'wild', 'g2', 'gseed', 'gcross') RETURNING kind", [u.id, idx])).map((r) => String(r[0]));
   const rain = (await rainUntil()) > t;
   const double = s.bonus === "rich" && Math.random() < 0.25;
@@ -1635,7 +1636,7 @@ export async function visit(u: any, pub: string) {
   const shop = await q("SELECT strain, listed FROM f_inv WHERE user = ? AND listed > 0", [f[0]]);
   const stall = await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [f[0]]);
   const ii = await itemInfo(stall.map((r) => String(r[0]))), own = await ownPrices(Number(f[0]));
-  return { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given, roof: await roofOf(Number(f[0])),
+  const res: any = { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given, roof: await roofOf(Number(f[0])),
            plots: await (async () => { const ev = await plotEvents(Number(f[0])); return Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(f[1]), ev[i])); })(), now: now(),
            rain_until: await rainUntil(), weather: weatherView(now()), showers: showersIn(now() - 3 * DAY, now() + DAY), dry_limit: DRY_LIMIT, gifts_left: await giftsLeft(u.id), gifts_per_day: GIFTS_PER_DAY,
            ...(await kitchenOf(Number(f[0]))),
@@ -1644,6 +1645,13 @@ export async function visit(u: any, pub: string) {
              const ss = { ...ii.strains, ...(await strains([...plots.map((p) => p[1]), ...shop.map((x) => x[0])])) };
              return { strains: ss, shop: shop.map(([strain, n]) => ({ strain, count: Number(n), price: ss[strain] ? sellerPrice(ss[strain].price!, own["s:" + strain]) : 0 })) };
            })()), bonuses: BONUSES };
+  // Только ферма хозяина канала (g_meta «owner»): его первое странное растение гости видят ростком, пока он его не соберёт
+  // (его решение 2026-11-19: «не хочу, чтобы заранее видели, во что оно вырастает; только на этот первый раз; остальных не касается»).
+  // После первого сбора (f_evlog «odd:reaped») — как есть.
+  const ownerId = String((await q("SELECT value FROM g_meta WHERE key = 'owner'"))[0]?.[0] || "");
+  if (ownerId && String(f[0]) === ownerId && !(await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = 'odd:reaped' LIMIT 1", [f[0]])).length)
+    res.plots = res.plots.map((v: any) => v.crop && res.strains[v.crop]?.odd ? { ...v, veil: 1 } : v);
+  return res;
 }
 
 // ---------- лавка ----------
