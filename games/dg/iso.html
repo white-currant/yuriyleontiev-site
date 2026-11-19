@@ -257,7 +257,11 @@
   // Без сервера (страница открыта сама по себе) — как раньше, пробный бой.
   var RUN = (location.search.match(/run=([0-9a-f]+)/) || [])[1] || "", dgCall = (function () { try { return parent !== window && parent.dgCall; } catch (e) { return null; } })(), sent = null;
   function report(got) { if (!RUN || !dgCall) return Promise.resolve(); if (!sent) sent = dgCall("/api/dg/finish", { run: RUN, bones: got, dead: hero.st === "dead", card: cardGot }).catch(function () {}); return sent; }
-  function home() { var b = document.getElementById("leave"); b.disabled = true; report(hero.st === "dead" ? 0 : bones).then(function () { location.href = "hub.html?v=" + Date.now(); }); }
+  function home() { var b = document.getElementById("leave"); b.disabled = true; report(hero.st === "dead" ? 0 : bones).then(function () {
+    var tries = 0;                                                                   // убежище отвечает — переходим; нет — ещё попытки (сбои GitHub, 2026-11-19)
+    (function attempt() { fetch("hub.html?probe=" + Date.now(), { cache: "no-store" }).then(function (r) { if (!r.ok) throw 0; location.href = "hub.html?v=" + Date.now(); })
+      .catch(function () { if (++tries < 4) return setTimeout(attempt, 1000); b.disabled = false; b.textContent = "нет связи · ещё раз"; var hb = document.getElementById("home"); if (hb) hb.textContent = "Нет связи — ещё раз"; }); })();
+  }); }
   function finish(title, sub) { done = true; report(hero.st === "dead" ? 0 : bones);
     document.getElementById("overt").textContent = title; document.getElementById("overs").textContent = sub; setTimeout(function () { document.getElementById("over").classList.add("on"); }, 700); }
   if (RUN) document.getElementById("again").hidden = true;                    // новый поход — снова через убежище: он стоит еды
@@ -355,7 +359,7 @@
       if (ed < .32) { var push = (.32 - ed) / 2; a2.u -= eu / ed * push; a2.v -= ev / ed * push; b2.u += eu / ed * push; b2.v += ev / ed * push; }
     }
     cur.drops = cur.drops.filter(function (d2) { d2.t += dt; if (hero.st !== "dead" && d2.t > .3 && Math.hypot(d2.u - hero.u, d2.v - hero.v) < .3) { bones++; hud(); fx.push({ k: "plus", u: d2.u, v: d2.v, t: 0 }); drawMap(); return false; } return true; });
-    fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : f.k === "heal" ? .9 : .32); });
+    fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : f.k === "heal" ? 1.4 : .32); });
     if (cur.card && hero.st !== "dead" && Math.hypot(cur.card.u - hero.u, cur.card.v - hero.v) < .45) {      // легендарная карта — в руки
       fx.push({ k: "poof", u: cur.card.u, v: cur.card.v, t: 0 }); cur.card = null; cardGot = true; banner = 2.6; drawMap(); }
     banner = Math.max(0, banner - dt);
@@ -379,6 +383,29 @@
     for (var q = 0; q < 26; q++) { var ph = (T * .25 + q * .0385) % 1, x = 64 + Math.sin(T * .9 + q * 2.4) * 22, y = 110 - ph * 80;
       secG.fillStyle = q % 3 ? "rgba(201,180,255," + (0.7 * (1 - ph)) + ")" : "rgba(255,240,255," + (0.8 * (1 - ph)) + ")"; secG.fillRect(Math.round(x), Math.round(y), 3, 2); }
     var a = S(wl.i, wl.j); ctx.drawImage(secC, Math.round(a[0]) - 64, Math.round(a[1]) - 66);
+  }
+  // руна платформы лечения (его правка 2026-11-19): её рисунок заполняется светом в разные стороны — середина от центра наружу,
+  // звезда против часовой, кольцо от верха в обе стороны, в конце — четыре камня по углам; после лечения рисунок блёклый
+  var RUNE = null;
+  function runePx() {
+    if (RUNE) return RUNE; var im = IMG.circle, c = mk(im.width, im.height), g = c.getContext("2d"); g.drawImage(im, 0, 0);
+    var d = g.getImageData(0, 0, im.width, im.height).data, out = [], cx = 63, cy = 32;
+    for (var y = 0; y < im.height; y++) for (var x = 0; x < im.width; x++) { var o = (y * im.width + x) * 4, r = d[o], gg = d[o + 1], b = d[o + 2];
+      if (d[o + 3] < 200 || b < 150 || gg < 110 || r > 140 || (x > 95 && y < 26)) continue;
+      var dx = x - cx, dy = y - cy, e = Math.hypot(dx / 31, dy / 16), an = Math.atan2(dx, -dy * 2), th;   // угол от верха, по часовой
+      if (e <= .32) th = e / .32 * .22;
+      else if (e <= .84) th = .2 + ((Math.PI - an) / (2 * Math.PI)) * .42;          // звезда — против часовой
+      else if (e <= 1.15) th = .58 + Math.abs(an) / Math.PI * .34;                     // кольцо — от верха в обе стороны
+      else if (e <= 1.8) th = .93 + (e - 1.15) * .05;                                  // камни по углам
+      else continue;
+      out.push([x, y, Math.min(.99, th)]); }
+    return (RUNE = out);
+  }
+  function runeDraw(hl) {
+    var px0 = runePx(), s = S(hl.u, hl.v), ox = Math.round(s[0] - IMG.circle.width / 2), oy = Math.round(s[1] - IMG.circle.height / 2), k = hl.t / 3;
+    if (hl.used) { ctx.fillStyle = "rgba(58,62,84,.92)"; px0.forEach(function (q) { ctx.fillRect(ox + q[0], oy + q[1], 1, 1); }); return; }   // израсходована — рисунок блёклый
+    if (k <= 0) return;
+    px0.forEach(function (q) { if (k < q[2]) return; var fr = k - q[2]; ctx.fillStyle = fr < .03 ? "#ffffff" : fr < .1 ? "#c8ffe8" : "#6ff0c0"; ctx.fillRect(ox + q[0], oy + q[1], 1, 1); });
   }
   function heroFrame() {
     var name, i;
@@ -460,6 +487,7 @@
       cur.floorC = fc; cur.floorO = [mnX, mnY];
     }
     var o0 = S(0, 0), p00 = P(0, 0); ctx.drawImage(cur.floorC, o0[0] - p00[0] + cur.floorO[0], o0[1] - p00[1] + cur.floorO[1]);
+    if (cur.heal && IMG.circle.complete) runeDraw(cur.heal);
     // стены, предметы, герой и слизни — по глубине (стена за клеткой: глубина середины её края)
     var list = [];
     // стены — его тайлы (2026-11-19): кадр 128×128 рисуется со сдвигом (−64, −66) от верхней вершины клетки; дальние раньше ближних —
@@ -515,7 +543,7 @@
     for (j = 0; j < cur.h; j++) for (i = 0; i < cur.w; i++) if (cur.floor[j][i] === 7 && cur.open[j][i]) { var rs2 = S(i + .5, j + .5); glow(rs2[0], rs2[1], 80, "rgba(120,180,255,A)", .55 + .2 * Math.sin(t * 2.2 + i)); }   // руна светится
     var hs = S(hero.u, hero.v); glow(hs[0], hs[1] - 18, 90, "rgba(225,215,255,A)", .7);
     cur.walls.forEach(function (wl) { if (!wl.secret) return; var s = wl.side === "v" ? S(wl.i + .5, wl.j) : S(wl.i, wl.j + .5); glow(s[0], s[1] - 30, 150, "rgba(190,130,255,A)", 1.1 + Math.sin(t * 1.8) * .15); });   // странная дверь
-    if (cur.heal) { var hs3 = S(cur.heal.u, cur.heal.v), hk = cur.heal.used ? .12 : .45 + .15 * Math.sin(t * 2) + cur.heal.t / 3 * .9; glow(hs3[0], hs3[1] - 4, 110, "rgba(110,230,170,A)", hk); }   // платформа: разгорается, пока стоишь
+    if (cur.heal) { var hs3 = S(cur.heal.u, cur.heal.v), hk = cur.heal.used ? .05 : .45 + .15 * Math.sin(t * 2) + cur.heal.t / 3 * 1.1; glow(hs3[0], hs3[1] - 4, 110, "rgba(110,230,170,A)", hk); }   // платформа: разгорается, пока стоишь
     if (cur.card) { var cs = S(cur.card.u, cur.card.v); glow(cs[0], cs[1] - 18, 110, "rgba(180,130,255,A)", .8 + Math.sin(t * 2.4) * .1); }
     cur.drops.forEach(function (d) { var s = S(d.u, d.v); glow(s[0], s[1] - 6, 20, "rgba(255,240,200,A)", .35); });
     ctx.globalCompositeOperation = "multiply"; ctx.drawImage(lightC, 0, 0, W + 1, H + 1); ctx.globalCompositeOperation = "source-over";
@@ -533,8 +561,14 @@
       ctx.lineWidth = 2; ctx.strokeStyle = "rgba(10,20,16,.6)"; ctx.beginPath(); ctx.arc(hp3[0], hp3[1] - 52, 7, 0, 7); ctx.stroke();
       ctx.strokeStyle = "#8ff0bf"; ctx.beginPath(); ctx.arc(hp3[0], hp3[1] - 52, 7, -Math.PI / 2, -Math.PI / 2 + k3 * Math.PI * 2); ctx.stroke();
       px(ctx, hp3[0] - 1, hp3[1] - 55, 2, 6, "#8ff0bf"); px(ctx, hp3[0] - 3, hp3[1] - 53, 6, 2, "#8ff0bf"); }
-    fx.forEach(function (f) { if (f.k !== "heal") return; var s9 = S(f.u, f.v), k9 = f.t / .9;                       // вылечился: зелёные крестики вверх
-      for (var q9 = 0; q9 < 8; q9++) { var a9 = q9 * .785, d9 = 6 + k9 * 18; ctx.globalAlpha = 1 - k9; px(ctx, s9[0] + Math.cos(a9) * d9 - 1, s9[1] - 14 + Math.sin(a9) * d9 * .5 - k9 * 20, 2, 2, q9 % 2 ? "#c8ffe0" : "#5ee0a0"); }
+    fx.forEach(function (f) { if (f.k !== "heal") return; var s9 = S(f.u, f.v), k9 = f.t / 1.4, rp = runePx(),          // вылечился: искры взлетают с рисунка руны
+      ox9 = Math.round(s9[0] - IMG.circle.width / 2), oy9 = Math.round(s9[1] - IMG.circle.height / 2);
+      if (k9 < .25) { ctx.globalAlpha = 1 - k9 / .25; ctx.fillStyle = "#ffffff"; rp.forEach(function (q) { ctx.fillRect(ox9 + q[0], oy9 + q[1], 1, 1); }); }   // вспышка всего рисунка
+      for (var q9 = 0; q9 < 46; q9++) { var pq = rp[(q9 * 97) % rp.length], dl = (q9 % 7) * .03, kk = Math.max(0, Math.min(1, (k9 - dl) / (1 - dl))); if (!kk) continue;
+        var sx9 = ox9 + pq[0] + Math.sin(q9 * 1.7 + kk * 6) * 3 * kk, sy9 = oy9 + pq[1] - kk * (26 + (q9 % 5) * 7);
+        ctx.globalAlpha = 1 - kk; ctx.fillStyle = q9 % 3 === 0 ? "#ffffff" : q9 % 3 === 1 ? "#b8ffe0" : "#5ee0a0"; ctx.fillRect(Math.round(sx9), Math.round(sy9), q9 % 4 ? 1 : 2, q9 % 4 ? 1 : 2); }
+      for (var c9 = 0; c9 < 6; c9++) { var a9 = c9 * 1.047 + k9 * 2, d9 = 8 + k9 * 20; ctx.globalAlpha = Math.max(0, 1 - k9 * 1.4);      // зелёные крестики вокруг героя
+        px(ctx, s9[0] + Math.cos(a9) * d9 - 1, s9[1] - 24 + Math.sin(a9) * d9 * .5 - k9 * 16, 2, 2, "#c8ffe0"); }
       ctx.globalAlpha = 1; });
     cur.walls.forEach(function (wl) { if (!wl.secret) return; var s = wl.side === "v" ? S(wl.i + .5, wl.j) : S(wl.i, wl.j + .5);   // туман из странной двери
       for (var q2 = 0; q2 < 14; q2++) { var ph2 = (t * .3 + q2 * .071) % 1; ctx.globalAlpha = (1 - ph2) * .85;   // выползает на пол комнаты
@@ -559,7 +593,22 @@
   }
 
   var last = 0; function loop(ts) { requestAnimationFrame(loop); var dt = Math.min(.05, (ts - last) / 1000 || 0); last = ts; update(dt); draw(ts); }
-  function start() { reset(); requestAnimationFrame(loop); }
+  // оплата едой — здесь, когда страница боя уже открылась (его жалоба 2026-11-19: GitHub отдавал 404 вместо боя, а еду убежище уже списало).
+  // В адресе pay=1 — новый поход: просим сервер начать (он съедает еду) и меняем адрес на run=…, чтобы перезагрузка не платила второй раз
+  function start() {
+    if (/pay=1/.test(location.search) && dgCall && !RUN) {
+      var ov = document.getElementById("over"); document.getElementById("overt").textContent = "Спускаемся…"; document.getElementById("overs").textContent = "";
+      document.getElementById("again").hidden = true; document.getElementById("home").hidden = true; ov.classList.add("on");
+      dgCall("/api/dg/start", { size: SIZEK }).then(function (r) {
+        if (r.error) { document.getElementById("overt").textContent = r.error; document.getElementById("home").hidden = false; return; }
+        RUN = r.run; SECRET = !!r.secret;
+        try { history.replaceState(null, "", "iso.html?size=" + r.size + "&run=" + r.run + (r.secret ? "&secret=1" : "") + "&v=" + Date.now()); } catch (e) {}
+        document.getElementById("home").hidden = false; reset(); requestAnimationFrame(loop);
+      }).catch(function () { document.getElementById("overt").textContent = "Нет связи с сервером — еда не потрачена"; document.getElementById("home").hidden = false; });
+      return;
+    }
+    reset(); requestAnimationFrame(loop);
+  }
   window.__game = { scr: function (u, v) { return S(u, v); }, hero: function () { return hero; }, room: function () { return cur; }, rooms: function () { return rooms; }, keys: keys, hit: function () { wantHit = true; }, frame: function (ts) { draw(ts); }, joy: function (x, y) { joy.dx = x; joy.dy = y; }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; var p2 = P(hero.u, hero.v); camX = p2[0]; camY = p2[1]; drawMap(); }, step: function (dt) { update(dt); draw(performance.now()); } };
 })();
 </script>

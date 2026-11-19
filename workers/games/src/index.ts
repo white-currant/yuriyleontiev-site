@@ -511,6 +511,7 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/roof": return json(await farm.setRoof(user, String(body.color || "")));
     case "/api/farm/shell": return json(await farm.dustShell(user));
     case "/api/farm/decor": return json(await farm.setDecor(user, String(body.slot || ""), String(body.item || ""), body.on !== false));
+    case "/api/farm/fertilize": return json(await farm.fertilize(user, Number(body.idx)));
     case "/api/farm/water": return json(await farm.water(user, Number(body.idx)));
     case "/api/farm/fill": return json(await farm.fill(user));
     case "/api/farm/book": return json(await farm.book(user));

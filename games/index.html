@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611192019";
+    var BUILD = "202611192126";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1000,7 +1000,7 @@
   <!-- «Лунная ферма»: свой участок, гости, пластинки -->
   <section class="screen" id="farm" hidden>
     <div class="scene">
-      <div class="farm-top"><button class="exit" type="button" data-go="home">← Гильдия</button><div class="pills"><button type="button" class="dust-pill gempill" id="gempill" aria-label="Самоцветная пыль" hidden><canvas class="pix" id="gemicon"></canvas><span id="gemn"></span></button><button type="button" class="dust-pill decorbtn" id="decorbtn" aria-label="Вид фермы"><canvas class="pix" id="decoricon"></canvas></button><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
+      <div class="farm-top"><button class="exit" type="button" data-go="home">← Гильдия</button><div class="pills"><button type="button" class="dust-pill gempill" id="gempill" aria-label="Самоцветная пыль" hidden><canvas class="pix" id="gemicon"></canvas><span id="gemn"></span></button><button type="button" class="dust-pill gempill" id="fertpill" aria-label="Удобрение" hidden><canvas class="pix" id="ferticon"></canvas><span id="fertn"></span></button><button type="button" class="dust-pill decorbtn" id="decorbtn" aria-label="Вид фермы"><canvas class="pix" id="decoricon"></canvas></button><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
       <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div><div class="toolbox" id="toolbox"></div>
     </div>
     <div id="farmbanners"></div>
@@ -3694,7 +3694,7 @@
              o: "#ff9f43", O: "#c8661a", v: "#c4a3ff", V: "#7a52c8", n: "#a0683a", N: "#6e4425", s: "#f4f0ff",
              a: "#24242c", A: "#45454f", z: "#6c6c78", f: "#ff7a2e", F: "#ffd166", Q: "#ff2a3a", q: "#8a1420" };
   var DISH = {
-    "p:fert":    ["......eg......", ".....egGg.....", "......Gk......", "....kkmmkk....", "...knnnnnNk...", "..knnngnnnNk..", "..kngGgnnnNk..", "..knngnnnnNk..", "..knnnnnnNNk..", "...kkkkkkkk..."],   // удобрение из подземелья (2026-11-19): мешок с ростком
+    "p:fert":    ["..kkkkkkkkkk..", "..khbhbhbhbk..", "..kkkkkkkkkk..", ".kbbbbbbbbbBk.", ".kbGGGGGGGGBk.", ".kbWWGGGGWWBk.", ".kbGWWWWWWGBk.", ".kbGWWWWWWGBk.", ".kbWWGGGGWWBk.", ".kbGGGGGGGGBk.", ".kbbbbbbbbbBk.", ".kBBBBBBBBBBk.", "..kkkkkkkkkk.."],   // удобрение (его правка 2026-11-19): бумажный пакетик с костью на зелёной наклейке; другие удобрения — другим цветом наклейки
     "p:gem":     ["......kk......", ".....kssk.....", "....ksvvVk....", "...ksvvvvVk...", "..ksvsvvvVVk..", "..kvvvvvVVVk..", "...kVvvvVVk...", "....kVVVVk....", ".....kVVk.....", "......kk......"],
     "p:gemdust": ["...s......v...", ".v.....s....s.", "....kkkkkk....", "...kmVVVVmk...", "....kVVVVk....", "...kvvsvvvVk..", "..kvvvvvsvVVk.", "..kvsvvvvvVVk.", "..kvvvvvvVVVk.", "...kkkkkkkkk.."],
     "p:coal":    ["......F.......", ".....kfk......", "...kkAzkk.....", "..kAzzAaAkk...", ".kAzAaAfAzAk..", ".kaAaFaAaAaAk.", "kaAfaAaAzaAaAk", "kaaAaaAfaAaaak", ".kkaaaaaaaakk.", "...kkkkkkkk..."],
@@ -4048,12 +4048,13 @@
     }
     var gA = gemSel ? (F.gemA || 0) : 0, gIn = !!(F.sel === "gem");
     // грядки, которые сейчас ускоряет странное растение: [грядка, доля] — для бледных искр
-    var fastBeds = [];
+    var fastBeds = [], fertBeds = [];                                          // fertBeds — удобренные: [грядка, пакетиков]
     if (f && f.plots) f.plots.forEach(function (pl) {
       if (!pl || !pl.crop || !BC[pl.idx] || pl.burning || pl.coal) return;
       var inf = plotInfo(pl, now, ss, f.dry_limit || 1e9); if (inf && !inf.ripe && !inf.dead && inf.fast > .02) fastBeds.push([pl.idx, inf.fast]);
+      if (inf && !inf.ripe && !inf.dead && pl.fert) fertBeds.push([pl.idx, pl.fert]);
     });
-    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !bfx.length && !efx.length && !gemLive.length && !gemEnd.length && !millGem.length && !fastBeds.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
+    if (!sun && !mossy && !fire && !moonlit && !(gemSel && gA > 0) && !stars.length && !myth.length && !gfx.length && !bfx.length && !efx.length && !gemLive.length && !gemEnd.length && !millGem.length && !fastBeds.length && !fertBeds.length) { if (!L.box.hidden) { L.box.hidden = true; } return; }
     L.box.hidden = false;
     var W = L.fx.clientWidth, H = L.fx.clientHeight; if (!W || !H) return;
     var dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
@@ -4124,6 +4125,16 @@
         var ox = (hash01(sd + 1) - .5) * 22, oy = (hash01(sd + 2) - .5) * 10;                      // держатся над самой грядкой, к соседним не улетают
         if (Math.abs(ox) / 22 + Math.abs(oy) / 10 > .5) { ox *= .6; oy *= .6; }
         spark((p[0] + ox) * kx, (p[1] - 1 + oy - ph * 7) * ky, (.7 + hash01(sd + 3) * .5) * dpr, n % 2 ? "#d9ccff" : "#f4f0ff", Math.sin(ph * Math.PI) * (.55 + .45 * fb[1]), sd);
+      }
+    });
+    // удобренная грядка (2026-11-19): зелёные искорки поднимаются от земли — с двумя пакетиками их вдвое больше
+    fertBeds.forEach(function (fb) {
+      var p = BC[fb[0]];
+      for (var n = 0; n < 4 * fb[1]; n++) {
+        var sd = n * 9.1 + fb[0] * 23 + 3, ph = ((t / 2400) + hash01(sd)) % 1;
+        var ox = (hash01(sd + 1) - .5) * 24, oy = (hash01(sd + 2) - .5) * 11;
+        if (Math.abs(ox) / 24 + Math.abs(oy) / 11 > .5) { ox *= .6; oy *= .6; }
+        spark((p[0] + ox) * kx, (p[1] - 1 + oy - ph * 10) * ky, (.7 + hash01(sd + 3) * .5) * dpr, n % 2 ? "#9ff2a8" : "#e2ffd8", Math.sin(ph * Math.PI) * .8, sd);
       }
     });
     // растворение: искры взмывают и расходятся, свечение гаснет, напоследок — короткое кольцо
@@ -4357,7 +4368,7 @@
   var UPGRADES_ON = false;            // прокачка мельницы и печи готова, но пока выключена (его решение 2026-11-16: сначала только отмена)
   // выбранная самоцветная пыль не «прилипает» (жалоба Дениса 2026-11-17: ушёл в магазин, в покраску крыш — пыль осталась в руке,
   // а потом тратится от нажатия на грядку, чтобы глянуть время): любое другое окно или уход с фермы кладут пыль обратно, в руке — лейка
-  function dropGem() { if (typeof F === "undefined" || F.sel !== "gem") return; F.sel = "can"; try { renderHotbar(); renderFarm(); } catch (e) {} }
+  function dropGem() { if (typeof F === "undefined" || (F.sel !== "gem" && F.sel !== "fert")) return; F.sel = "can"; try { renderHotbar(); renderFarm(); } catch (e) {} }
   function sheet(build, keepGem) {
     if (!keepGem) dropGem();
     var w = document.createElement("div"); w.className = "sheet-wrap"; var sh = document.createElement("div"); sh.className = "sheet";
@@ -4738,7 +4749,8 @@
       var gemX = mk.indexOf("g2") >= 0; if (gemX) gain *= 2;                        // бирюзовая самоцветная пыль — ещё ×2
       var mo2 = monoOf(s, now), mossX = !!(mo2 && mo2.kind === "moss" && inf.s.shape === "moss"); if (mossX) gain *= 2;   // мох захватил ферму — мох ×2
       s.marks = marksOf(s).filter(function (m) { return !(m.idx === pl.idx && (m.kind === "star" || m.kind === "myth" || m.kind === "g2" || m.kind === "gseed" || m.kind === "gcross")) && !(inf.s.myth && (m.kind === "myth" || m.kind === "mythripe")); });
-      var pts = " · +" + inf.s.points + " " + plural(inf.s.points, "очко", "очка", "очков");
+      var ptN = pl.fert_c ? Math.max(2, Math.round(inf.s.points * (1 - Math.min(.6, pl.fert_c / (inf.s.minutes * 60))))) : inf.s.points;   // удобренное — очки по фактическому времени (как на сервере)
+      var pts = " · +" + ptN + " " + plural(ptN, "очко", "очка", "очков");
       haptic("success"); addFx("harvest", pl.idx, inf.s);
       var oddW = inf.s.odd ? 1700 : 0;                                              // странное: сначала глаз над грядкой, урожай летит потом
       if (inf.s.odd) { (F.oddFx = F.oddFx || []).push({ i: pl.idx, t0: Date.now() }); farmAnim(); setTimeout(function () { haptic("medium"); }, 480); setTimeout(function () { haptic("light"); }, 1150); }
@@ -4770,6 +4782,19 @@
         var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl); };
         if (r.hybrid) setTimeout(function () { showHybrid(r.hybrid, next); }, 500); else if (r.vinyl) setTimeout(next, 500);
       }).catch(function () {});
+    }
+    if (F.sel === "fert") {                                                         // удобрение: оставшееся время сразу сокращается (как на сервере)
+      var fb2 = barnOf("p:fert"), fn = pl.fert || 0;
+      if (!fb2 || fb2.count < 1) { F.sel = "can"; renderHotbar(); return toast("Удобрение кончилось"); }
+      if (inf.s.odd) { haptic("error"); return toast("Странное растение не торопится — удобрение на него не действует"); }
+      if (inf.ripe) { haptic("error"); return toast("Уже созрело — собери урожай"); }
+      if (fn >= 2) { haptic("error"); return toast("Больше двух удобрений на одну посадку нельзя"); }
+      var cr = Math.round(inf.left * (1 - (1 + fn / 3) / (1 + (fn + 1) / 3)));
+      var q3 = F.state.plots[pl.idx] || pl;                                          // правим саму грядку в состоянии фермы — экран сразу показывает новое время
+      haptic("success"); fb2.count--; q3.grown += cr; q3.fert = fn + 1; q3.fert_c = (q3.fert_c || 0) + cr; if (q3 !== pl) { pl.grown = q3.grown; pl.fert = q3.fert; pl.fert_c = q3.fert_c; }
+      if (typeof statics !== "undefined") statics = {}; renderHotbar(); renderFarm();
+      floatText(pl.idx, fn ? "удобрение ×2 — ещё быстрее" : "удобрено: растёт быстрее", "big");
+      return farmCall("/api/farm/fertilize", { idx: pl.idx }).catch(function () {});
     }
     if (F.sel === "gem") {                                                          // самоцветная пыль: что делает — зависит от цвета
       var kind = F.gemKind, gk = GEMK[kind], gd2 = gk && barnOf(gk.dust);
@@ -5102,7 +5127,7 @@
       redraw(); renderHotbar();
     };
   }
-  function isTool(k) { return k === "can" || k === "shovel" || k === "gem"; }
+  function isTool(k) { return k === "can" || k === "shovel" || k === "gem" || k === "fert"; }
   var SHOVEL = new Image(); SHOVEL.src = "art/shovel-v.png";   // его выбор: прямая лопата 16×16
   function toolsCol(onPick) {                                   // лейка и лопата: свои маленькие ячейки, не среди семян
     var col = el("div", "tools");
@@ -5117,9 +5142,18 @@
     return col;
   }
   // кнопка пыли — наверху вместо капель (его решение 2026-11-16), видна, пока в амбаре есть пыль; нажатие — меню выбора
+  // удобрение (его решение 2026-11-19): пакетик в верхней полоске, как самоцветная пыль — нажал на него, потом на растущую грядку
+  function fertPill() {
+    var b = $("fertpill"); if (!b || !F.state) return; var fb = barnOf("p:fert"), n = fb ? fb.count : 0;
+    if (!n) { b.hidden = true; if (F.sel === "fert") F.sel = "can"; return; }
+    b.hidden = false; b.classList.toggle("on", F.sel === "fert");
+    if (b.dataset.k !== String(n)) { b.dataset.k = String(n); itemIcon($("ferticon"), "p:fert"); setText($("fertn"), String(n)); }
+  }
+  document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("#fertpill")) { haptic("light"); F.sel = F.sel === "fert" ? "can" : "fert"; renderHotbar(); renderFarm(); } });
   function gemPill() {
+    fertPill();
     var b = $("gempill"); if (!b || !F.state) return;
-    var on = F.sel === "gem"; $("toshop").hidden = on; $("toneighbors").hidden = on; $("gemcancel").hidden = !on;   // пыль выбрана — внизу «Отменить» (его просьба 2026-11-17)
+    var on = F.sel === "gem" || F.sel === "fert"; $("toshop").hidden = on; $("toneighbors").hidden = on; $("gemcancel").hidden = !on;   // пыль выбрана — внизу «Отменить» (его просьба 2026-11-17)
     var have = gemDusts();
     if (!have.length) { b.hidden = true; if (F.sel === "gem") F.sel = "can"; return; }
     if (have.indexOf(F.gemKind) < 0) F.gemKind = have[0];
@@ -5194,6 +5228,7 @@
   }
   function selText() {
     var s = F.state;
+    if (F.sel === "fert") return "Удобрение: нажми на растущую грядку — растёт на треть быстрее, второй пакетик — ещё на треть. Не больше двух, странное растение не ускоряет.";
     if (F.sel === "gem") { var gkk = GEMK[F.gemKind] || GEMK.moon;
       return itemName(gkk.dust) + ": нажми " + (gkk.mark ? "на грядку" : "на растущую грядку") + " — " + gkk.does + "."; }
     if (F.sel === "shovel") return "Лопата: нажми на посаженную грядку, чтобы выкопать растение — семя вернётся в инвентарь (очки за посадку и полив спишутся). Созревшее лопата просто соберёт.";

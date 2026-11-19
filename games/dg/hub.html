@@ -86,6 +86,39 @@
   .btn.alt { background: #3a3e4b; box-shadow: 0 0 0 calc(var(--u) * .8) #14151b, inset 0 calc(var(--u) * -1.2) 0 #23252e, inset 0 calc(var(--u) * .8) 0 #5a5f70; color: var(--cream); }
   .btn:disabled { opacity: .45; }
   .btn:active { filter: brightness(1.2); }
+  /* окно котла — в стиле перегонного куба с его фона (2026-11-19): кованое железо с заклёпками, стеклянные колбы, зелёная светящаяся жижа */
+  #sheetbox.cube { background: linear-gradient(#232b2a, #161c1c 60%, #121616); clip-path: none;
+    box-shadow: 0 0 0 calc(var(--u) * .8) #0a0d0d, inset 0 calc(var(--u) * .8) 0 #46524f, inset 0 calc(var(--u) * -1) 0 #0b0f0f, 0 0 calc(var(--u) * 10) rgba(80, 230, 120, .18);
+    background-image: radial-gradient(circle at calc(var(--u) * 3) calc(var(--u) * 3), #5b6a66 calc(var(--u) * .9), transparent calc(var(--u) * 1.1)),
+      radial-gradient(circle at calc(100% - var(--u) * 3) calc(var(--u) * 3), #5b6a66 calc(var(--u) * .9), transparent calc(var(--u) * 1.1)),
+      radial-gradient(circle at calc(var(--u) * 3) calc(100% - var(--u) * 3), #5b6a66 calc(var(--u) * .9), transparent calc(var(--u) * 1.1)),
+      radial-gradient(circle at calc(100% - var(--u) * 3) calc(100% - var(--u) * 3), #5b6a66 calc(var(--u) * .9), transparent calc(var(--u) * 1.1)),
+      linear-gradient(#232b2a, #161c1c 60%, #121616); }
+  #sheetbox.cube .sh-h { color: #b9f7c4; text-shadow: 0 0 calc(var(--u) * 3) rgba(90, 240, 130, .55); }
+  #sheetbox.cube .sh-t { color: #9fc8a9; }
+  #sheetbox.cube .brew .cell { background: linear-gradient(rgba(70, 200, 110, .10), rgba(40, 140, 80, .22)), #0f1514;
+    box-shadow: inset 0 0 0 calc(var(--u) * .8) #3c4a47, inset 0 calc(var(--u) * 1.2) 0 rgba(200, 255, 220, .10), inset 0 calc(var(--u) * -4) calc(var(--u) * 3) rgba(70, 230, 120, .25); }
+  #sheetbox.cube .brew .arrow { position: relative; width: calc(var(--u) * 12); height: calc(var(--u) * 4); background: #2c3634; box-shadow: inset 0 calc(var(--u) * .7) 0 #55625f, inset 0 calc(var(--u) * -.7) 0 #0b0f0f; }
+  #sheetbox.cube .brew .arrow::after { content: ""; position: absolute; right: calc(var(--u) * -3); top: calc(var(--u) * -1.5); border: calc(var(--u) * 3.5) solid transparent; border-left-color: #55625f; border-right: 0; }
+  #sheetbox.cube .brew .arrow i { position: absolute; left: 0; right: 0; top: 30%; bottom: 30%; background: repeating-linear-gradient(90deg, #5ee07e 0 calc(var(--u) * 2), #2f9a52 calc(var(--u) * 2) calc(var(--u) * 4));
+    background-size: calc(var(--u) * 4) 100%; animation: flow 0.7s linear infinite; box-shadow: 0 0 calc(var(--u) * 2) rgba(90, 240, 130, .7); }
+  @keyframes flow { to { background-position: calc(var(--u) * 4) 0; } }
+  #sheetbox.cube .btn { background: linear-gradient(#58d37c, #2f9a52); box-shadow: 0 0 0 calc(var(--u) * .8) #0a0d0d, inset 0 calc(var(--u) * -1.2) 0 #1f6a3a, inset 0 calc(var(--u) * .8) 0 #a6f7bd, 0 0 calc(var(--u) * 4) rgba(90, 240, 130, .35); color: #062010; }
+  #sheetbox.cube .btn.alt { background: #2c3634; box-shadow: 0 0 0 calc(var(--u) * .8) #0a0d0d, inset 0 calc(var(--u) * -1.2) 0 #161c1c, inset 0 calc(var(--u) * .8) 0 #55625f; color: #b9f7c4; }
+  #sheetbox.cube .step .num { color: #b9f7c4; text-shadow: 0 0 calc(var(--u) * 2) rgba(90, 240, 130, .5); }
+  #sheetbox.cube .prog { height: calc(var(--u) * 5); background: #0f1514; box-shadow: inset 0 0 0 calc(var(--u) * .8) #3c4a47, inset 0 calc(var(--u) * 1) 0 rgba(200, 255, 220, .12); position: relative; overflow: hidden; }
+  #sheetbox.cube .prog i { background: linear-gradient(#7ef0a0, #2f9a52); box-shadow: 0 0 calc(var(--u) * 3) rgba(90, 240, 130, .6);
+    background-image: radial-gradient(circle at 20% 60%, rgba(220,255,230,.7) calc(var(--u) * .6), transparent calc(var(--u) * .8)), radial-gradient(circle at 60% 40%, rgba(220,255,230,.6) calc(var(--u) * .5), transparent calc(var(--u) * .7)), linear-gradient(#7ef0a0, #2f9a52);
+    background-size: calc(var(--u) * 10) 100%, calc(var(--u) * 14) 100%, 100% 100%; animation: bub 2.4s linear infinite; }
+  @keyframes bub { to { background-position: calc(var(--u) * 10) 0, calc(var(--u) * -14) 0, 0 0; } }
+  .brew { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: calc(var(--u) * 3); width: 62%; margin: 0 auto; }
+  .brew .cell { cursor: default; }
+  .brew .cell canvas { width: calc(var(--u) * 20); }
+  .brew .arrow { font-size: calc(var(--u) * 8); font-weight: 800; color: #ffcf7a; }
+  .sh-t.c { text-align: center; }
+  .step { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: calc(var(--u) * 3); margin-top: calc(var(--u) * 3); align-items: center; }
+  .step .num { text-align: center; font-size: calc(var(--u) * 7); font-weight: 800; }
+  .step .btn { font-size: calc(var(--u) * 6); }
   .prog { height: calc(var(--u) * 3); background: #15161c; margin: calc(var(--u) * 2) 0; }
   .prog i { display: block; height: 100%; background: linear-gradient(#8fe3a8 0 50%, #3f9e7c 50%); }
   .tag { position: absolute; transform: translate(-50%, -100%); font-size: calc(var(--u) * 3.6); font-weight: 800; letter-spacing: .03em; text-transform: lowercase; color: #f4ead0; text-shadow: 0 0 calc(var(--u) * 1.5) #000, 0 calc(var(--u) * .6) 0 #000; pointer-events: none; white-space: nowrap; }
@@ -104,7 +137,7 @@
     </div>
     <div id="res">
       <div class="cnt pan"><canvas class="ic" id="i-bone" width="12" height="11"></canvas><span id="nbone">0</span></div>
-      <div class="cnt pan"><canvas class="ic" id="i-leaf" width="11" height="10"></canvas><span id="nfert">0</span></div>
+      <div class="cnt pan"><canvas class="ic" id="i-leaf" width="14" height="13"></canvas><span id="nfert">0</span></div>
     </div>
     <button id="gear" class="pan" type="button" aria-label="Настройки"><canvas class="ic" id="i-gear" width="11" height="11"></canvas></button>
   </div>
@@ -449,7 +482,7 @@
   icon("i-heart", [".kk...kk...", "kRrk.kRRk..", "kRrRkRRRk..", "kRRRRRRRk..", "kRRRRRRRk..", ".kRRRRRk...", "..kRRRk....", "...kRk.....", "....k......"], { k: "#4c1010", R: "#e0453a", r: "#ff9a8c" });
   icon("i-bolt", ["....kkk.", "...kBbk.", "..kBbk..", ".kBbkkk.", "kBBBBbk.", "kkkBbk..", "..kBbk..", ".kBbk...", ".kbk....", ".kk....."], { k: "#0e2c50", B: "#7cc8ff", b: "#3f96e6" });
   icon("i-bone", ["........kk..", ".......kWWk.", "......kWWWWk", ".....kWWkWwk", "....kWWk.kk.", "...kWWk.....", ".kkWWk......", "kWWkwk......", "kWWWwk......", ".kWwk.......", "..kk........"], { k: "#3c362d", W: "#efe8d6", w: "#b9b09a" });
-  icon("i-leaf", [".kk.....kk.", "kGgk...kgGk", "kGgGk.kGgGk", "kGGGGkGGGGk", ".kGGGGGGGk.", "..kkGGGkk..", "....kGk....", "....kGk....", "....kGk....", ".....k....."], { k: "#113a18", G: "#4bc35a", g: "#a8f59a" });
+  icon("i-leaf", ["..kkkkkkkkkk..", "..khbhbhbhbk..", "..kkkkkkkkkk..", ".kbbbbbbbbbBk.", ".kbGGGGGGGGBk.", ".kbWWGGGGWWBk.", ".kbGWWWWWWGBk.", ".kbGWWWWWWGBk.", ".kbWWGGGGWWBk.", ".kbGGGGGGGGBk.", ".kbbbbbbbbbBk.", ".kBBBBBBBBBBk.", "..kkkkkkkkkk.."], { k: "#3a2414", h: "#f2c27a", b: "#d99a52", B: "#9a6430", G: "#3f8f3a", W: "#fbf4e4" });   // счётчик удобрений — тот же пакетик
   icon("i-gear", ["....kkk....", ".kk.kSk.kk.", "kSSkSSSkSSk", ".kSSSSSSSk.", "kkSSkkkSSkk", "kSSSk.kSSSk", "kkSSkkkSSkk", ".kSSSSSSSk.", "kSSkSSSkSSk", ".kk.kSk.kk.", "....kkk...."], { k: "#101116", S: "#b4bac8" });
   icon("i-face", [
     ".....kkkkkkkk.....", "....khHHHHHHhk....", "...khHHHHHHHHhk...", "..khHHhddddhHHhk..", "..khHhddddddhHhk..", "..khHddddddddHhk..",
@@ -531,7 +564,7 @@
   function show(fn) { pick.classList.remove("on"); open = fn; sheet.classList.add("on"); fn(); }   // окно одно: выбор спуска закрывается
   function hide() { open = null; sheet.classList.remove("on"); clearInterval(tick); }
   sheet.addEventListener("click", function (e) { if (e.target === sheet) hide(); });
-  function head(t) { box.innerHTML = ""; box.appendChild(el("div", "sh-h", t)); }
+  function head(t) { box.innerHTML = ""; box.classList.toggle("cube", open === brewView); box.appendChild(el("div", "sh-h", t)); }
   function noServer() { box.appendChild(el("div", "sh-t", "Открой подземелье из фермы — тогда здесь будут твой амбар, рюкзак и котёл.")); }
 
   // рюкзак: сверху ячейки с едой на спуск и сытость, ниже — еда из амбара
@@ -614,44 +647,62 @@
     two.appendChild(put); two.appendChild(take); box.appendChild(two);
   }
 
-  // котёл: 40 костей — одно удобрение, варятся по очереди по 30 минут; готовое само ложится в амбар
+  // котёл (его правка 2026-11-19): ячейка с костями → стрелка → ячейка с удобрением, счётчик сколько варить, меньше текста
+  var brewN = 1;
+  function boneCell(n) { var b = el("div", "cell"), c = el("canvas"), src = $("i-bone"); c.width = src.width; c.height = src.height; c.getContext("2d").drawImage(src, 0, 0); b.appendChild(c); b.appendChild(el("b", "", String(n))); return b; }
   function brewView() {
     head("Перегонный куб"); if (!D) return noServer();
-    var br = D.brew, nowS = Date.now() / 1000 - D.t0, left = br.n ? br.per - ((nowS - br.started) % br.per) : 0, can = Math.min(Math.floor(D.bones / br.bones), br.max - br.n);
-    if (br.n && nowS - br.started >= br.per) { load(); }
-    box.appendChild(el("div", "sh-t", "Костей: " + D.bones + ". Из " + br.bones + " костей выходит одно удобрение за " + Math.round(br.per / 60) + " минут. Готовое само ложится в амбар фермы, оттуда его можно выставить на рынок."));
-    if (br.n) {
-      box.appendChild(el("div", "sh-s", "Варится: " + br.n));
-      var pg = el("div", "prog"), pi = el("i"); pi.style.width = Math.round((1 - left / br.per) * 100) + "%"; pg.appendChild(pi); box.appendChild(pg);
-      box.appendChild(el("div", "sh-t", "Следующее через " + Math.floor(left / 60) + ":" + String(Math.floor(left % 60)).padStart(2, "0") + (br.n > 1 ? ", все — через " + Math.ceil((left + (br.n - 1) * br.per) / 60) + " мин" : "")));
-    }
-    if (D.got) { box.appendChild(el("div", "sh-t", "Готово и уже в амбаре: " + D.got)); D.got = 0; }
-    var two = el("div", "two"), b1 = el("button", "btn", "Переплавить 1"), b2 = el("button", "btn alt", "Всё — " + Math.max(can, 0));
-    b1.type = b2.type = "button"; b1.disabled = can < 1; b2.disabled = can < 2;
-    var go = function (n) { return function (e) { e.stopPropagation(); D.bones -= n * br.bones; if (!br.n) br.started = Date.now() / 1000 - D.t0; br.n += n; hud(); brewView(); apply(seq("/api/dg/brew", { n: n })); }; };
-    b1.onclick = go(1); b2.onclick = go(can); two.appendChild(b1); two.appendChild(b2); box.appendChild(two);
-    if (!D.barn) box.appendChild(el("div", "sh-t", "Сначала построй амбар на ферме: удобрение ложится в него."));
-    clearInterval(tick); tick = setInterval(function () { if (open === brewView) brewView(); else clearInterval(tick); }, 1000);
+    var br = D.brew, nowS = Date.now() / 1000 - D.t0, left = br.n ? br.per - ((nowS - br.started) % br.per) : 0, can = Math.max(0, Math.min(Math.floor(D.bones / br.bones), br.max - br.n));
+    brewN = Math.max(can ? 1 : 0, Math.min(brewN, can));
+    var row = el("div", "brew"), arrow = el("div", "arrow"); arrow.appendChild(el("i"));   // труба: по ней течёт зелёная жижа
+    row.appendChild(boneCell(brewN * br.bones)); row.appendChild(arrow); row.appendChild(iconCell("p:fert", null, null, null)); row.lastChild.appendChild(el("b", "", "×" + brewN));
+    box.appendChild(row);
+    box.appendChild(el("div", "sh-t c", "костей у тебя " + D.bones + " · " + br.bones + " на одно · " + Math.round(br.per / 60) + " мин"));
+    var st = el("div", "step"), mi = el("button", "btn alt", "−"), nn = el("div", "num", String(brewN)), pl = el("button", "btn alt", "+");
+    mi.type = pl.type = "button"; mi.disabled = brewN <= 1; pl.disabled = brewN >= can;
+    mi.onclick = function (e) { e.stopPropagation(); brewN--; brewView(); }; pl.onclick = function (e) { e.stopPropagation(); brewN++; brewView(); };
+    st.appendChild(mi); st.appendChild(nn); st.appendChild(pl); box.appendChild(st);
+    var one = el("div", "one"), go = el("button", "btn", can ? "Переплавить" : "Мало костей"); go.type = "button"; go.disabled = !can || !D.barn;
+    go.onclick = function (e) { e.stopPropagation(); var n = brewN; D.bones -= n * br.bones; if (!br.n) br.started = Date.now() / 1000 - D.t0; br.n += n; brewN = 1; hud(); brewView(); apply(seq("/api/dg/brew", { n: n })); };
+    one.appendChild(go); box.appendChild(one);
+    var pi = null, pt = null;
+    if (br.n) { var pg = el("div", "prog"); pi = el("i"); pg.appendChild(pi); box.appendChild(pg); pt = el("div", "sh-t c"); box.appendChild(pt); }
+    function upd() { if (!pi) return; var tn = Date.now() / 1000 - D.t0, lf = br.per - ((tn - br.started) % br.per);
+      if (tn - br.started >= br.per) { load(); return; }                                // одно сварилось — перечитать с сервера
+      pi.style.width = Math.round((1 - lf / br.per) * 100) + "%"; pt.textContent = "варится " + br.n + " · следующее через " + Math.floor(lf / 60) + ":" + String(Math.floor(lf % 60)).padStart(2, "0"); }
+    upd();
+    if (D.got) { tell("Готово — в амбаре: " + D.got); D.got = 0; }
+    if (!D.barn) box.appendChild(el("div", "sh-t c", "нужен амбар на ферме"));
+    clearInterval(tick); tick = setInterval(function () { if (open === brewView) upd(); else clearInterval(tick); }, 1000);   // раз в секунду — только таймер и полоска, течение в трубе не дёргается
   }
 
   // спуск: размер и плата едой из рюкзака
   function pickView() {                                // Странная похлёбка — только в большое (его решение 2026-11-19): в малом и среднем её сытость не считается
     var sat = D ? D.sat : 0, brew = D ? D.pack.filter(function (p) { return rec(p.item) === "brew"; }).reduce(function (a, p) { return a + p.sat; }, 0) : 0;
     $("pickneed").textContent = D ? "В рюкзаке сытость " + sat + (brew ? " — со Странной похлёбкой только в большое" : "") : "Пробный спуск — без фермы еда не нужна";
-    var rs = $("resume"), live = !!(D && D.run); rs.hidden = !live;
+    var rs = $("resume"), live = !!(D && D.run); rs.hidden = !live; rs.disabled = false;
     if (live) $("pickneed").textContent = "Есть начатый поход. Новый спуск — снова за еду, начатый пропадёт";
     if (live) $("resumes").textContent = { s: "малое", m: "среднее", l: "большое" }[D.size] + " · уже оплачен" + (D.secret ? " · тайная комната" : "");
     pick.querySelectorAll("button[data-size]").forEach(function (b) { var z = b.dataset.size; b.disabled = !!D && (z === "l" ? sat : sat - brew) < D.need[z];
       var sm = b.querySelector("small"); if (!sm.dataset.t) sm.dataset.t = sm.textContent; sm.textContent = sm.dataset.t + (z === "l" && brew ? " · тайная комната" : ""); });
   }
+  // переход в бой — только если страница боя отвечает (2026-11-19: GitHub, где лежит сайт, сбоил — вместо боя открывалась его ошибка 404,
+  // а поход уже был оплачен). Не ответила — ещё две попытки, потом остаёмся в убежище; начатый поход можно продолжить
+  function goBattle(url) {
+    var tries = 0;
+    (function attempt() {
+      fetch("iso.html?probe=" + Date.now(), { cache: "no-store" }).then(function (r) { if (!r.ok) throw 0; location.href = url; })
+        .catch(function () { if (++tries < 3) return setTimeout(attempt, 900);
+          tell("Сайт игр не ответил — попробуй ещё раз. Поход сохранён"); pick.classList.remove("on"); load(); });
+    })();
+  }
+  // вернулись «назад» с ошибки — браузер показывает убежище из памяти, с выключенными кнопками: перечитать заново
+  addEventListener("pageshow", function (e) { if (e.persisted) location.reload(); });
   pick.addEventListener("click", function (e) { e.stopPropagation(); var b = e.target.closest("button"); if (!b) { pick.classList.remove("on"); return; }
-    if (b.id === "resume") { location.href = "iso.html?size=" + D.size + "&run=" + D.run + (D.secret ? "&secret=1" : "") + "&v=" + Date.now(); return; }   // уже оплачен — без новой еды
+    if (b.id === "resume") { b.disabled = true; goBattle("iso.html?size=" + D.size + "&run=" + D.run + (D.secret ? "&secret=1" : "") + "&v=" + Date.now()); return; }   // уже оплачен — без новой еды
     if (!dgCall) { location.href = "iso.html?size=" + b.dataset.size + "&v=" + Date.now(); return; }
-    pick.querySelectorAll("button").forEach(function (x) { x.disabled = true; }); b.lastChild.textContent = "спускаюсь…";
-    dgCall("/api/dg/start", { size: b.dataset.size }).then(function (r) {
-      if (r.error) { tell(r.error); pick.classList.remove("on"); return load(); }
-      location.href = "iso.html?size=" + r.size + "&run=" + r.run + (r.secret ? "&secret=1" : "") + "&v=" + Date.now();
-    }).catch(function (e2) { tell(e2.message); pick.classList.remove("on"); });
+    pick.querySelectorAll("button").forEach(function (x) { x.disabled = true; });
+    goBattle("iso.html?size=" + b.dataset.size + "&pay=1&v=" + Date.now());   // еду спишет страница боя, когда откроется (2026-11-19)
   });
   document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation();
     if (bn.classList.contains("go")) { if (D && D.run) { hide(); pickView(); pick.classList.add("on"); return; } if (D && D.hp <= 0) return show(hpView), tell("Герою нужно подлечиться"); if (D && !D.sat) return show(packView), tell("Положи еду в рюкзак"); hide(); pickView(); pick.classList.add("on"); return; }
