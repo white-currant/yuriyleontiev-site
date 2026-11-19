@@ -57,9 +57,10 @@
   function P(u, v) { return [(u - v) * TW / 2, (u + v) * TH / 2]; }      // клетка мира → точка экрана комнаты
 
   // ---------- картинки из его листа ----------
-  var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "floor6", "floor7", "floor8", "floor9", "floor10", "t_blue", "t_violet", "t_lava", "wall_r", "wall_l", "arch_r", "arch_l", "archin_r", "archin_l", "brazier_f0", "brazier_f1", "brazier_f2", "brazier_f3", "brazier_f4", "brazier_f5", "brazier_f6", "brazier_f7", "brazier_f8", "gate_r", "gate_l", "torch_r", "torch_l", "door_r", "door_l",
+  var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "floor6", "floor7", "floor8", "floor9", "floor10", "t_blue", "t_violet", "t_lava", "wu_plain1", "wu_plain2", "wu_plain3", "wu_pil1", "wu_pil2", "wu_pil3", "wu_end", "wu_gate", "wu_door", "wu_arch", "wu_archin", "wu_torch1", "wu_torch2", "wu_torch3",
+    "wv_plain1", "wv_plain2", "wv_plain3", "wv_pil1", "wv_pil2", "wv_pil3", "wv_end", "wv_gate", "wv_door", "wv_arch", "wv_archin", "wv_torch1", "wv_torch2", "wv_torch3", "w_corner", "brazier_f0", "brazier_f1", "brazier_f2", "brazier_f3", "brazier_f4", "brazier_f5", "brazier_f6", "brazier_f7", "brazier_f8",
     "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag"], wait = NAMES.length + 1;
-  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=14"; IMG[n] = im; });
+  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=15"; IMG[n] = im; });
   var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png";
   var CW = 64, CH = 56, AX = 32, AY = 53;
   var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
@@ -137,7 +138,23 @@
       }
       var plain = rm.walls.filter(function (wl) { return wl.k === "wall"; }), nt = Math.min(plain.length, 2 + Math.floor(rr() * 3));
       for (var tt = 0; tt < nt; tt++) { var pk = plain.splice(Math.floor(rr() * plain.length), 1)[0]; pk.k = "torch"; }
-      plain.forEach(function (wl) { if (rr() < .08) wl.k = "gate"; });
+      plain.forEach(function (wl) { var q9 = rr(); if (q9 < .07) wl.k = "gate"; else if (q9 < .13) wl.k = "door"; });
+      // Каменные стены из его тайлов (2026-11-19). Стена идёт «прогонами» вдоль края: у левой («u») — по j, у правой («v») — по i; дальний сосед — far, ближний — near.
+      // Колонна (pil): у ближнего торца прогона, раз в три секции, и по обе стороны от двери, арки, решётки и факела (его правило) — у самой секции и у дальнего соседа.
+      // Вариант рисунка камня (va) — от места, чтобы соседние секции не повторялись.
+      var wmap = {}; rm.walls.forEach(function (wl) { wmap[wl.side + wl.i + "," + wl.j] = wl; });
+      rm.walls.forEach(function (wl) {
+        wl.far = wl.side === "u" ? wmap["u" + wl.i + "," + (wl.j - 1)] : wmap["v" + (wl.i - 1) + "," + wl.j];
+        wl.near = wl.side === "u" ? wmap["u" + wl.i + "," + (wl.j + 1)] : wmap["v" + (wl.i + 1) + "," + wl.j];
+        wl.corner = !!wmap[(wl.side === "u" ? "v" : "u") + wl.i + "," + wl.j];
+        wl.va = 1 + (wl.i * 7 + wl.j * 13 + (wl.side === "u" ? 0 : 5)) % 3;
+      });
+      rm.walls.forEach(function (wl) { if (wl.far) return; var n9 = 0;                 // от дальнего конца прогона к ближнему
+        for (var w9 = wl; w9; w9 = w9.near) { n9++; if (w9.k !== "wall") { w9.pil = true; if (w9.far) w9.far.pil = true; n9 = 0; } else if (!w9.near || n9 >= 3) { w9.pil = true; n9 = 0; } } });
+      rm.walls.forEach(function (wl) {
+        var pre = wl.side === "u" ? "wu_" : "wv_";
+        wl.img = wl.k === "wall" ? pre + (wl.pil ? "pil" + wl.va : !wl.far && !wl.corner ? "end" : "plain" + wl.va) : pre + wl.k;
+      });
       // предметы: в зале — колоннада, в остальных — вразброс; не на проходах и не в центре
       var lane = grid(rm.w, rm.h, 0);
       function mark(i2, j2) { if (i2 >= 0 && j2 >= 0 && i2 < rm.w && j2 < rm.h) lane[j2][i2] = 1; }
@@ -377,15 +394,15 @@
     var o0 = S(0, 0), p00 = P(0, 0); ctx.drawImage(cur.floorC, o0[0] - p00[0] + cur.floorO[0], o0[1] - p00[1] + cur.floorO[1]);
     // стены, предметы, герой и слизни — по глубине (стена за клеткой: глубина середины её края)
     var list = [];
-    var WW = TW / 2 + 1;
-    cur.walls.forEach(function (wl) {
-      // арка: глубина проёма — позади всего (и героя, ушедшего в проход), рамка с дырой — на своём месте
-      if (wl.k === "arch") {
-        if (wl.side === "v") list.push({ z: -10, f: function () { var a = S(wl.i + 1, wl.j), im = IMG.archin_r; ctx.drawImage(im, Math.round(a[0] - WW), Math.round(a[1] - im.height + 2), WW, im.height); } });
-        else list.push({ z: -10, f: function () { var b = S(wl.i, wl.j + 1), im = IMG.archin_l; ctx.drawImage(im, Math.round(b[0]), Math.round(b[1] - im.height + 2), WW, im.height); } });
-      }
-      if (wl.side === "v") list.push({ z: wl.i + wl.j - .01, f: function () { var a = S(wl.i + 1, wl.j), im = IMG[wl.k + "_r"], x0 = Math.round(a[0] - WW), y0 = Math.round(a[1] - im.height + 2); ctx.drawImage(im, x0, y0, WW, im.height); } });
-      else list.push({ z: wl.i + wl.j - .01, f: function () { var b = S(wl.i, wl.j + 1), im = IMG[wl.k + "_l"], x0 = Math.round(b[0]), y0 = Math.round(b[1] - im.height + 2); ctx.drawImage(im, x0, y0, WW, im.height); } });
+    // стены — его тайлы (2026-11-19): кадр 128×128 рисуется со сдвигом (−64, −66) от верхней вершины клетки; дальние раньше ближних —
+    // ближняя секция закрывает торец колонны дальней, и у колонны видна одна грань
+    cur.walls.forEach(function (wl, n4) {
+      var z0 = wl.i + wl.j - .01;
+      var at = function (name) { var a = S(wl.i, wl.j); ctx.drawImage(IMG[name], Math.round(a[0]) - 64, Math.round(a[1]) - 66); };
+      // арка: темнота проёма — позади всего (и героя, ушедшего в проход), стена с дырой — на своём месте
+      if (wl.k === "arch") list.push({ z: -10, f: function () { at(wl.img + "in"); } });
+      list.push({ z: z0, f: function () { at(wl.k === "torch" ? wl.img + [1, 2, 3, 2][Math.floor(T * 7 + n4) % 4] : wl.img); } });   // у факела меняется только пламя
+      if (wl.corner && wl.side === "u") list.push({ z: z0 + .001, f: function () { at("w_corner"); } });                  // внутренний угол — полоса кладки поверх стыка
     });
     cur.decor.forEach(function (d) { if (d.flat) return; list.push({ z: d.u + d.v - .5, f: function () { var s = S(d.u, d.v), im = IMG[d.k]; img(d.k, s[0] - im.width / 2, s[1] - im.height + 6); } }); });
     cur.props.forEach(function (p) { list.push({ z: p.i + p.j + 1, f: function () {
