@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611202001";
+    var BUILD = "202611202049";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -210,6 +210,7 @@
   .devlink b { font-size: 15px; } .devlink span { grid-column: 1; font-size: 12.5px; color: rgba(246, 239, 227, .6); }
   .devlink i { grid-row: 1 / 3; grid-column: 2; font-style: normal; font-size: 18px; color: var(--gold); }
   .devlink:active { transform: scale(.98); }
+  .devlinks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0 0; } .devlinks .devlink { margin: 0; grid-template-columns: 1fr; text-align: center; }
   .vrec { background: none; border: 0; text-align: center; color: inherit; }
   .vrec canvas { width: 100%; aspect-ratio: 1; }
   .crec canvas { aspect-ratio: 180 / 272; border-radius: 6px; }
@@ -978,7 +979,10 @@
     <div class="link-card" id="linkcard" hidden></div>
 
     <!-- канал с новостями об играх — над вкладками (его просьба 2026-11-20) -->
-    <a class="devlink" id="devlink" href="https://t.me/whitecurrantdev"><b>Новости об играх</b><span>Телеграм-канал: обновления и события</span><i>→</i></a>
+    <div class="devlinks">   <!-- две кнопки рядом (его просьба 2026-11-20): канал создателя и новости игр -->
+      <a class="devlink" id="devlink2" href="https://t.me/yulion_music"><b>Канал создателя</b></a>
+      <a class="devlink" id="devlink" href="https://t.me/whitecurrantdev"><b>Обновления и события</b></a>
+    </div>
     <div class="tabs" id="tabs">
       <button type="button" data-tab="games" aria-pressed="true">Игры</button>
       <button type="button" data-tab="hall" aria-pressed="false">Звёздный зал</button>
@@ -6996,7 +7000,7 @@
     if (cur === "farm-visit") openNeighbors(); else if (cur === "farm-neighbors" || cur === "farm-shop") openFarm(); else home();
   }
 
-  $("devlink").onclick = function (e) { var u = this.href; if (tg && tg.openTelegramLink) { e.preventDefault(); haptic("light"); tg.openTelegramLink(u); } };   // внутри Телеграма — открыть канал, не браузер
+  $("devlink").onclick = $("devlink2").onclick = function (e) { var u = this.href; if (tg && tg.openTelegramLink) { e.preventDefault(); haptic("light"); tg.openTelegramLink(u); } };   // внутри Телеграма — открыть канал, не браузер
   $("play").onclick = play;
   $("nextbtn").onclick = play;
   $("homebtn").onclick = home;
