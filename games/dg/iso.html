@@ -221,7 +221,7 @@
       var nm = k === 0 ? 2 : Math.max(4, Math.round(free.length * Math.min(.55, .26 + .08 * rm.depth) * (.85 + rr() * .3)));
       for (tt = 0; tt < nm && free.length; tt++) { var f2 = free.splice(Math.floor(rr() * free.length), 1)[0]; rm.mobs.push({ u: f2[0] + .5, v: f2[1] + .5, hp: 3, t: rr() * 10, hit: 0, vu: 0, vv: 0, wu: 0, wv: 0, wt: 0 }); }
       var nsp = rm.depth >= 4 ? 2 : rm.depth >= 2 ? 1 : 0;                        // стрелки: с третьей комнаты от входа — один, с пятой — два
-      for (tt = 0; tt < nsp && tt < rm.mobs.length; tt++) { var sp = rm.mobs[rm.mobs.length - 1 - tt]; sp.spit = true; sp.hp = 2; sp.cd = 2.5 + rr() * 2; sp.aim = 0; }   // два удара (его правка 2026-11-20); первый плевок не сразу
+      for (tt = 0; tt < nsp && tt < rm.mobs.length; tt++) { var sp = rm.mobs[rm.mobs.length - 1 - tt]; sp.spit = true; sp.hp = 2; sp.cd = 2.5 + rr() * 2; sp.aim = 0; sp.jcd = 0; }   // два удара (его правка 2026-11-20); первый плевок не сразу
       rm.shots = [];
       rm.drops = []; rm.seen = k === 0;
       // тайный зал — пустой и чистый: без слизней, предметов, люков и плиток с предметами
@@ -250,6 +250,8 @@
     if (j < 0) return !!rm.mv && i === rm.door.mv; if (j >= rm.h) return !!rm.pv && i === rm.door.pv;
     return !!rm.open[j][i] && !rm.props.some(function (p) { return p.i === i && p.j === j; });
   }
+  // интервал между плевками (его правка 2026-11-20): случайный, и глубже — чаще: в ближних залах 3–5 с, в дальних 2–3,5 с
+  function spitGap() { var k = Math.min(1, Math.max(0, ((cur && cur.depth) || 2) - 2) / 4); return (3 - k) + Math.random() * (2 - .5 * k); }
   function blocked(u, v) { var r = .13, al = cur && cur.altar; if (al && Math.abs(u - al.u) < 1.02 && Math.abs(v - al.v) < 1.02) return true;
     if (cur && cur.secret && cur.decor.some(function (d) { return d.solid && Math.abs(u - d.u) < .38 && Math.abs(v - d.v) < .38; })) return true; return !cellOpen(Math.floor(u - r), Math.floor(v - r)) || !cellOpen(Math.floor(u + r), Math.floor(v - r)) || !cellOpen(Math.floor(u - r), Math.floor(v + r)) || !cellOpen(Math.floor(u + r), Math.floor(v + r)); }
   function reset() {
@@ -404,11 +406,13 @@
       if (m.hp <= 0) return;
       m.t += dt; m.hit = Math.max(0, m.hit - dt);
       var du2 = hero.u - m.u, dv2 = hero.v - m.v, d = Math.hypot(du2, dv2) || 1, hop = Math.max(0, Math.sin(m.t * 5.5)), mu = 0, mv = 0;
-      if (m.spit && hero.st !== "dead" && d < 6) {                                 // стрелок: держит расстояние 2–4 клетки, раз в ~4,5 с плюёт туда, где герой стоит сейчас
+      if (m.spit && hero.st !== "dead" && d < 6) {                                 // стрелок: держит расстояние 2–4 клетки, плюёт туда, где герой стоит сейчас (раз в 3–5 с, в глубине — 2–3,5 с)
         var sgn = d < 2 ? -1 : d > 4 ? 1 : 0; mu = du2 / d * .4 * sgn * hop * dt; mv = dv2 / d * .4 * sgn * hop * dt;
         if (m.aim > 0) { m.aim -= dt; mu = mv = 0;                                 // надувается 0,45 с — видно, что сейчас плюнет
-          if (m.aim <= 0) { shots.push({ u: m.u, v: m.v, du: du2 / d * 2.4, dv: dv2 / d * 2.4, t: 0 }); m.cd = 4 + Math.random() * 1.5; } }   // стреляет реже — раз в 4–5,5 с (его правка 2026-11-20, было 2,2–3 с)
+          if (m.aim <= 0) { shots.push({ u: m.u, v: m.v, du: du2 / d * 2.4, dv: dv2 / d * 2.4, t: 0 }); m.cd = spitGap(); } }
         else { m.cd -= dt; if (m.cd <= 0) m.aim = .45; }
+        m.jcd = Math.max(0, (m.jcd || 0) - dt); m.jump = Math.max(0, (m.jump || 0) - dt);                                    // отскок (его правка 2026-11-20): подошёл вплотную — с шансом 50% отпрыгивает назад,
+        if (d < 1.1 && m.jcd <= 0 && m.hit <= 0) { m.jcd = 2.2; if (Math.random() < .5) { m.vu = -du2 / d * 5; m.vv = -dv2 / d * 5; m.aim = 0; m.jump = .35; } }   // потом 2,2 с не может
       }
       else if (hero.st !== "dead" && d < 3) { mu = du2 / d * .55 * hop * dt; mv = dv2 / d * .55 * hop * dt; }
       else { m.wt -= dt; if (m.wt <= 0) { m.wt = 1 + Math.random() * 2; var a = Math.random() * 6.28; m.wu = Math.cos(a); m.wv = Math.sin(a); } mu = m.wu * .22 * hop * dt; mv = m.wv * .22 * hop * dt; }
@@ -975,7 +979,7 @@
       px(ctx, x - 2 - Math.sign(b.du - b.dv) * 3, y, 2, 2, "#5a9a1e"); px(ctx, x - 2, y - 1, 5, 4, "#34641a"); px(ctx, x - 1, y - 2, 3, 5, "#34641a"); px(ctx, x - 1, y - 1, 3, 3, "#9ad63a"); px(ctx, x - 1, y - 1, 1, 1, "#eaffb0");
     } }); });
     cur.mobs.forEach(function (m) { if (m.hp <= 0) return; list.push({ z: m.u + m.v, f: function () {
-      var s = S(m.u, m.v), fr = Math.sin(m.t * 5.5) > 0 ? 0 : 1, jump = Math.round(Math.max(0, Math.sin(m.t * 5.5)) * 4);
+      var s = S(m.u, m.v), fr = Math.sin(m.t * 5.5) > 0 ? 0 : 1, jump = Math.round(Math.max(0, Math.sin(m.t * 5.5)) * 4) + (m.jump > 0 ? Math.round(Math.sin((1 - m.jump / .35) * Math.PI) * 12) : 0);   // отскок — дугой
       px(ctx, s[0] - 8, s[1] - 1, 16, 3, "rgba(8,6,10,.45)");
       if (m.spit && m.aim > 0) { fr = 0; jump = 0; }                               // перед плевком замирает и вспыхивает
       ctx.drawImage((m.hit > 0 || (m.spit && m.aim > 0 && Math.floor(m.aim * 20) % 2) ? slimeHit : m.spit ? slimeG : slimeF)[fr], Math.round(s[0] - 10), Math.round(s[1] - 12 - jump));
