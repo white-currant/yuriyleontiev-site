@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611201535";
+    var BUILD = "202611201556";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -978,13 +978,13 @@
           <button class="btn" id="tofarm">На ферму</button>
         </div>
       </div>
-      <!-- Подземелье: проба, видна только хозяину (его решение 2026-11-17) -->
+      <!-- Подземелье: до открытия видно только хозяину (переключатель DG_OPEN на сервере) -->
       <div class="game-card art-card dg-card" id="dgcard" hidden>
-        <img class="art" id="dgart" src="dg/card.jpg" alt="" style="object-fit:cover">
+        <img class="art" id="dgart" src="dg/card.webp" alt="" style="object-fit:cover">
         <div class="art-body">
           <h2>Подземелье</h2>
-          <p>Проба — видишь только ты.</p>
-          <button class="btn" id="todg">Войти</button>
+          <p>Спускайся за костями, бей слизней, добывай удобрения.</p>
+          <button class="btn" id="todg">В подземелье</button>
         </div>
       </div>
     </div>
@@ -1133,7 +1133,7 @@
     $("title").textContent = p.title; $("name").textContent = p.name;
     $("sigil").textContent = initial(p.name);
     setPhoto($("sigil"), p.avatar); rankFrame($("sigil"), p.title, 36);
-    $("dgcard").hidden = !("link" in p && p.link === null); fertTab(!$("dgcard").hidden);
+    $("dgcard").hidden = !(p.dg || ("link" in p && p.link === null)); fertTab(!$("dgcard").hidden);   // подземелье — по флагу сервера: до открытия только хозяину (2026-11-20)
     try { if ($("dgcard").hidden) localStorage.removeItem("dg-owner"); else localStorage.setItem("dg-owner", "1"); } catch (e) {}   // хозяин — запомнить: карточка подземелья сразу при старте (2026-11-20)   // удобрение в лавке — только хозяину (его срочная правка 2026-11-19): у остальных вкладки нет вовсе                 // подземелье — пока только хозяину: у него одного нет привязки канала
     $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
     $("karma").textContent = p.karma; $("place").textContent = p.place || "—";

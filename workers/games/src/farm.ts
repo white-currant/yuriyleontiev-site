@@ -1720,7 +1720,7 @@ export async function visit(u: any, pub: string) {
   const vin = Number((await q("SELECT COUNT(DISTINCT item) FROM g_items WHERE user = ? AND game = 'farm' ", [f[0]]))[0][0]);
   const given = (await q("SELECT 1 FROM f_given WHERE from_user = ? AND to_user = ? AND day = ?", [u.id, f[0], today()])).length > 0;
   const shop = await q("SELECT strain, listed FROM f_inv WHERE user = ? AND listed > 0", [f[0]]);
-  const stall = (await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [f[0]])).filter((r) => String(r[0]) !== "p:fert");   // удобрение на прилавке гостям не видно (2026-11-19)
+  const stall = (await q("SELECT item, listed FROM f_stall WHERE user = ? AND listed > 0", [f[0]])).filter((r) => DG_OPEN || String(r[0]) !== "p:fert");   // удобрение на прилавке гостям не видно, пока подземелье закрыто
   const ii = await itemInfo(stall.map((r) => String(r[0]))), own = await ownPrices(Number(f[0]));
   const res: any = { pub, name: f[2] || "Сосед", title: f[3] || "Ученик звёзд", unlocked: Number(f[1]), vinyls: vin, gifted: given, roof: await roofOf(Number(f[0])), ...(await yardOf(Number(f[0]))),
            plots: await (async () => { const ev = await plotEvents(Number(f[0])); return Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(f[1]), ev[i])); })(), now: now(),
@@ -1831,7 +1831,7 @@ export async function listItem(u: any, item: string, delta: number) {
   return { farm: await farmState(u) };
 }
 async function buyItem(u: any, seller: number, pub: string, item: string, myName: string) {
-  if (item === "p:fert") return { error: "Такого товара нет" };                 // пока подземелье скрыто — удобрение не купить
+  if (item === "p:fert" && !DG_OPEN) return { error: "Такого товара нет" };                 // пока подземелье скрыто — удобрение не купить
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Урожай и продукты кладут в амбар — сначала построй его" };
   const it = (await itemInfo([item])).info[item];
   if (!it) return { error: "Такого товара нет" };
@@ -1903,7 +1903,7 @@ export async function market(u: any, hidden: number[]) {
   if (an) { ss.anomaly = view(CROPS.anomaly); offers.splice(fnv(an.key) % (offers.length + 1), 0, { pub: ANOM_PUB, strain: "anomaly", count: 1, price: an.price, seller: an.seller }); }
   const st = await q(`SELECT s.user, f.pub, s.item, s.listed, p.name, pr.price FROM f_stall s JOIN f_farms f ON f.user = s.user
                       LEFT JOIN g_profiles p ON p.user = s.user LEFT JOIN f_prices pr ON pr.user = s.user AND pr.item = s.item
-                      WHERE s.listed > 0 AND s.user != ? AND s.item != 'p:fert' LIMIT 300`, [u.id]);   // удобрение на рынке пока не показываем (2026-11-19)
+                      WHERE s.listed > 0 AND s.user != ? AND (? OR s.item != 'p:fert') LIMIT 300`, [u.id, DG_OPEN ? 1 : 0]);   // удобрение на рынке пока не показываем (2026-11-19)
   const ii = await itemInfo(st.map((r) => String(r[2])));
   const items = st.map(([uid, pub, item, n, name, own]) => ({ pub, item: String(item), count: Number(n), price: ii.info[String(item)] ? sellerPrice(stallPrice(ii.info[String(item)].dust), own) : 0,
                                                           seller: hidden.includes(Number(uid)) ? "Сосед" : name || "Сосед" })).filter((o) => o.price);
@@ -1943,7 +1943,7 @@ const MONO_NAMES: Record<string, [string, string]> = {
   comet: ["Кометный дождь", "на ферме большой кратер и осколки со звёздной пылью — собери их, кратер убери лопатой"],
 };
 export async function logFeed(kind: string, actor: number, target: number | null, item: string | null, n = 1) {
-  if (item && /^(anomaly|p:eye|p:brew|p:fert)/.test(item)) return;   // о странном в новостях — ни слова (его правка 2026-11-18); об удобрении — тоже, подземелье ещё скрыто (2026-11-19)
+  if (item && (DG_OPEN ? /^(anomaly|p:eye|p:brew)/ : /^(anomaly|p:eye|p:brew|p:fert)/).test(item)) return;   // о странном в новостях — ни слова (его правка 2026-11-18); об удобрении — тоже, подземелье ещё скрыто (2026-11-19)
   const t = now();
   const upd = await q("UPDATE f_feed SET n = n + ?, at = ? WHERE id = (SELECT id FROM f_feed WHERE kind = ? AND actor = ? AND target IS ? AND item IS ? AND at > ? ORDER BY id DESC LIMIT 1) RETURNING 1",
                       [n, t, kind, actor, target, item, t - 600]);
@@ -1964,7 +1964,7 @@ export async function feed(u: any, hidden: number[], since = 0) {      // since 
   for (const [id, at, kind, actor, target, item, n] of rows) {
     if (hidden.includes(Number(actor)) && Number(actor) !== u.id) continue;          // скрытых игроков в ленте нет
     const k = String(kind), it = String(item || "");
-    if (it === "p:fert") continue;                                                   // удобрение из подземелья — пока тайна для всех, кроме хозяина (утечка 2026-11-19)
+    if (it === "p:fert" && !DG_OPEN) continue;                                                   // удобрение из подземелья — пока тайна для всех, кроме хозяина (утечка 2026-11-19)
     out.push({ id: Number(id), at: Number(at), kind: k, n: Number(n), actor: who(Number(actor)), target: target ? who(Number(target)) || { name: "соседу", pub: "", me: false } : null,
                item: k === "event" ? { id: it, name: (MONO_NAMES[it] || [it])[0] } : it ? { id: it, name: nameOfItem(it) } : null });
   }
@@ -2123,7 +2123,10 @@ export const FERT_BONES = 40, FERT_SEC = 20 * 60,   // котёл — 20 мин�
 // здоровье героя в убежище (его решение 2026-11-19): гибель в походе отнимает 20, лечат чаи из амбара; при нуле в поход нельзя
 export const HP_MAX = 100, HP_DEATH = 20, HP_TEA: Record<string, number> = { tea: 30, honeytea: 50 };
 function satOf(id: string) { const r = RECIPES[recipeOf(id)]; return id.startsWith("p:") && r && r.kind === "oven" ? r.points : 0; }
-async function dgOwner(u: any) { return String(u.id) === String((await q("SELECT value FROM g_meta WHERE key = 'owner'"))[0]?.[0] || "-"); }
+// открытие подземелья всем (его решение 2026-11-20: подготовить к релизу, но пока не открывать) — один переключатель: подземелье,
+// удобрение в лавке, на рынке и в новостях, вкладка «Удобрение». false — всё это видит только хозяин
+export const DG_OPEN = false;
+async function dgOwner(u: any) { if (DG_OPEN) return true; return String(u.id) === String((await q("SELECT value FROM g_meta WHERE key = 'owner'"))[0]?.[0] || "-"); }
 async function dgHero(uid: number) {
   await q("INSERT OR IGNORE INTO d_hero (user, bones) VALUES (?, 0)", [uid]);
   const [h] = await q("SELECT bones, run, size, hp FROM d_hero WHERE user = ?", [uid]);
@@ -2183,7 +2186,7 @@ export async function dgPack(u: any, item: string, slot: number) {        // ite
 }
 // проба для хозяина (его просьбы 2026-11-20): спуск бесплатный — еда из рюкзака не тратится, а в большом подземелье странная дверь есть
 // всегда, даже без Странной похлёбки (похлёбка тоже не съедается). Подземелье пока видит только он — перед открытием всем выключить
-export const DG_FREE = true;
+export const DG_FREE = false;                                               // проба выключена (его решение 2026-11-20, подготовка к релизу)
 export async function dgStart(u: any, size: string) {                      // вход: съесть из рюкзака сытость с наименьшим перебором
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   const need = DG_NEED[size]; if (!need) return { error: "Нет такого подземелья" };
