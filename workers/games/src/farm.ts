@@ -2190,6 +2190,7 @@ export async function dgStart(u: any, size: string) {                      // в
   const pack = (await q("SELECT slot, item FROM d_pack WHERE user = ?", [u.id])).map(([s, it]) => ({ slot: Number(s), sat: satOf(String(it)), brew: recipeOf(String(it)) === "brew" }));
   // Странная похлёбка (его решение 2026-11-19): открывает странную дверь в тайную комнату — и только в большом подземелье; там съедается всегда,
   // её сытость тоже идёт в счёт. В малое и среднее похлёбка не берётся: остаётся в рюкзаке, платит другая еда
+  if (size !== "l" && pack.some((p) => p.brew)) return { error: "Со Странной похлёбкой в рюкзаке — только в большое подземелье" };   // его правка 2026-11-20
   const bi = size === "l" ? pack.findIndex((p) => p.brew) : -1, must = bi < 0 ? 0 : 1 << bi, skip = pack.reduce((a, p, i) => p.brew && i !== bi ? a | 1 << i : a, 0);
   let best = -1, bs = 1e9, bc = 99;
   for (let m = 1; m < 1 << pack.length; m++) {

@@ -276,7 +276,7 @@
   // поход на сервере (2026-11-19): вход оплачен едой в убежище, итог — один запрос при выходе. Погиб — кости 0; вышел сам или зачистил — кости твои.
   // Без сервера (страница открыта сама по себе) — как раньше, пробный бой.
   var RUN = (location.search.match(/run=([0-9a-f]+)/) || [])[1] || "", dgCall = (function () { try { return parent !== window && parent.dgCall; } catch (e) { return null; } })(), sent = null;
-  function report(got) { if (!RUN || !dgCall || !hero) return Promise.resolve(); if (!sent) sent = dgCall("/api/dg/finish", { run: RUN, bones: got, dead: hero.st === "dead", left: leftEarly }).catch(function (e) { sent = null; throw e; }); return sent; }   // не дошло — в убежище не уходим (кости пропали бы), следующее нажатие отправит снова
+  function report(got) { if (!RUN || !dgCall || !hero) return Promise.resolve(); if (!sent) sent = dgCall("/api/dg/finish", { run: RUN, bones: got, dead: hero.st === "dead", left: leftEarly }).then(function (r) { try { if (parent.__dgD) parent.__dgD.run = null; } catch (e) {} return r; }).catch(function (e) { sent = null; throw e; }); return sent; }   // поход закрыт — в памяти убежища тоже   // не дошло — в убежище не уходим (кости пропали бы), следующее нажатие отправит снова
   // возврат в убежище (его жалоба 2026-11-19: «на кнопке долго висит без ответа»). GitHub отвечает то за 2, то за 15 секунд, а раньше
   // страница убежища качалась дважды (проверка, потом переход) и только после итога похода. Теперь убежище качается заранее, пока идёт бой,
   // в кэш браузера (GitHub разрешает хранить 10 минут) под одним адресом — переход берёт его оттуда. Нажатие сразу показывает «Возвращаемся…»

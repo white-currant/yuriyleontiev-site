@@ -630,7 +630,7 @@
     [["s", "малое"], ["m", "среднее"], ["l", "большое"]].forEach(function (z) { mk.appendChild(el("span", D.sat >= need[z[0]] ? "ok" : "", z[1] + " " + need[z[0]] + (D.sat >= need[z[0]] ? " ✓" : ""))); });
     box.appendChild(mk);
     box.appendChild(el("div", "sh-t", "Сытость в рюкзаке: " + D.sat + ". Число в углу ячейки — сытость блюда. На спуск съедается столько, сколько нужно, с наименьшим перебором; остальное остаётся в рюкзаке до следующего спуска — лишнее не пропадает."));
-    if (D.cards && D.cards.length) {                                                // карты тайной комнаты (редкие и легендарные) — пока под туманом
+    if (false && D.cards && D.cards.length) {                                       // карты в рюкзаке не показываем — они в «Коллекции» гильдии (его правка 2026-11-20)                                                // карты тайной комнаты (редкие и легендарные) — пока под туманом
       box.appendChild(el("div", "sh-s", "Карты"));
       var gc = el("div", "grid");
       D.cards.forEach(function (cd) { var rare = cd.kind === "rare", nm = rare ? "Редкая тайная карта" : "Легендарная тайная карта";   // редкие и легендарные (2026-11-19)
@@ -748,12 +748,12 @@
   function pickView() {                                // Странная похлёбка — только в большое (его решение 2026-11-19): в малом и среднем её сытость не считается
     var sat = D ? D.sat : 0, brew = D ? D.pack.filter(function (p) { return rec(p.item) === "brew"; }).reduce(function (a, p) { return a + p.sat; }, 0) : 0;
     $("pickneed").textContent = D ? "В рюкзаке сытость " + sat + (brew ? " — со Странной похлёбкой только в большое" : "") : "Пробный спуск — без фермы еда не нужна";
-    var rs = $("resume"), live = !!(D && D.run); rs.hidden = !live; rs.disabled = false;
+    var rs = $("resume"), live = !!(D && D.run && (fresh || !dgCall)); rs.hidden = !live; rs.disabled = false;   // «продолжить» — только по свежему ответу сервера: вышел — похода нет (2026-11-20)
     $("srtest").hidden = !(D && D.free); $("srtest").disabled = !!(D && dgCall && !fresh);   // проба хозяина (2026-11-20): сразу в странную комнату
     if (live) $("pickneed").textContent = "Есть начатый поход. Новый спуск — снова за еду, начатый пропадёт";
     var wait = !!D && !!dgCall && !fresh; if (wait) $("pickneed").textContent = "Проверяю рюкзак…";   // 2026-11-19: из памяти пустило в поход без еды
     if (live) $("resumes").textContent = { s: "малое", m: "среднее", l: "большое" }[D.size] + " · уже оплачен" + (D.secret ? " · тайная комната" : "");
-    pick.querySelectorAll("button[data-size]").forEach(function (b) { var z = b.dataset.size; b.disabled = wait || (!!D && !D.free && (z === "l" ? sat : sat - brew) < D.need[z]);   // проба хозяина (D.free) — без еды
+    pick.querySelectorAll("button[data-size]").forEach(function (b) { var z = b.dataset.size; b.disabled = wait || (!!brew && z !== "l") || (!!D && !D.free && (z === "l" ? sat : sat - brew) < D.need[z]);   // похлёбка в рюкзаке — открыто только большое (его правка 2026-11-20)   // проба хозяина (D.free) — без еды
       var sm = b.querySelector("small"); if (!sm.dataset.t) sm.dataset.t = sm.textContent; sm.textContent = sm.dataset.t + (z === "l" && brew ? " · тайная комната" : ""); });
   }
   // переход в бой — только если страница боя отвечает (2026-11-19: GitHub, где лежит сайт, сбоил — вместо боя открывалась его ошибка 404,
