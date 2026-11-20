@@ -1099,8 +1099,11 @@
       }).catch(function () { document.getElementById("overt").textContent = "Нет связи с сервером — еда не потрачена"; document.getElementById("home").hidden = false; });
       return;
     }
+    // пробный бой без сервера — только у себя на компьютере (утечка 2026-11-20: по прямой ссылке подземелье открывалось до релиза)
+    if (!RUN && !/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) { closedPage(); return; }
     reset(); if (SRJ) srJump(); requestAnimationFrame(loop);
   }
+  function closedPage() { document.documentElement.innerHTML = "<body style='margin:0;background:#0b0710;color:#cfc4e0;font:600 15px/1.4 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center'><div>Подземелье пока закрыто.<br><a href='../index.html' style='color:#ffcf7a'>В гильдию</a></div></body>"; }
   setTimeout(hubPrefetch, 3000);                                               // убежище — заранее, в начале боя
   window.__game = { scr: function (u, v) { return S(u, v); }, hero: function () { return hero; }, room: function () { return cur; }, rooms: function () { return rooms; }, keys: keys, hit: function () { wantHit = true; }, frame: function (ts) { draw(ts); }, joy: function (x, y) { joy.dx = x; joy.dy = y; }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; var p2 = P(hero.u, hero.v); camX = p2[0]; camY = p2[1]; drawMap(); }, step: function (dt) { update(dt); draw(performance.now()); } };
 })();

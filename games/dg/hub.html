@@ -594,7 +594,9 @@
     if (D.hp >= D.hp_max) box.appendChild(el("div", "sh-t", "Герой здоров — чай пока не нужен."));
   }
   $("hpbar").addEventListener("click", function (e) { e.stopPropagation(); if (open === hpView) return hide(); show(hpView); });
-  function load() { if (!dgCall) return Promise.resolve(); return dgCall("/api/dg").then(function (r) { if (r.error) { tell(r.error); return; } D = r; D.t0 = Date.now() / 1000 - r.now; fresh = true; try { parent.__dgD = D; } catch (e) {} hud(); if (open) open(); if (pick.classList.contains("on")) pickView(); }).catch(function (e) { tell(e.message); if (!fresh) $("pickneed").textContent = "Нет связи — закрой и открой ещё раз"; }); }
+  function closedPage() { document.documentElement.innerHTML = "<body style='margin:0;background:#0b0710;color:#cfc4e0;font:600 15px/1.4 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center'><div>Подземелье пока закрыто.<br><a href='../index.html' style='color:#ffcf7a'>В гильдию</a></div></body>"; }
+  if (!dgCall && !/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) { closedPage(); return; }   // по прямой ссылке, без игры — не пускаем (утечка 2026-11-20)
+  function load() { if (!dgCall) return Promise.resolve(); return dgCall("/api/dg").then(function (r) { if (r.error) { if (r.error === "Подземелье пока закрыто") return closedPage(); tell(r.error); return; } D = r; D.t0 = Date.now() / 1000 - r.now; fresh = true; try { parent.__dgD = D; } catch (e) {} hud(); if (open) open(); if (pick.classList.contains("on")) pickView(); }).catch(function (e) { tell(e.message); if (!fresh) $("pickneed").textContent = "Нет связи — закрой и открой ещё раз"; }); }
   // прошлое состояние убежища — из памяти главного окна: окна открываются сразу, а сервер обновляет их в фоне (его жалоба 2026-11-19)
   try { if (dgCall && parent.__dgD) { D = parent.__dgD; } if (dgCall && parent.__dgM) M = parent.__dgM; } catch (e) {}
   // запросы убежища — строго по очереди: быстрые нажатия не обгоняют друг друга на сервере
