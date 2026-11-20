@@ -762,17 +762,18 @@
   function mRefresh() { if (!dgCall) return; dgCall("/api/farm/market").then(function (m) { M = m; try { parent.__dgM = m; } catch (e) {} if (open === marketView) marketView(); }).catch(function () {}); }
 
   // котёл (его правка 2026-11-19): ячейка с костями → стрелка → ячейка с удобрением, счётчик сколько варить, меньше текста
-  var brewN = 1;
+  var brewN = -1;
   function plural(n, a, b, c) { var m = n % 100, k = n % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k > 1 && k < 5 ? b : c; }
   function boneCell(n) { var b = el("div", "cell"), c = el("canvas"), src = $("i-bone"); c.width = src.width; c.height = src.height; c.getContext("2d").drawImage(src, 0, 0); b.appendChild(c); b.appendChild(el("b", "", String(n))); return b; }
   function brewView() {
     head("Перегонный куб"); if (!D) return noServer();
     var br = D.brew, nowS = Date.now() / 1000 - D.t0, left = br.n ? br.per - ((nowS - br.started) % br.per) : 0, can = Math.max(0, Math.min(Math.floor(D.bones / br.bones), br.max - br.n));
+    if (brewN < 0) brewN = can;                                                       // его правило 2026-11-20: 0–69 костей → ×0, 70–139 → ×1, 140–209 → ×2…
     brewN = Math.max(can ? 1 : 0, Math.min(brewN, can));
     var row = el("div", "brew"), arrow = el("div", "arrow"); arrow.appendChild(el("i"));   // труба: по ней течёт зелёная жижа
     // не хватает костей (его правка 2026-11-20: «0 костей → ×0» непонятно): на костях «24/70», на удобрении «×1», вместо счётчика — сколько ещё нужно
     var full = br.n >= br.max;
-    row.appendChild(boneCell(can ? brewN * br.bones : D.bones + "/" + br.bones)); row.appendChild(arrow); row.appendChild(iconCell("p:fert", null, null, null)); row.lastChild.appendChild(el("b", "", "×" + (can ? brewN : 1)));
+    row.appendChild(boneCell(can ? brewN * br.bones : D.bones + "/" + br.bones)); row.appendChild(arrow); row.appendChild(iconCell("p:fert", null, null, null)); row.lastChild.appendChild(el("b", "", "×" + (can ? brewN : 0)));
     box.appendChild(row);
     box.appendChild(el("div", "sh-t c", "костей у тебя " + D.bones + " · " + br.bones + " на одно · " + Math.round(br.per / 60) + " мин"));
     if (can) {
@@ -782,7 +783,7 @@
       st.appendChild(mi); st.appendChild(nn); st.appendChild(pl); box.appendChild(st);
     }
     var one = el("div", "one"), go = el("button", "btn", can ? "Переплавить" : full ? "Котёл полон" : "Нужно ещё " + (br.bones - D.bones % br.bones) + " " + plural(br.bones - D.bones % br.bones, "кость", "кости", "костей")); go.type = "button"; go.disabled = !can || !D.barn;
-    go.onclick = function (e) { e.stopPropagation(); var n = brewN; D.bones -= n * br.bones; if (!br.n) br.started = Date.now() / 1000 - D.t0; br.n += n; brewN = 1; hud(); brewView(); apply(seq("/api/dg/brew", { n: n })); };
+    go.onclick = function (e) { e.stopPropagation(); var n = brewN; D.bones -= n * br.bones; if (!br.n) br.started = Date.now() / 1000 - D.t0; br.n += n; brewN = -1; hud(); brewView(); apply(seq("/api/dg/brew", { n: n })); };
     one.appendChild(go); box.appendChild(one);
     var pi = null, pt = null;
     if (br.n) { var pg = el("div", "prog"); pi = el("i"); pg.appendChild(pi); box.appendChild(pg); pt = el("div", "sh-t c"); box.appendChild(pt); }
@@ -834,7 +835,7 @@
   document.getElementById("gear").addEventListener("click", function (e) { e.stopPropagation(); tell("Настройки — будут позже"); });
   cv.addEventListener("pointerdown", function (e) {
     var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;   // доли экрана — места на его фоне
-    if (x > .12 && x < .40 && y > .28 && y < .60) return show(brewView);
+    if (x > .12 && x < .40 && y > .28 && y < .60) { brewN = -1; return show(brewView); }   // открыли котёл — счётчик на максимум (сколько выходит из всех костей)
     if (x > .63 && x < .92 && y > .33 && y < .62) return tell("Кузница — будет позже");
     if (x > .40 && x < .63 && y > .32 && y < .59) return document.querySelector(".act.go").click();
   });

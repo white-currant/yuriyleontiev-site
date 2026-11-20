@@ -187,6 +187,16 @@
         if (j === 0 || !rm.open[j - 1][i]) rm.walls.push({ side: "v", i: i, j: j, k: j === 0 && rm.mv && i === rm.door.mv ? "arch" : "wall" });
         if (i === 0 || !rm.open[j][i - 1]) rm.walls.push({ side: "u", i: i, j: j, k: i === 0 && rm.mu && j === rm.door.mu ? "arch" : "wall" });
       }
+      // лесенки (его решение 2026-11-20): короткие (до 2 клеток) отрезки стены внутри комнаты — ступеньки неровного края — не ставим,
+      // иначе получались ярусы висящих стен. Стены по краю комнаты (j = 0 / i = 0) и проходы остаются
+      (function () {
+        var key = function (wl) { return wl.side + wl.i + "," + wl.j; }, has = {}; rm.walls.forEach(function (wl) { has[key(wl)] = 1; });
+        var runLen = function (wl) { var n = 1, d;
+          for (d = 1; has[wl.side === "u" ? "u" + wl.i + "," + (wl.j - d) : "v" + (wl.i - d) + "," + wl.j]; d++) n++;
+          for (d = 1; has[wl.side === "u" ? "u" + wl.i + "," + (wl.j + d) : "v" + (wl.i + d) + "," + wl.j]; d++) n++;
+          return n; };
+        rm.walls = rm.walls.filter(function (wl) { var inner = wl.side === "u" ? wl.i > 0 : wl.j > 0; return wl.k !== "wall" || !inner || runLen(wl) > 2; });
+      })();
       var plain = rm.walls.filter(function (wl) { return wl.k === "wall"; }), nt = Math.min(plain.length, 2 + Math.floor(rr() * 3));
       for (var tt = 0; tt < nt; tt++) { var pk = plain.splice(Math.floor(rr() * plain.length), 1)[0]; pk.k = "torch"; }
       plain.forEach(function (wl) { var q9 = rr(); if (q9 < .07) wl.k = "gate"; else if (q9 < .13) wl.k = "door"; });
@@ -1031,7 +1041,7 @@
       var s = S(p.i + .5, p.j + .5), im = IMG[k], x0 = Math.round(s[0] - im.width / 2), y0 = Math.round(s[1] - im.height + 16); img(k, x0, y0); } }); });
     cur.drops.forEach(function (d) { list.push({ z: d.u + d.v, f: function () { var s = S(d.u, d.v), bob = Math.round(Math.sin(d.t * 5) * 2); px(ctx, s[0] - 5, s[1], 10, 2, "rgba(8,6,10,.4)"); ctx.drawImage(boneC, Math.round(s[0] - 6), Math.round(s[1] - 12 + bob)); } }); });
     if (cur.altar) list.push({ z: cur.altar.u + cur.altar.v, f: function () { altarDraw(cur.altar, t); } });
-    (cur.shots || []).forEach(function (b) { list.push({ z: b.u + b.v, f: function () {      // плевок: зелёный комок с хвостом и тенью
+    (cur.shots || []).forEach(function (b) { list.push({ z: b.u + b.v + .9, f: function () {   /* поверх слизней рядом: было видно, как пуля «врезается» в слизня, пролетая за ним (его замечание 2026-11-20) */      // плевок: зелёный комок с хвостом и тенью
       var s = S(b.u, b.v), x = Math.round(s[0]), y = Math.round(s[1] - 9);
       px(ctx, x - 2, s[1] - 1, 5, 2, "rgba(8,6,10,.4)");
       px(ctx, x - 2 - Math.sign(b.du - b.dv) * 3, y, 2, 2, "#5a9a1e"); px(ctx, x - 2, y - 1, 5, 4, "#34641a"); px(ctx, x - 1, y - 2, 3, 5, "#34641a"); px(ctx, x - 1, y - 1, 3, 3, "#9ad63a"); px(ctx, x - 1, y - 1, 1, 1, "#eaffb0");
@@ -1149,7 +1159,8 @@
   }
   function closedPage() { document.documentElement.innerHTML = "<body style='margin:0;background:#0b0710;color:#cfc4e0;font:600 15px/1.4 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center'><div>Подземелье пока закрыто.<br><a href='../index.html' style='color:#ffcf7a'>В гильдию</a></div></body>"; }
   setTimeout(hubPrefetch, 3000);                                               // убежище — заранее, в начале боя
-  window.__game = { scr: function (u, v) { return S(u, v); }, hero: function () { return hero; }, room: function () { return cur; }, rooms: function () { return rooms; }, keys: keys, hit: function () { wantHit = true; }, frame: function (ts) { draw(ts); }, joy: function (x, y) { joy.dx = x; joy.dy = y; }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; var p2 = P(hero.u, hero.v); camX = p2[0]; camY = p2[1]; drawMap(); }, step: function (dt) { update(dt); draw(performance.now()); } };
+  window.__game = { scr: function (u, v) { return S(u, v); }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; drawMap(); },   // проверка: перенести в комнату k
+    hero: function () { return hero; }, room: function () { return cur; }, rooms: function () { return rooms; }, keys: keys, hit: function () { wantHit = true; }, frame: function (ts) { draw(ts); }, joy: function (x, y) { joy.dx = x; joy.dy = y; }, goto: function (k) { cur = rooms[k]; cur.seen = true; hero.u = cur.ci + .5; hero.v = cur.cj + .5; var p2 = P(hero.u, hero.v); camX = p2[0]; camY = p2[1]; drawMap(); }, step: function (dt) { update(dt); draw(performance.now()); } };
 })();
 </script>
 </body>
