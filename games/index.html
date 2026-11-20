@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611201904";
+    var BUILD = "202611202001";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -159,6 +159,20 @@
   .dust-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 99px; background: rgba(255, 196, 105, .14);
     border: 1px solid rgba(255, 196, 105, .4); font-family: var(--mono); font-size: 14px; color: var(--gold); }
   .scene { position: relative; margin: 14px -16px 0; }
+  /* нашествие слизней (промо подземелья, 2026-11-20): слизни поверх фермы, тап — лопается брызгами */
+  .slimes { position: absolute; inset: 0; pointer-events: none; z-index: 6; overflow: hidden; }
+  .slime { position: absolute; width: 7%; aspect-ratio: 20 / 13; padding: 0; border: 0; background: none; pointer-events: auto; cursor: pointer; transform: translate(-50%, -100%);
+    transition: left 8s linear, top 8s linear;   /* ползут медленно (его правка 2026-11-20: было 3,2 с) */ animation: slimehop .8s ease-in-out infinite; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .slime::before { content: ""; position: absolute; inset: -60%; }   /* попасть пальцем легче, чем видно */
+  .slime canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+  .slime .f1 { animation: slimefr .8s steps(1) infinite; }
+  @keyframes slimefr { 0%, 49% { opacity: 0; } 50%, 100% { opacity: 1; } }
+  @keyframes slimehop { 0%, 100% { margin-top: 0; } 50% { margin-top: -3%; } }
+  .slime.pop { animation: slimepop .45s ease-out forwards; pointer-events: none; transition: none; }
+  .slime.pop canvas { animation: none; }
+  @keyframes slimepop { 0% { transform: translate(-50%, -100%) scale(1, 1); } 30% { transform: translate(-50%, -100%) scale(1.5, .45); opacity: 1; } 100% { transform: translate(-50%, -100%) scale(1.8, .1); opacity: 0; } }
+  .slimedrop { position: absolute; left: 50%; top: 60%; width: 14%; aspect-ratio: 1; background: #5cc0ee; box-shadow: 0 0 0 1px #10202c; animation: slimedrop .45s ease-out forwards; }
+  @keyframes slimedrop { to { transform: rotate(var(--a)) translateY(-260%); opacity: 0; } }
   .scene canvas { display: block; width: 100%; height: auto; }
   .plot { position: relative; background: none; border: 0; padding: 0; min-height: 0; }
   .plot .lbl { position: absolute; left: 50%; bottom: -2px; transform: translate(-50%, 100%); white-space: nowrap; font-family: var(--mono);
@@ -4711,8 +4725,54 @@
     show("farm"); haptic("light");
     loadReleases();
     if (F.state) { renderFarm(); farmAnim(); }
-    loadFarm().then(function () { farmLoop(); farmAnim(); showNotice(); })
+    loadFarm().then(function () { farmLoop(); farmAnim(); showNotice(); slimeRaid(); })
       .catch(function (e) { toast("Не получилось: " + e.message); });
+  }
+
+  // нашествие слизней (его промо подземелья, 2026-11-20): разово у каждого. Зашёл на ферму — 30 секунд из-за краёв приползают
+  // 100 слизней, мелких, без счётчика (его правка 2026-11-20; рисунок — из подземелья), тап — лопнул. Наказаний нет. Прогнал всех — сервер снимает флаг, больше не повторится
+  var SLIME_ROWS = [
+  ["......kkkkkkkk......", "....kkAAAAAAAAkk....", "...kAAhhAAAAAAAAk...", "..kAAhhAAAAAAAAAAk..", ".kaAAAAAAAAAAAAAAak.", ".kaAAAeeAAAAeeAAAak.", "kaaAAAeeAAAAeeAAAaak", "kaaAAAAAAAAAAAAAAaak", "kaaaAAAAAAAAAAAAaaak", "kdaaaaaAAAAAAaaaaadk", "kddaaaaaaaaaaaaaaddk", ".kddddaaaaaaaadddk..", "..kkkkkkkkkkkkkkkk.."],
+    ["....................", "....................", ".....kkkkkkkkkk.....", "...kkAAAAAAAAAAkk...", "..kAAhhAAAAAAAAAAk..", ".kaAhhAAAAAAAAAAAak.", "kaaAAAeeAAAAeeAAAaak", "kaaAAAeeAAAAeeAAAaak", "kaaaAAAAAAAAAAAAaaak", "kdaaaaaAAAAAAaaaaadk", "kddaaaaaaaaaaaaaaddk", "kdddddaaaaaaaaddddk.", ".kkkkkkkkkkkkkkkkkk."]
+  ], SLIME_PAL = { k: "#10202c", a: "#2f8fc4", A: "#5cc0ee", h: "#c8f1ff", d: "#1d6a96", e: "#0b0a10" };
+  function slimeCanvas(fr) { var c = document.createElement("canvas"); c.width = 20; c.height = 13; var g = c.getContext("2d");
+    SLIME_ROWS[fr].forEach(function (row, j) { for (var i = 0; i < row.length; i++) if (row[i] !== "." && SLIME_PAL[row[i]]) { g.fillStyle = SLIME_PAL[row[i]]; g.fillRect(i, j, 1, 1); } }); return c; }
+  function slimeRaid() {
+    if (F.slimeRun || !F.state || !F.state.slimes) return; F.slimeRun = true;
+    var scene = $("scenecv").parentNode, box = el("div", "slimes"), N = 100, gone = 0, born = 0, t0 = Date.now(), timers = [];
+    scene.appendChild(box);
+    var upd = function () {};   // счётчик убран (его правка 2026-11-20)
+    var stop = function () { timers.forEach(clearTimeout); box.remove(); F.slimeRun = false; };
+    F.slimeStop = stop;
+    var spawn = function () {
+      if (!document.body.dataset.screen || document.body.dataset.screen.indexOf("farm") !== 0) return stop();   // ушёл с фермы — в следующий раз заново
+      born++; upd();
+      var sl = el("button", "slime"); sl.type = "button"; sl.setAttribute("aria-label", "Слизень");
+      var f0 = slimeCanvas(0), f1 = slimeCanvas(1); f1.className = "f1"; sl.appendChild(f0); sl.appendChild(f1);
+      var side = born % 4, x0 = side === 0 ? -12 : side === 1 ? 104 : 8 + Math.random() * 84, y0 = side === 2 ? 28 : side === 3 ? 104 : 35 + Math.random() * 55;
+      var x1 = 10 + Math.random() * 78, y1 = 42 + Math.random() * 46;
+      sl.style.left = x0 + "%"; sl.style.top = y0 + "%"; sl.style.animationDelay = -(Math.random() * .8).toFixed(2) + "s";
+      box.appendChild(sl); requestAnimationFrame(function () { requestAnimationFrame(function () { sl.style.left = x1 + "%"; sl.style.top = y1 + "%"; }); });
+      sl.onpointerdown = function (e) {
+        e.preventDefault(); e.stopPropagation(); if (sl.classList.contains("pop")) return;
+        sl.classList.add("pop"); haptic("light"); gone++; upd();
+        for (var i = 0; i < 6; i++) { var d = el("i", "slimedrop"); d.style.setProperty("--a", (i * 60 + Math.random() * 30) + "deg"); sl.appendChild(d); }
+        setTimeout(function () { sl.remove(); }, 450);
+        if (gone >= N) done();
+      };
+    };
+    var done = function () {
+      timers.push(setTimeout(function () {
+        stop(); haptic("success"); F.state.slimes = false; farmCall("/api/farm/slimes", {}).catch(function () {});
+        sheet(function (sh, close) {
+          sh.appendChild(el("h3", "", "Ферма свободна!"));
+          sh.appendChild(el("div", "sub", "Ты прогнал всех слизней. Они выползли откуда-то из-под земли… Их логово откроется в полночь."));
+          sh.appendChild(btn("Ладно", "", function () { close(); }));
+        });
+      }, 500));
+    };
+    for (var k = 0; k < N; k++) timers.push(setTimeout(spawn, k < 10 ? 300 + k * 150 : 1800 + (k - 10) * (28000 / (N - 10))));   // первые десять — сразу, остальные — до 30-й секунды (100 штук — его правка)
+    upd();
   }
 
   // личное объявление с сервера (разовое): закрыл — больше не показывается

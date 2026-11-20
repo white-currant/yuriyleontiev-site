@@ -721,6 +721,9 @@ function farmReads(uid: number, t: number): [string, any[]][] {
     ["SELECT item, count FROM f_hive WHERE user = ? AND count > 0", [uid]],
   ];
 }
+// нашествие слизней (его промо подземелья, 2026-11-20): разовое событие у каждого — зашёл на ферму, 30 секунд приходят слизни,
+// тап — исчез; без наказаний. Флаг «promo:slimes» в f_evlog (с двоеточием — не считается погодным событием), снимается, когда прогнал всех
+export async function slimesDone(u: any) { await q("DELETE FROM f_evlog WHERE user = ? AND kind = 'promo:slimes'", [u.id]); return { ok: true }; }
 export async function farmState(u: any) {
   // первым в пакете — «завести ферму, если её нет» (то же, что ensureFarm); новичку следом — стартовый мешок
   const pub0 = [...crypto.getRandomValues(new Uint8Array(9))].map((b) => b.toString(16).padStart(2, "0")).join(""), t0 = now();
@@ -764,6 +767,7 @@ async function farmState1(u: any) {
     strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
     ...kit, ...(await decorView(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...kit.jobs.map((j: any) => "p:" + j.recipe)])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await metWanderer(u.id, await wandererView(u.id)), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
+    slimes: (await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = 'promo:slimes'", [u.id])).length > 0,   // нашествие слизней (промо подземелья, 2026-11-20)
     vinyls, inv, barn, stall, chest, hive, shells: Number((await q("SELECT count FROM f_shell WHERE user = ?", [u.id]))[0]?.[0] || 0), shell_dust: SHELL_DUST, wet: await wetOf(u.id), seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })), ...(await monoView(u.id)), feed_top: await feedTop(u.id),
     orders: await ordersOf(u.id, kit.builds),
