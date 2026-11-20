@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611202110";
+    var BUILD = "202611202119";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -214,7 +214,19 @@
   .devlink b { font-size: 15px; } .devlink span { grid-column: 1; font-size: 12.5px; color: rgba(246, 239, 227, .6); }
   .devlink i { grid-row: 1 / 3; grid-column: 2; font-style: normal; font-size: 18px; color: var(--gold); }
   .devlink:active { transform: scale(.98); }
-  .devlinks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0 0; } .devlinks .devlink { margin: 0; grid-template-columns: 1fr; text-align: center; }
+  .link-card { position: relative; }
+  .linkx { position: absolute; top: -6px; right: 0; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%;
+    background: rgba(255, 255, 255, .08); color: rgba(246, 239, 227, .8); font-size: 15px; cursor: pointer; }
+  .linkx:active { transform: scale(.94); }
+  .homehead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .gearbtn { flex: none; width: 36px; height: 36px; margin: -6px -6px -6px 0; border: 0; border-radius: 10px; background: rgba(255, 255, 255, .06); color: rgba(246, 239, 227, .75); font-size: 27px; line-height: 36px; padding: 0; cursor: pointer; }
+  .gearbtn:active { transform: scale(.94); }
+  .setrow { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 18px; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .setrow input { position: absolute; opacity: 0; pointer-events: none; }
+  .setrow .swi { flex: none; position: relative; width: 50px; height: 30px; border-radius: 15px; background: rgba(255, 255, 255, .18); transition: background .2s; }
+  .setrow .swi::after { content: ""; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .setrow input:checked + .swi { background: var(--gold, #f2c46b); } .setrow input:checked + .swi::after { transform: translateX(20px); }
+  .devlinks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0 0; } .devlinks .devlink { margin: 0; grid-template-columns: 1fr; text-align: center; } .devlinks .devlink.wide { grid-column: 1 / -1; }
   .vrec { background: none; border: 0; text-align: center; color: inherit; }
   .vrec canvas { width: 100%; aspect-ratio: 1; }
   .crec canvas { aspect-ratio: 180 / 272; border-radius: 6px; }
@@ -971,7 +983,7 @@
 <main>
   <!-- главная: профиль, игра, лидеры -->
   <section class="screen" id="home" hidden>
-    <div class="mono">Звёздная гильдия · StarGuardian</div>
+    <div class="homehead"><div class="mono">Звёздная гильдия · StarGuardian</div><button class="gearbtn" id="gearbtn" type="button" aria-label="Настройки">⚙︎</button></div>
     <div class="who">
       <div class="sigil" id="sigil">✦</div>
       <div><h1 id="title">Ученик звёзд</h1><div class="name" id="name"></div>
@@ -986,6 +998,7 @@
     <div class="devlinks">   <!-- две кнопки рядом (его просьба 2026-11-20): канал создателя и новости игр -->
       <a class="devlink" id="devlink2" href="https://t.me/yulion_music"><b>Канал создателя</b></a>
       <a class="devlink" id="devlink" href="https://t.me/whitecurrantdev"><b>Обновления и события</b></a>
+      <a class="devlink wide" id="devlink3" href="https://t.me/EVILINSTUDIO"><b>Помощь с визуалом — Evilin</b></a>   <!-- художник (его просьба 2026-11-20) -->
     </div>
     <div class="tabs" id="tabs">
       <button type="button" data-tab="games" aria-pressed="true">Игры</button>
@@ -1114,7 +1127,9 @@
     tg.ready(); tg.expand();
     try { tg.setHeaderColor("#120a05"); tg.setBackgroundColor("#120a05"); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
   }
-  var haptic = function (kind) { try { tg && tg.HapticFeedback && (kind === "light" || kind === "medium" ? tg.HapticFeedback.impactOccurred(kind) : tg.HapticFeedback.notificationOccurred(kind)); } catch (e) {} };
+  // вибрация — можно выключить в настройках (шестерёнка в лобби, его просьба 2026-11-20); хранится на этом устройстве
+  var hapticOn = function () { try { return localStorage.getItem("games-haptic") !== "0"; } catch (e) { return true; } };
+  var haptic = function (kind) { if (!hapticOn()) return; try { tg && tg.HapticFeedback && (kind === "light" || kind === "medium" ? tg.HapticFeedback.impactOccurred(kind) : tg.HapticFeedback.notificationOccurred(kind)); } catch (e) {} };
   var $ = function (id) { return document.getElementById(id); };
 
   // ---------- сервер ----------
@@ -1201,6 +1216,12 @@
     var box = $("linkcard"); clearInterval(linkPoll);
     if (!link) { box.hidden = true; return; }
     box.hidden = false; box.innerHTML = "";
+    // не привязан и не открыт — одна кнопка вместо заголовка, абзаца и кнопки (его правка 2026-11-20: блок занимал много места)
+    if (link.state !== "linked" && link.state !== "pending" && !consent) {
+      var r0 = el("div", "row"); r0.appendChild(btn("Играть от имени канала", "ghost", function () { renderLink(link, "intro"); })); box.appendChild(r0);
+      if (consent !== "intro") return;
+      box.innerHTML = "";
+    }
     box.appendChild(el("div", "mono", "Играть от имени канала"));
     if (link.state === "linked") {
       var p = el("p"); p.style.marginTop = "8px"; p.append("Ты играешь как «", el("b", "", link.title), "». Очки и звание — у канала.");
@@ -1224,7 +1245,7 @@
       }, 4000);
       return;
     }
-    if (consent) {
+    if (consent === true) {
       box.appendChild(el("p", "", "Бот и администратор чата будут знать, что этот канал — твой. Другим участникам твой личный аккаунт не покажется.")).style.marginTop = "8px";
       box.appendChild(el("p", "small", "Отвязать можно в любой момент здесь, удалить все свои данные — командой /forget в боте."));
       var r3 = el("div", "row");
@@ -1233,7 +1254,8 @@
       box.appendChild(r3); return;
     }
     box.appendChild(el("p", "", "Пишешь в чат от имени своего канала? Привяжи его — очки и звание будут у канала, а личный аккаунт нигде не появится.")).style.marginTop = "8px";
-    var r4 = el("div", "row"); r4.appendChild(btn("Привязать канал", "ghost", function () { renderLink(link, true); })); box.appendChild(r4);
+    var r4 = el("div", "row"); r4.appendChild(btn("Привязать канал", "", function () { renderLink(link, true); })); box.appendChild(r4);
+    var lx = el("button", "linkx", "✕"); lx.type = "button"; lx.setAttribute("aria-label", "Свернуть"); lx.onclick = function () { haptic("light"); renderLink(link); }; box.appendChild(lx);   // крестик вместо «Не надо» (его правка 2026-11-20)
   }
   $("privacy").onclick = function (e) {
     e.preventDefault();
@@ -7004,7 +7026,16 @@
     if (cur === "farm-visit") openNeighbors(); else if (cur === "farm-neighbors" || cur === "farm-shop") openFarm(); else home();
   }
 
-  $("devlink").onclick = $("devlink2").onclick = function (e) { var u = this.href; if (tg && tg.openTelegramLink) { e.preventDefault(); haptic("light"); tg.openTelegramLink(u); } };   // внутри Телеграма — открыть канал, не браузер
+  $("gearbtn").onclick = function () {                       // настройки (2026-11-20): пока одна — вибрация в играх
+    sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", "Настройки"));
+      var row = el("label", "setrow"), sw = el("input"); sw.type = "checkbox"; sw.checked = hapticOn();
+      row.appendChild(el("span", "", "Вибрация в играх")); row.appendChild(sw); row.appendChild(el("i", "swi")); sh.appendChild(row);
+      sw.onchange = function () { try { localStorage.setItem("games-haptic", sw.checked ? "1" : "0"); } catch (e) {} if (sw.checked) haptic("light"); };
+      sh.appendChild(btn("Готово", "", function () { close(); }));
+    });
+  };
+  $("devlink").onclick = $("devlink2").onclick = $("devlink3").onclick = function (e) { var u = this.href; if (tg && tg.openTelegramLink) { e.preventDefault(); haptic("light"); tg.openTelegramLink(u); } };   // внутри Телеграма — открыть канал, не браузер
   $("play").onclick = play;
   $("nextbtn").onclick = play;
   $("homebtn").onclick = home;
