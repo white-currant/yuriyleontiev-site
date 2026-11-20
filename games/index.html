@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611202119";
+    var BUILD = "202611202135";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -5047,7 +5047,8 @@
   var RAW_MAIN = { soup: "moss", stew: "mushroom", tea: "flower", jam: "cactus" }, RAW_REF = { moss: 4, mushroom: 8, flower: 8, cactus: 8 };   // как на сервере
   function rawKey(g) { var d = (g.myth ? g.dust / 3 : g.dust) / (RAW_REF[g.shape] || 8); return "r:" + g.color + ":" + (d <= 1.4 ? 2 : d <= 2 ? 1 : 0) + (g.myth ? ":m" : ""); }
   // сытость блюда (его просьба 2026-11-20): у блюд из печи она равна очкам рецепта; у урожая и прочего — 0
-  function satOfItem(id) { var rs = (F.state && F.state.recipes) || {}, r = rs[recKey(id)]; return id.indexOf("p:") === 0 && r && r.kind === "oven" ? (r.points || 0) : 0; }
+  function satOfItem(id) { if (id.indexOf("p:") !== 0) return 0; var sm = F.state && F.state.satmap; if (sm) return sm[recKey(id)] || 0;   // сытость — своя, с сервера (2026-11-20)
+    var rs = (F.state && F.state.recipes) || {}, r = rs[recKey(id)]; return r && r.kind === "oven" ? (r.points || 0) : 0; }
   function satTxt(id) { var n = satOfItem(id); return n ? "Сытость " + n + "." : ""; }
   function itemName(id) { var it = itemOf(id); return it ? it.name + (it.sort_name ? " · " + it.sort_name.toLowerCase() : "") : ""; }   // сорт или продукт кухни
   // амбар разложен по видам (его просьба 2026-11-17, вручную там не переставить): сначала урожай по форме — ягоды к ягодам, колосья к колосьям;
@@ -6567,7 +6568,7 @@
     if (!mine.length) {
       note(cat === "seed" ? "Своих сортов пока нет. Посади разные культуры на соседние грядки — когда созреют обе, при сборе может выпасть семя-гибрид."
         : !hasBuild(s, "barn") ? "Чтобы продавать урожай и блюда, нужен амбар: без него урожай сразу превращается в пыль."
-        : cat === "fert" ? "Удобрения нет. Его варит котёл в подземелье: 40 костей монстров — одно удобрение." : cat === "crop" ? "В амбаре нет урожая. Собери грядки — урожай ляжет в амбар." : "Блюд нет. Муку мелет мельница, еду печёт печь.");
+        : cat === "fert" ? "Удобрения нет. Его варит котёл в подземелье: 80 костей монстров — одно удобрение." : cat === "crop" ? "В амбаре нет урожая. Собери грядки — урожай ляжет в амбар." : "Блюд нет. Муку мелет мельница, еду печёт печь.");
       return;
     }
     if (sel && !acts2[sel]) sel = F.shopSel = null;

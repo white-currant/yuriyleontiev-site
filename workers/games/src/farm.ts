@@ -769,7 +769,7 @@ async function farmState1(u: any) {
     stars: (await q("SELECT id, x, y, dust FROM f_stars WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     clumps: (await q("SELECT id, x, y, dust FROM f_clumps WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
-    ...kit, ...(await decorView(u.id)), recipes: RECIPES, products: (await productsFor([...bs, ...kit.jobs.map((j: any) => "p:" + j.recipe)])).products, build_list: BUILDS,
+    ...kit, ...(await decorView(u.id)), recipes: RECIPES, satmap: satMap(), products: (await productsFor([...bs, ...kit.jobs.map((j: any) => "p:" + j.recipe)])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await metWanderer(u.id, await wandererView(u.id)), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
     slimes: !dgOpen() && (await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = 'promo:slimes'", [u.id])).length > 0,   // только до открытия подземелья (его решение: после 00:00 не запускать)   // нашествие слизней (промо подземелья, 2026-11-20)
     vinyls, inv, barn, stall, chest, hive, shells: Number((await q("SELECT count FROM f_shell WHERE user = ?", [u.id]))[0]?.[0] || 0), shell_dust: SHELL_DUST, wet: await wetOf(u.id), seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
@@ -2139,14 +2139,22 @@ export async function noticeSeen(u: any, id: string) {
 PRODUCTS["p:fert"] = { name: "Удобрение", dust: 30 };   // было 20; поднял по его решению 2026-11-20 — чтобы походы окупались (на рынке ×1,5 = 45)
 export const DG_NEED: Record<string, number> = { s: 1, m: 2, l: 4 };
 const DG_MAXB: Record<string, number> = { s: 150, m: 400, l: 700 };    // больше костей с уровня не набрать (замер 150 уровней: не больше 88 / 258 / 400)
-export const FERT_BONES = 40, FERT_SEC = 20 * 60,   // котёл — 20 минут на удобрение (его решение 2026-11-19, было 30)
+export const FERT_BONES = 80, FERT_SEC = 10 * 60,   // было 40 костей и 20 минут (его решение 2026-11-20, вместе с удвоенной сытостью)
+    // котёл — 20 минут на удобрение (его решение 2026-11-19, было 30)
   DG_SLOTS = 6, BREW_MAX = 20;
 // здоровье героя в убежище (его решение 2026-11-19): гибель в походе отнимает 20, лечат чаи из амбара; при нуле в поход нельзя
 export const HP_MAX = 100, HP_DEATH = 20, HP_TEA: Record<string, number> = { tea: 30, honeytea: 50 };
 // сухпайки (его подарок 2026-11-20): 4 пайка по 1 сытости в первой ячейке рюкзака у всех; едятся по одному, в амбар не возвращаются
 PRODUCTS["p:ration"] = { name: "Сухпайки", dust: 5 };
-export const RATION_SAT = 4;
-function satOf(id: string) { if (id === "p:ration") return RATION_SAT; const r = RECIPES[recipeOf(id)]; return id.startsWith("p:") && r && r.kind === "oven" ? r.points : 0; }
+// сытость — свой параметр, не очки за готовку (его решение 2026-11-20): вдвое больше прежней, вход в подземелья прежний (1/2/4) —
+// одним блюдом спускаются вдвое чаще; удобрение — вдвое больше костей (80) и вдвое быстрее (10 мин), так что пыли и удобрений на ту же еду
+// выходит столько же. Странная похлёбка — 4 (хватает ровно на большое) и съедается вся. Сухпайки — 4 пайка по 2 = 8
+export const DG_SAT: Record<string, number> = { bread: 2, soup: 2, bun: 4, pie: 8, tea: 4, stew: 6, pumpkin: 6, jam: 6, brew: 4,
+  honeycake: 4, honeytea: 4, honeypie: 6, honeycandy: 8, honeypumpkin: 6 };
+export const RATION_SAT = 8;
+function recSat(k: string) { const r = RECIPES[k]; return r && r.kind === "oven" && r.points > 0 ? (DG_SAT[k] ?? r.points * 2) : 0; }
+function satOf(id: string) { if (id === "p:ration") return RATION_SAT; return id.startsWith("p:") ? recSat(recipeOf(id)) : 0; }
+export function satMap() { return { ...Object.fromEntries(Object.keys(RECIPES).filter((k) => recSat(k) > 0).map((k) => [k, recSat(k)])), ration: RATION_SAT }; }
 // открытие подземелья всем (его решение 2026-11-20: подготовить к релизу, но пока не открывать) — один переключатель: подземелье,
 // удобрение в лавке, на рынке и в новостях, вкладка «Удобрение». false — всё это видит только хозяин
 // открывается само в 00:00 21 ноября 2026 по UTC+3 (его решение 2026-11-20) — до этого только хозяину
@@ -2161,7 +2169,7 @@ async function dgHero(uid: number) {
 // очки в звание за подземелье (его решение 2026-11-20): за пройденное до конца (не погиб, не вышел раньше) и за каждое сваренное удобрение
 // до открытия — «Лунная ферма»: иначе в карточке /gametime хозяина всем было бы видно «Подземелье» (без спойлеров)
 const dgReason = () => dgOpen() ? "Подземелье" : "Лунная ферма";
-export const DG_POINTS: Record<string, number> = { s: 2, m: 4, l: 8 }, POINTS_FERT = 1;
+export const DG_POINTS: Record<string, number> = { s: 1, m: 2, l: 4 }   /* было 2/4/8 — спусков вдвое больше на ту же еду (2026-11-20) */, POINTS_FERT = 1;
 async function brewTick(uid: number, name = "") {                          // готовые удобрения — в амбар; очередь идёт дальше
   const [b] = await q("SELECT n, started FROM d_brew WHERE user = ?", [uid]); if (!b) return { n: 0, started: 0, got: 0 };
   let n = Number(b[0]), st = Number(b[1]); const ready = Math.min(n, Math.floor((now() - st) / FERT_SEC));
@@ -2194,7 +2202,7 @@ export async function dgState(u: any, got = 0) {
   const [d] = await q("SELECT dust FROM f_farms WHERE user = ?", [u.id]);
   const hasBarn = (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length > 0;
   const [fs] = await q("SELECT listed FROM f_stall WHERE user = ? AND item = 'p:fert'", [u.id]), own = (await ownPrices(u.id))["p:fert"];
-  const satmap = { ...Object.fromEntries(Object.entries(RECIPES).filter(([, r]) => r.kind === "oven" && r.points > 0).map(([k, r]) => [k, r.points])), ration: RATION_SAT };
+  const satmap = satMap();
   const cards = (await q("SELECT id, kind FROM d_cards WHERE user = ? ORDER BY id", [u.id])).map(([id, kind]) => ({ id: Number(id), kind: String(kind) }));
   const secret = !!h.run && (await q("SELECT 1 FROM d_secret WHERE user = ? AND run = ?", [u.id, h.run])).length > 0;   // начатый поход — можно продолжить (страница не загрузилась, связь пропала)
   const [ar] = h.run ? await q("SELECT armor FROM d_armor WHERE user = ? AND run = ?", [u.id, h.run]) : [];
