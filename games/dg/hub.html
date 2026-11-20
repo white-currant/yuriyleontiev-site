@@ -615,7 +615,9 @@
     var g = el("div", "grid");
     for (var i = 0; i < D.slots; i++) (function (i) {
       var it = D.pack.filter(function (p) { return p.slot === i; })[0];
-      g.appendChild(iconCell(it && it.item, null, it && it.sat, it ? function () {                 // из рюкзака — обратно в амбар
+      // в углу — сытость; у надкусанного — остаток «3/4»; мифическое сытостью не платит — в углу «✦» (его решения 2026-11-20)
+      g.appendChild(iconCell(it && it.item, null, it && (it.myth ? "✦" : it.bite ? it.sat + "/" + it.full : it.sat), it ? function () {   // из рюкзака — обратно в амбар
+        if (it.bite) return tell("Надкусанное в амбар не вернуть");
         D.pack = D.pack.filter(function (p) { return p.slot !== i; }); D.sat -= it.sat; addFood(it.item, 1); packView();
         apply(seq("/api/dg/pack", { slot: i }));
       } : null));
@@ -630,8 +632,8 @@
     [["s", "малое"], ["m", "среднее"], ["l", "большое"]].forEach(function (z) { mk.appendChild(el("span", D.sat >= need[z[0]] ? "ok" : "", z[1] + " " + need[z[0]] + (D.sat >= need[z[0]] ? " ✓" : ""))); });
     box.appendChild(mk);
     var nm = D.pack.filter(function (p) { var pr = D.products && D.products[p.item]; return pr && pr.myth; }).length;   // мифические блюда — возрождение на спуск (2026-11-20)
-    if (nm) box.appendChild(el("div", "sh-t", "Мифическое блюдо в рюкзаке: если на спуске его съешь, герой один раз поднимется после гибели — с полным здоровьем."));
-    box.appendChild(el("div", "sh-t", "Сытость в рюкзаке: " + D.sat + ". Число в углу ячейки — сытость блюда. На спуск съедается столько, сколько нужно, с наименьшим перебором; остальное остаётся в рюкзаке до следующего спуска — лишнее не пропадает."));
+    if (nm) box.appendChild(el("div", "sh-t", "Мифическое блюдо ✦ — не еда на спуск, а возрождение: погибнешь — герой один раз поднимется с полным здоровьем. Тратится, только если герой поднялся; иначе остаётся в рюкзаке."));
+    box.appendChild(el("div", "sh-t", "Сытость в рюкзаке: " + D.sat + ". Число в углу ячейки — сытость блюда. На спуск съедается ровно столько, сколько нужно: сначала надкусанное, потом целое. Остаток блюда лежит в рюкзаке до следующих спусков (в углу «3/4»), в амбар его не вернуть."));
     if (false && D.cards && D.cards.length) {                                       // карты в рюкзаке не показываем — они в «Коллекции» гильдии (его правка 2026-11-20)                                                // карты тайной комнаты (редкие и легендарные) — пока под туманом
       box.appendChild(el("div", "sh-s", "Карты"));
       var gc = el("div", "grid");
@@ -650,7 +652,8 @@
         var used = D.pack.map(function (p) { return p.slot; }), free = -1;
         for (var j = 0; j < D.slots; j++) if (used.indexOf(j) < 0) { free = j; break; }
         if (free < 0) return tell("Рюкзак полон");
-        D.pack.push({ slot: free, item: f.item, sat: f.sat }); D.sat += f.sat; addFood(f.item, -1); packView();
+        var my = !!(D.products && D.products[f.item] && D.products[f.item].myth);   // мифическое — на возрождение, сытостью не платит
+        D.pack.push({ slot: free, item: f.item, sat: my ? 0 : f.sat, full: f.sat, myth: my }); D.sat += my ? 0 : f.sat; addFood(f.item, -1); packView();
         apply(seq("/api/dg/pack", { item: f.item }));
       }));
     });

@@ -524,7 +524,7 @@ async function handle(req: Request): Promise<Response> {
     case "/api/dg": return json(await farm.dgState(user));
     case "/api/dg/pack": return json(await farm.dgPack(user, String(body.item || "").slice(0, 80), body.slot == null ? -1 : Number(body.slot)));
     case "/api/dg/start": return json(await farm.dgStart(user, String(body.size || "")));
-    case "/api/dg/finish": return json(await farm.dgFinish(user, String(body.run || "").slice(0, 32), Number(body.bones) || 0, !!body.dead, !!body.left));
+    case "/api/dg/finish": return json(await farm.dgFinish(user, String(body.run || "").slice(0, 32), Number(body.bones) || 0, !!body.dead, !!body.left, !!body.revived));
     case "/api/cards/history": return json(await farm.cardHistory(user, Number(body.id) || 0));
     case "/api/dg/altar": return json(await farm.dgAltar(user, String(body.run || "").slice(0, 32)));
     case "/api/dg/drink": return json(await farm.dgDrink(user, String(body.item || "").slice(0, 80)));

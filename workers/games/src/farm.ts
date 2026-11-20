@@ -2150,11 +2150,19 @@ async function brewTick(uid: number) {                                     // г
   }
   return { n, started: st, got: ready };
 }
+// рюкзак с остатками (его решение 2026-11-20): у надкусанного блюда сытость — остаток; мифическое блюдо сытостью не платит —
+// оно лежит на возрождение и тратится, только если герой поднялся
+async function packOf(uid: number) {
+  const rows = await q("SELECT p.slot, p.item, b.left FROM d_pack p LEFT JOIN d_bite b ON b.user = p.user AND b.slot = p.slot WHERE p.user = ? ORDER BY p.slot", [uid]);
+  const pr = await productsFor(rows.map((r) => String(r[1])));
+  return rows.map(([slot, item, left]) => { const it = String(item), full = satOf(it), myth = !!pr.products[it]?.myth, bite = left != null;
+    return { slot: Number(slot), item: it, full, sat: myth ? 0 : bite ? Number(left) : full, bite, myth, brew: recipeOf(it) === "brew" }; });
+}
 export async function dgState(u: any, got = 0) {
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   await ensureFarm(u);
   const h = await dgHero(u.id), br = await brewTick(u.id);
-  const pack = (await q("SELECT slot, item FROM d_pack WHERE user = ? ORDER BY slot", [u.id])).map(([slot, item]) => ({ slot: Number(slot), item: String(item), sat: satOf(String(item)) }));
+  const pack = (await packOf(u.id)).map(({ brew, ...p }) => p);
   const barn = (await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])).map(([id, n]) => ({ item: String(id), count: Number(n) }));
   const food = barn.filter((b) => satOf(b.item) > 0).map((b) => ({ ...b, sat: satOf(b.item), heal: HP_TEA[recipeOf(b.item)] || 0 }));
   const pr = await productsFor([...food.map((f) => f.item), ...pack.map((p) => p.item), "p:fert"]);
@@ -2173,6 +2181,9 @@ export async function dgState(u: any, got = 0) {
 export async function dgPack(u: any, item: string, slot: number) {        // item — из амбара в свободную ячейку; slot ≥ 0 — из ячейки обратно в амбар
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   if (slot >= 0) {
+    if ((await q("SELECT 1 FROM d_bite WHERE user = ? AND slot = ?", [u.id, slot])).length) return { error: "Надкусанное блюдо в амбар не вернуть — доешь его в походах" };
+    const h = await dgHero(u.id);
+    if (h.run && (await q("SELECT 1 FROM d_myth WHERE user = ? AND run = ? AND slot = ?", [u.id, h.run, slot])).length) return { error: "Мифическое блюдо сейчас в походе" };
     const [p] = await q("DELETE FROM d_pack WHERE user = ? AND slot = ? RETURNING item", [u.id, slot]);
     if (p) await q("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [u.id, String(p[0])]);
     return dgState(u);
@@ -2197,34 +2208,38 @@ export async function dgStart(u: any, size: string) {                      // в
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   const need = DG_NEED[size]; if (!need) return { error: "Нет такого подземелья" };
   if ((await dgHero(u.id)).hp <= 0) return { error: "Герою нужно подлечиться — выпей чаю" };
-  const pack = (await q("SELECT slot, item FROM d_pack WHERE user = ?", [u.id])).map(([s, it]) => ({ slot: Number(s), item: String(it), sat: satOf(String(it)), brew: recipeOf(String(it)) === "brew" }));
+  const pack = await packOf(u.id);
   // Странная похлёбка (его решение 2026-11-19): открывает странную дверь в тайную комнату — и только в большом подземелье; там съедается всегда,
   // её сытость тоже идёт в счёт. В малое и среднее похлёбка не берётся: остаётся в рюкзаке, платит другая еда
   if (size !== "l" && pack.some((p) => p.brew)) return { error: "Со Странной похлёбкой в рюкзаке — только в большое подземелье" };   // его правка 2026-11-20
-  const bi = size === "l" ? pack.findIndex((p) => p.brew) : -1, must = bi < 0 ? 0 : 1 << bi, skip = pack.reduce((a, p, i) => p.brew && i !== bi ? a | 1 << i : a, 0);
-  let best = -1, bs = 1e9, bc = 99;
-  for (let m = 1; m < 1 << pack.length; m++) {
-    if ((m & must) !== must || (m & skip)) continue;
-    let s = 0, c = 0; pack.forEach((p, i) => { if (m >> i & 1) { s += p.sat; c++; } });
-    if (s >= need && (s < bs || (s === bs && c < bc))) { best = m; bs = s; bc = c; }
-  }
-  if (DG_FREE) { best = 0; bs = 0; }                                         // проба: ничего не съедается
-  const secret = !!must || (DG_FREE && size === "l");                         // проба: в большом — странная дверь всегда
-  if (best < 0) return { error: "Мало еды в рюкзаке: нужно сытости " + need + (skip ? " (Странная похлёбка — только для большого подземелья)" : "") };
-  // возрождение (его решение 2026-11-20, вместо брони): съел на спуск мифическое блюдо — одно возрождение с полным здоровьем, сколько бы их ни было; в пробе — весь рюкзак
-  const pr = await productsFor(pack.map((p) => p.item)), eatenItems = DG_FREE ? pack : pack.filter((_, i) => best >> i & 1);
-  const revive = eatenItems.some((p) => pr.products[p.item]?.myth) ? 1 : 0;
-  const eat = pack.filter((_, i) => best >> i & 1).map((p) => p.slot), run = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  // оплата (его решение 2026-11-20): еда съедается по очереди — сначала надкусанная, потом целая (от меньшей сытости), последнее блюдо
+  // может быть съедено частично — остаток лежит в рюкзаке. Странная похлёбка (только в большом) съедается вся. Мифическое — не платит
+  const bi = size === "l" ? pack.findIndex((p) => p.brew) : -1;
+  const eat: number[] = [], bites: [number, number][] = []; let paid = 0;
+  if (bi >= 0) { eat.push(pack[bi].slot); paid += pack[bi].sat; }
+  const order = pack.filter((p) => !p.brew && !p.myth && p.sat > 0).sort((a, b) => (b.bite ? 1 : 0) - (a.bite ? 1 : 0) || a.sat - b.sat || a.slot - b.slot);
+  for (const p of order) { if (paid >= need) break; const take = Math.min(p.sat, need - paid); paid += take;
+    if (take >= p.sat) eat.push(p.slot); else bites.push([p.slot, p.sat - take]); }
+  if (DG_FREE) { eat.length = 0; bites.length = 0; paid = need; }            // проба: ничего не съедается
+  const secret = bi >= 0 || (DG_FREE && size === "l");                       // проба: в большом — странная дверь всегда
+  if (paid < need) return { error: "Мало еды в рюкзаке: нужно сытости " + need + (pack.some((p) => p.brew) && bi < 0 ? " (Странная похлёбка — только для большого подземелья)" : "") };
+  // возрождение (его решение 2026-11-20): мифическое блюдо в рюкзаке — одно возрождение на поход; тратится, только если герой поднялся
+  const mi = pack.find((p) => p.myth), revive = mi ? 1 : 0;
+  const run = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await dgHero(u.id);
   await DB.batch([
     ...eat.map((s) => DB.prepare("DELETE FROM d_pack WHERE user = ? AND slot = ?").bind(u.id, s)),
+    ...eat.map((s) => DB.prepare("DELETE FROM d_bite WHERE user = ? AND slot = ?").bind(u.id, s)),
+    ...bites.map(([s, l]) => DB.prepare("INSERT INTO d_bite (user, slot, left) VALUES (?, ?, ?) ON CONFLICT(user, slot) DO UPDATE SET left = excluded.left").bind(u.id, s, l)),
+    DB.prepare("DELETE FROM d_myth WHERE user = ?").bind(u.id),
+    ...(mi ? [DB.prepare("INSERT INTO d_myth (user, run, slot, item) VALUES (?, ?, ?, ?)").bind(u.id, run, mi.slot, mi.item)] : []),
     DB.prepare("UPDATE d_hero SET run = ?, size = ?, started = ? WHERE user = ?").bind(run, size, now(), u.id),
     DB.prepare("DELETE FROM d_secret WHERE user = ?").bind(u.id),
     DB.prepare("DELETE FROM d_altar WHERE user = ?").bind(u.id),            // находка брошенного похода пропала
     DB.prepare("INSERT INTO d_armor (user, run, armor) VALUES (?, ?, ?) ON CONFLICT(user) DO UPDATE SET run = excluded.run, armor = excluded.armor").bind(u.id, run, revive),
     ...(secret ? [DB.prepare("INSERT INTO d_secret (user, run) VALUES (?, ?)").bind(u.id, run)] : []),
   ]);
-  return { run, size, ate: bs, secret, revive };
+  return { run, size, ate: paid, secret, revive };
 }
 // странная комната (его решения 2026-11-19): поход со Странной похлёбкой — за дверью с глазом красный зал, в центре алтарь, обвитый щупальцем.
 // Удар по алтарю — одна находка за поход, бросок на сервере: карта — чаще всего (иначе семя не будет редкостью), и карты бывают
@@ -2299,7 +2314,7 @@ export async function cardHistory(u: any, id: number) {
     mine_from: from != null && String(from) === String(u.id), mine_to: to != null && String(to) === String(u.id), hash: String(h).slice(0, 12) }));
   return { id, serial: String(id).padStart(6, "0"), kind: String(c[1]), at: Number(c[2]), foil: c[3] === "foil", ok, chain: all.length, events };
 }
-export async function dgFinish(u: any, run: string, bones: number, dead = false, left = false) {      // итог похода: погиб — кости 0; закрыл игру посреди похода — итог не пришёл, всё пропало
+export async function dgFinish(u: any, run: string, bones: number, dead = false, left = false, revived = false) {      // итог похода: погиб — кости 0; закрыл игру посреди похода — итог не пришёл, всё пропало
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   const h = await dgHero(u.id);
   if (!run || h.run !== run) return { error: "Поход уже закончен" };
@@ -2307,6 +2322,8 @@ export async function dgFinish(u: any, run: string, bones: number, dead = false,
   if (left && !dead) b = Math.floor(b / 2);                                 // вышел, не дойдя до конца, — половина костей (его решение 2026-11-19)
   await q("UPDATE d_hero SET bones = bones + ?, hp = MAX(0, hp - ?), run = NULL, size = NULL WHERE user = ? AND run = ?", [b, dead ? HP_DEATH : 0, u.id, run]);
   await q("DELETE FROM d_secret WHERE user = ? AND run = ?", [u.id, run]);
+  const [my] = await q("DELETE FROM d_myth WHERE user = ? AND run = ? RETURNING slot, item", [u.id, run]);   // герой поднялся — мифическое блюдо съедено
+  if (my && revived) { await q("DELETE FROM d_pack WHERE user = ? AND slot = ? AND item = ?", [u.id, Number(my[0]), String(my[1])]); await q("DELETE FROM d_bite WHERE user = ? AND slot = ?", [u.id, Number(my[0])]); }
   const [al] = await q("DELETE FROM d_altar WHERE user = ? AND run = ? RETURNING loot", [u.id, run]);
   let loot: string | null = null;                                            // «карта+добавка» — выдаётся всё
   if (al && !dead) { const got = []; for (const k of String(al[0]).split("+")) got.push(await altarGive(u.id, k)); loot = got.join("+"); }

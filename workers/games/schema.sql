@@ -113,6 +113,10 @@ CREATE TABLE IF NOT EXISTS f_wet (user INTEGER NOT NULL, strain TEXT NOT NULL, n
 -- подземелье (2026-11-19): кости и текущий поход героя, рюкзак еды (ячейка — одно блюдо), очередь котла удобрений
 CREATE TABLE IF NOT EXISTS d_hero (user INTEGER PRIMARY KEY, bones INTEGER NOT NULL DEFAULT 0, run TEXT, size TEXT, started INTEGER, hp INTEGER NOT NULL DEFAULT 100);
 CREATE TABLE IF NOT EXISTS d_pack (user INTEGER NOT NULL, slot INTEGER NOT NULL, item TEXT NOT NULL, PRIMARY KEY (user, slot));
+-- надкусанные блюда в рюкзаке (его решение 2026-11-20): left — сколько сытости осталось; в амбар такое не вернуть
+CREATE TABLE IF NOT EXISTS d_bite (user INTEGER NOT NULL, slot INTEGER NOT NULL, left INTEGER NOT NULL, PRIMARY KEY (user, slot));
+-- мифическое блюдо похода (его решение 2026-11-20): тратится, только если герой возродился; иначе остаётся в рюкзаке
+CREATE TABLE IF NOT EXISTS d_myth (user INTEGER PRIMARY KEY, run TEXT NOT NULL, slot INTEGER NOT NULL, item TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS d_brew (user INTEGER PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, started INTEGER NOT NULL DEFAULT 0);
 -- тайная комната (2026-11-19): поход со Странной похлёбкой и легендарные карты для будущей карточной игры (пока скрыты)
 CREATE TABLE IF NOT EXISTS d_secret (user INTEGER PRIMARY KEY, run TEXT NOT NULL);
