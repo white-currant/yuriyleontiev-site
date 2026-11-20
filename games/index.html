@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611202315";
+    var BUILD = "202611202321";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3239,6 +3239,10 @@
       var pre = lv >= 3 ? "oven3" : lv >= 2 ? "oven2" : "oven";
       var im = busy ? ARTS[pre + "-fire-" + (1 + Math.floor((F.frame || 0) / 2) % 3)] : ARTS[pre];
       c.drawImage(im, x - 14, y + 4 - im.height);
+      if (busy) for (i = 0; i < 4; i++) {                                         // дым из трубы, пока печёт (его просьба 2026-11-20) — у всех трёх печей труба в x 17–22 рисунка
+        var sph = (t / 1500 + i / 4) % 1, sx = x - 14 + 19, sy = y + 4 - im.height - 1;
+        disc(c, sx + Math.round(Math.sin(sph * 6 + i) * 2 + sph * 3), sy - Math.round(sph * 13), Math.round(1 + sph * 2), "rgba(240,235,255," + (.55 * (1 - sph)).toFixed(2) + ")");
+      }
       if (ready && own && (t / 400 | 0) % 2) { px(c, x - 1, y - 28, 3, 1, "#ffffff"); px(c, x, y - 29, 1, 3, "#ffffff"); }   // готово — искорка
       return;
     }
