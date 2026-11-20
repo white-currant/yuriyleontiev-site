@@ -2128,7 +2128,7 @@ export async function noticeSeen(u: any, id: string) {
 // Вход стоит «сытость» = очки блюда (хлеб 1 … Странная похлёбка 5): малое 1, среднее 2, большое 4. Бой считается в игре,
 // сервер запоминает итог при выходе (два запроса на поход). Удобрение — товар амбара «p:fert», 40 костей, 20 минут штука.
 // Пока подземелье открыто только хозяину — и все запросы тоже.
-PRODUCTS["p:fert"] = { name: "Удобрение", dust: 20 };
+PRODUCTS["p:fert"] = { name: "Удобрение", dust: 30 };   // было 20; поднял по его решению 2026-11-20 — чтобы походы окупались (на рынке ×1,5 = 45)
 export const DG_NEED: Record<string, number> = { s: 1, m: 2, l: 4 };
 const DG_MAXB: Record<string, number> = { s: 150, m: 400, l: 700 };    // больше костей с уровня не набрать (замер 150 уровней: не больше 88 / 258 / 400)
 export const FERT_BONES = 40, FERT_SEC = 20 * 60,   // котёл — 20 минут на удобрение (его решение 2026-11-19, было 30)
@@ -2147,7 +2147,11 @@ async function dgHero(uid: number) {
   const [h] = await q("SELECT bones, run, size, hp FROM d_hero WHERE user = ?", [uid]);
   return { bones: Number(h[0]), run: h[1] ? String(h[1]) : "", size: h[2] ? String(h[2]) : "", hp: Number(h[3]) };
 }
-async function brewTick(uid: number) {                                     // готовые удобрения — в амбар; очередь идёт дальше
+// очки в звание за подземелье (его решение 2026-11-20): за пройденное до конца (не погиб, не вышел раньше) и за каждое сваренное удобрение
+// до открытия — «Лунная ферма»: иначе в карточке /gametime хозяина всем было бы видно «Подземелье» (без спойлеров)
+const dgReason = () => dgOpen() ? "Подземелье" : "Лунная ферма";
+export const DG_POINTS: Record<string, number> = { s: 2, m: 4, l: 8 }, POINTS_FERT = 1;
+async function brewTick(uid: number, name = "") {                          // готовые удобрения — в амбар; очередь идёт дальше
   const [b] = await q("SELECT n, started FROM d_brew WHERE user = ?", [uid]); if (!b) return { n: 0, started: 0, got: 0 };
   let n = Number(b[0]), st = Number(b[1]); const ready = Math.min(n, Math.floor((now() - st) / FERT_SEC));
   if (ready > 0) {
@@ -2155,6 +2159,7 @@ async function brewTick(uid: number) {                                     // г
     await DB.batch([
       DB.prepare("UPDATE d_brew SET n = ?, started = ? WHERE user = ?").bind(n, st, uid),
       DB.prepare("INSERT INTO f_barn (user, strain, count) VALUES (?, 'p:fert', ?) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count").bind(uid, ready),
+      DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)").bind(uid, name || "Игрок", ready * POINTS_FERT, dgReason(), now()),
     ]);
   }
   return { n, started: st, got: ready };
@@ -2170,7 +2175,7 @@ async function packOf(uid: number) {
 export async function dgState(u: any, got = 0) {
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   await ensureFarm(u);
-  const h = await dgHero(u.id), br = await brewTick(u.id);
+  const h = await dgHero(u.id), br = await brewTick(u.id, nameOf(u));
   const pack = (await packOf(u.id)).map(({ brew, ...p }) => p);
   const barn = (await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])).map(([id, n]) => ({ item: String(id), count: Number(n) }));
   const food = barn.filter((b) => satOf(b.item) > 0).map((b) => ({ ...b, sat: satOf(b.item), heal: HP_TEA[recipeOf(b.item)] || 0 }));
@@ -2183,7 +2188,7 @@ export async function dgState(u: any, got = 0) {
   const secret = !!h.run && (await q("SELECT 1 FROM d_secret WHERE user = ? AND run = ?", [u.id, h.run])).length > 0;   // начатый поход — можно продолжить (страница не загрузилась, связь пропала)
   const [ar] = h.run ? await q("SELECT armor FROM d_armor WHERE user = ? AND run = ?", [u.id, h.run]) : [];
   return { free: DG_FREE, revive: ar ? Number(ar[0]) : 0, secret, cards, hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
-           fert_stall: Number(fs?.[0] || 0), fert_price: sellerPrice(stallPrice(PRODUCTS["p:fert"].dust), own), satmap,
+           fert_stall: Number(fs?.[0] || 0), fert_price: sellerPrice(stallPrice(PRODUCTS["p:fert"].dust), own), fert_base: stallPrice(PRODUCTS["p:fert"].dust), fert_dust: PRODUCTS["p:fert"].dust, price_range: [PRICE_LO, PRICE_HI], satmap,
            pack, slots: DG_SLOTS, food, sat: pack.reduce((a, p) => a + p.sat, 0), need: DG_NEED, products: pr.products,
            brew: { n: br.n, started: br.started, per: FERT_SEC, bones: FERT_BONES, max: BREW_MAX }, got: got + br.got, now: now() };
 }
@@ -2329,14 +2334,16 @@ export async function dgFinish(u: any, run: string, bones: number, dead = false,
   if (!run || h.run !== run) return { error: "Поход уже закончен" };
   let b = dead ? 0 : Math.max(0, Math.min(DG_MAXB[h.size] || 0, Math.round(Number(bones) || 0)));
   if (left && !dead) b = Math.floor(b / 2);                                 // вышел, не дойдя до конца, — половина костей (его решение 2026-11-19)
-  await q("UPDATE d_hero SET bones = bones + ?, hp = MAX(0, hp - ?), run = NULL, size = NULL WHERE user = ? AND run = ?", [b, dead ? HP_DEATH : 0, u.id, run]);
+  const done = await q("UPDATE d_hero SET bones = bones + ?, hp = MAX(0, hp - ?), run = NULL, size = NULL WHERE user = ? AND run = ? RETURNING 1", [b, dead ? HP_DEATH : 0, u.id, run]);
+  const pts = !dead && !left && done.length ? DG_POINTS[h.size] || 0 : 0;   // прошёл до конца — очки в звание
+  if (pts) await q("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)", [u.id, nameOf(u), pts, dgReason(), now()]);
   await q("DELETE FROM d_secret WHERE user = ? AND run = ?", [u.id, run]);
   const [my] = await q("DELETE FROM d_myth WHERE user = ? AND run = ? RETURNING slot, item", [u.id, run]);   // герой поднялся — мифическое блюдо съедено
   if (my && revived) { await q("DELETE FROM d_pack WHERE user = ? AND slot = ? AND item = ?", [u.id, Number(my[0]), String(my[1])]); await q("DELETE FROM d_bite WHERE user = ? AND slot = ?", [u.id, Number(my[0])]); }
   const [al] = await q("DELETE FROM d_altar WHERE user = ? AND run = ? RETURNING loot", [u.id, run]);
   let loot: string | null = null;                                            // «карта+добавка» — выдаётся всё
   if (al && !dead) { const got = []; for (const k of String(al[0]).split("+")) got.push(await altarGive(u.id, k)); loot = got.join("+"); }
-  return { ok: true, bones: b, total: h.bones + b, hp: dead ? Math.max(0, h.hp - HP_DEATH) : h.hp, loot };
+  return { ok: true, bones: b, total: h.bones + b, hp: dead ? Math.max(0, h.hp - HP_DEATH) : h.hp, loot, points: pts };
 }
 export async function dgDrink(u: any, item: string) {                      // выпить чай из амбара — здоровье героя
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
@@ -2349,7 +2356,7 @@ export async function dgDrink(u: any, item: string) {                      // в
 export async function dgBrew(u: any, n: number) {                          // в котёл: по 40 костей на удобрение, варятся по очереди
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Удобрение ложится в амбар — сначала построй его на ферме" };
-  const k = Math.max(1, Math.min(BREW_MAX, Math.round(n) || 1)), br = await brewTick(u.id);
+  const k = Math.max(1, Math.min(BREW_MAX, Math.round(n) || 1)), br = await brewTick(u.id, nameOf(u));
   if (br.n + k > BREW_MAX) return { error: "В котле не больше " + BREW_MAX };
   if (!(await q("UPDATE d_hero SET bones = bones - ? WHERE user = ? AND bones >= ? RETURNING 1", [k * FERT_BONES, u.id, k * FERT_BONES])).length) return { error: "Не хватает костей" };
   await q("INSERT INTO d_brew (user, n, started) VALUES (?, ?, ?) ON CONFLICT(user) DO UPDATE SET n = d_brew.n + excluded.n, started = CASE WHEN d_brew.n = 0 THEN excluded.started ELSE d_brew.started END",

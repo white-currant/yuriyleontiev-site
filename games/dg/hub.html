@@ -108,6 +108,15 @@
   .meter span.f { background: linear-gradient(#ffcf7a 0 50%, #d08a2a 50%); }
   .marks { display: flex; justify-content: space-between; font-size: calc(var(--u) * 4.2); font-weight: 700; opacity: .8; }
   .marks .ok { color: #8fe3a8; opacity: 1; }
+  /* продажа удобрения — как в лавке фермы (2026-11-20): счётчик − N + «все» и цена − ✦ N + «как на рынке» в цветах убежища */
+  .winfo { margin-top: calc(var(--u) * 3); }
+  .winfo .sh-s { margin-top: calc(var(--u) * 2); }
+  .salecount { margin-top: calc(var(--u) * 3); font-size: calc(var(--u) * 5); font-weight: 800; }
+  .qty { display: grid; grid-template-columns: calc(var(--u) * 13) calc(var(--u) * 15) calc(var(--u) * 13) 1fr; gap: calc(var(--u) * 2); align-items: center; margin-top: calc(var(--u) * 3); }
+  .qty.price { grid-template-columns: calc(var(--u) * 13) calc(var(--u) * 19) calc(var(--u) * 13) 1fr; }
+  .qty .btn { padding: 0; font-size: calc(var(--u) * 6); }
+  .qty .btn:last-child { font-size: calc(var(--u) * 4.4); }
+  .qval { text-align: center; font-size: calc(var(--u) * 6); font-weight: 800; color: #ffcf7a; }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * 3); margin-top: calc(var(--u) * 3); }
   .one { display: grid; margin-top: calc(var(--u) * 3); }
   .btn { height: calc(var(--u) * 13); border: 0; color: #f2fff8; font: inherit; font-size: calc(var(--u) * 5.2); font-weight: 800; cursor: pointer; background: #3f9e7c;
@@ -700,24 +709,45 @@
       }
     }
   }
-  // «Продать» (его жалоба 2026-11-19: «удобрения не активны, не могу убрать из продажи»): пакетики нажимаются, как еда на «Купить», —
-  // выбрал «в амбаре» → «Выставить», выбрал «на прилавке» → «Убрать». Пустой прилавок — бледный пакетик без ценника, чтобы не казалось, что он продаётся
-  var fSel = null;
+  // «Продать» — как продажа в лавке фермы (его просьба 2026-11-20), только в цветах подземелья: товар на полке с ценником
+  // и «в продаже X из Y», ниже — «На продаже: X из Y», счётчик − N + «все», «Выставить N» / «Убрать N» и цена счётчиком − ✦ N +
+  var fN = 1;
   function sellView() {
-    box.appendChild(el("div", "sh-s", "Твоё удобрение"));
-    if (!fSel || (fSel === "barn" && !D.fert && D.fert_stall) || (fSel === "stall" && !D.fert_stall && D.fert)) fSel = D.fert || !D.fert_stall ? "barn" : "stall";   // выбрано пустое, а в другом есть — перейти туда
-    var g2 = el("div", "wares");
-    g2.appendChild(ware("p:fert", { on: fSel === "barn", off: !D.fert, q: "×" + D.fert, click: function () { fSel = "barn"; marketView(); } }));
-    g2.appendChild(ware("p:fert", { on: fSel === "stall", off: !D.fert_stall, q: "×" + D.fert_stall, sale: true, tag: D.fert_stall ? "✦ " + D.fert_price : "", click: function () { fSel = "stall"; marketView(); } }));
-    box.appendChild(g2);
-    var lb = el("div", "two"); lb.appendChild(el("div", "sh-t c", "в амбаре")); lb.appendChild(el("div", "sh-t c", "на прилавке")); lb.style.width = "50%"; lb.style.marginTop = "0"; box.appendChild(lb);
-    var bar = fSel === "barn";
-    box.appendChild(el("div", "sh-t c", bar ? (D.fert ? "В амбаре " + D.fert + " · на прилавке пойдёт по ✦ " + D.fert_price : "В амбаре удобрения нет — свари в перегонном кубе")
-                                            : (D.fert_stall ? "На прилавке " + D.fert_stall + " по ✦ " + D.fert_price : "На прилавке пусто — ничего не продаётся")));
-    var one = el("div", "one"), b = el("button", "btn" + (bar ? "" : " alt"), bar ? "Выставить на прилавок" : "Убрать с прилавка"); b.type = "button";
-    b.disabled = bar ? !D.fert : !D.fert_stall;
-    b.onclick = function (e) { e.stopPropagation(); var d = bar ? 1 : -1; D.fert -= d; D.fert_stall += d; hud(); marketView(); apply(seq("/api/farm/stall", { item: "p:fert", delta: d })); };
-    one.appendChild(b); box.appendChild(one);
+    var tot = D.fert + D.fert_stall, base = D.fert_base || 30, rg = D.price_range || [.7, 1.3];
+    var lo = Math.max(1, Math.floor(base * rg[0])), hi = Math.max(1, Math.ceil(base * rg[1])), cur = D.fert_price || base;
+    if (!tot) { box.appendChild(el("div", "sh-t", "Удобрения нет. Его варит перегонный куб: " + ((D.brew && D.brew.bones) || 40) + " костей — одно удобрение.")); return; }
+    var g = el("div", "wares");
+    g.appendChild(ware("p:fert", { on: true, q: D.fert_stall ? D.fert_stall + " из " + tot : "×" + tot, sale: !!D.fert_stall, tag: "✦ " + cur }));
+    box.appendChild(g);
+    var info = el("div", "winfo"); info.appendChild(el("div", "sh-s", "Удобрение"));
+    info.appendChild(el("div", "sh-t", "Игрокам — ✦ " + cur + " за штуку, в пыль — ✦ " + (D.fert_dust || 20) + "."));
+    info.appendChild(el("div", "sh-t", "Выставленное лежит на прилавке: его не высыпать на грядку, пока не уберёшь."));
+    info.appendChild(el("div", "salecount", "На продаже: " + D.fert_stall + " из " + tot));
+    var mx = Math.max(D.fert, D.fert_stall); fN = Math.max(1, Math.min(fN, mx));
+    var q = el("div", "qty"), mi = el("button", "btn alt", "−"), pl = el("button", "btn alt", "+"), all = el("button", "btn alt", "все " + mx);
+    [mi, pl, all].forEach(function (b) { b.type = "button"; });
+    mi.disabled = fN <= 1; pl.disabled = fN >= mx; all.disabled = fN >= mx; if (mx === 1) all.style.visibility = "hidden";
+    mi.onclick = function (e) { e.stopPropagation(); fN--; marketView(); }; pl.onclick = function (e) { e.stopPropagation(); fN++; marketView(); };
+    all.onclick = function (e) { e.stopPropagation(); fN = mx; marketView(); };
+    q.appendChild(mi); q.appendChild(el("div", "qval", String(fN))); q.appendChild(pl); q.appendChild(all); info.appendChild(q);
+    var two = el("div", "two"), put = el("button", "btn", "Выставить " + fN), take = el("button", "btn alt", "Убрать " + fN);
+    put.type = take.type = "button"; put.disabled = D.fert < fN; take.disabled = D.fert_stall < fN;
+    var move = function (d) { D.fert -= d; D.fert_stall += d; hud(); marketView(); apply(seq("/api/farm/stall", { item: "p:fert", delta: d })); };
+    put.onclick = function (e) { e.stopPropagation(); if (D.fert >= fN) move(fN); }; take.onclick = function (e) { e.stopPropagation(); if (D.fert_stall >= fN) move(-fN); };
+    two.appendChild(put); two.appendChild(take); info.appendChild(two);
+    // «в пыль» прямо в убежище (его решение 2026-11-20): не ждать покупателя — сразу звёздная пыль за каждое из амбара
+    var one = el("div", "one"), dust = el("button", "btn alt", "В пыль " + fN + " · ✦ " + fN * (D.fert_dust || 30)); dust.type = "button"; dust.disabled = D.fert < fN;
+    dust.onclick = function (e) { e.stopPropagation(); if (D.fert < fN) return; var k = fN; D.fert -= k; D.dust += k * (D.fert_dust || 30); hud(); marketView(); tell("+✦ " + k * (D.fert_dust || 30));
+      seq("/api/farm/sell", { strain: "p:fert", n: k }).then(function (r) { if (r && r.error) tell(r.error); return load(); }).catch(function (e2) { tell(e2.message); load(); }); };
+    one.appendChild(dust); info.appendChild(one);
+    info.appendChild(el("div", "sh-t", "Цена за штуку" + (cur === base ? " — как на рынке" : " (на рынке ✦ " + base + ")") + ". Можно от ✦ " + lo + " до ✦ " + hi + "."));
+    var step = Math.max(1, Math.round(base * .05)), set = function (v) { v = Math.max(lo, Math.min(hi, v)); if (v === cur) return; D.fert_price = v; marketView(); apply(seq("/api/farm/price", { item: "p:fert", price: v, kind: "item" })); };
+    var pr = el("div", "qty price"), dn = el("button", "btn alt", "−"), up = el("button", "btn alt", "+"), same = el("button", "btn alt", "как на рынке");
+    [dn, up, same].forEach(function (b) { b.type = "button"; });
+    dn.disabled = cur <= lo; up.disabled = cur >= hi; same.disabled = cur === base;
+    dn.onclick = function (e) { e.stopPropagation(); set(cur - step); }; up.onclick = function (e) { e.stopPropagation(); set(cur + step); }; same.onclick = function (e) { e.stopPropagation(); set(base); };
+    pr.appendChild(dn); pr.appendChild(el("div", "qval", "✦ " + cur)); pr.appendChild(up); pr.appendChild(same); info.appendChild(pr);
+    box.appendChild(info);
   }
   // рынок — заранее и в памяти главного окна: окно открывается сразу, свежие данные подтягиваются в фоне
   function mRefresh() { if (!dgCall) return; dgCall("/api/farm/market").then(function (m) { M = m; try { parent.__dgM = m; } catch (e) {} if (open === marketView) marketView(); }).catch(function () {}); }
