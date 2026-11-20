@@ -221,7 +221,7 @@
       var nm = k === 0 ? 2 : Math.max(4, Math.round(free.length * Math.min(.55, .26 + .08 * rm.depth) * (.85 + rr() * .3)));
       for (tt = 0; tt < nm && free.length; tt++) { var f2 = free.splice(Math.floor(rr() * free.length), 1)[0]; rm.mobs.push({ u: f2[0] + .5, v: f2[1] + .5, hp: 3, t: rr() * 10, hit: 0, vu: 0, vv: 0, wu: 0, wv: 0, wt: 0 }); }
       var nsp = rm.depth >= 4 ? 2 : rm.depth >= 2 ? 1 : 0;                        // стрелки: с третьей комнаты от входа — один, с пятой — два
-      for (tt = 0; tt < nsp && tt < rm.mobs.length; tt++) { var sp = rm.mobs[rm.mobs.length - 1 - tt]; sp.spit = true; sp.hp = 2; sp.cd = 1.5 + rr() * 2; sp.aim = 0; }
+      for (tt = 0; tt < nsp && tt < rm.mobs.length; tt++) { var sp = rm.mobs[rm.mobs.length - 1 - tt]; sp.spit = true; sp.hp = 2; sp.cd = 2.5 + rr() * 2; sp.aim = 0; }   // два удара (его правка 2026-11-20); первый плевок не сразу
       rm.shots = [];
       rm.drops = []; rm.seen = k === 0;
       // тайный зал — пустой и чистый: без слизней, предметов, люков и плиток с предметами
@@ -404,10 +404,10 @@
       if (m.hp <= 0) return;
       m.t += dt; m.hit = Math.max(0, m.hit - dt);
       var du2 = hero.u - m.u, dv2 = hero.v - m.v, d = Math.hypot(du2, dv2) || 1, hop = Math.max(0, Math.sin(m.t * 5.5)), mu = 0, mv = 0;
-      if (m.spit && hero.st !== "dead" && d < 6) {                                 // стрелок: держит расстояние 2–4 клетки, раз в ~2,5 с плюёт туда, где герой стоит сейчас
+      if (m.spit && hero.st !== "dead" && d < 6) {                                 // стрелок: держит расстояние 2–4 клетки, раз в ~4,5 с плюёт туда, где герой стоит сейчас
         var sgn = d < 2 ? -1 : d > 4 ? 1 : 0; mu = du2 / d * .4 * sgn * hop * dt; mv = dv2 / d * .4 * sgn * hop * dt;
         if (m.aim > 0) { m.aim -= dt; mu = mv = 0;                                 // надувается 0,45 с — видно, что сейчас плюнет
-          if (m.aim <= 0) { shots.push({ u: m.u, v: m.v, du: du2 / d * 2.4, dv: dv2 / d * 2.4, t: 0 }); m.cd = 2.2 + Math.random() * .8; } }
+          if (m.aim <= 0) { shots.push({ u: m.u, v: m.v, du: du2 / d * 2.4, dv: dv2 / d * 2.4, t: 0 }); m.cd = 4 + Math.random() * 1.5; } }   // стреляет реже — раз в 4–5,5 с (его правка 2026-11-20, было 2,2–3 с)
         else { m.cd -= dt; if (m.cd <= 0) m.aim = .45; }
       }
       else if (hero.st !== "dead" && d < 3) { mu = du2 / d * .55 * hop * dt; mv = dv2 / d * .55 * hop * dt; }
