@@ -1314,9 +1314,9 @@ async function kitchenOf(uid: number) {
   return { builds, jobs, levels };
 }
 // прокачка мельницы или печи: ещё одна ячейка, всего до трёх
-const UPGRADES_ON = false;                 // прокачка готова, но пока выключена (его решение 2026-11-16: сначала только отмена)
+const UPGRADES_ON: Record<string, boolean> = { oven: true, mill: false };   // печь — включена (его решение 2026-11-20, со своими рисунками 2 и 3 уровня); мельница — пока нет
 export async function upgrade(u: any, kind: string) {
-  if (!UPGRADES_ON) return { error: "Прокачка пока закрыта" };
+  if (!UPGRADES_ON[kind]) return { error: "Прокачка пока закрыта" };
   const b = BUILDS[kind]; if (!b?.up) return { error: "Это строение не прокачивается" };
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, kind])).length) return { error: b.name + " ещё не построена" };
   const lvl = await levelOf(u.id, kind);
