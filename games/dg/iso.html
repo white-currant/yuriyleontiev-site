@@ -84,7 +84,11 @@
   var slimeF = [
     ["......kkkkkkkk......", "....kkAAAAAAAAkk....", "...kAAhhAAAAAAAAk...", "..kAAhhAAAAAAAAAAk..", ".kaAAAAAAAAAAAAAAak.", ".kaAAAeeAAAAeeAAAak.", "kaaAAAeeAAAAeeAAAaak", "kaaAAAAAAAAAAAAAAaak", "kaaaAAAAAAAAAAAAaaak", "kdaaaaaAAAAAAaaaaadk", "kddaaaaaaaaaaaaaaddk", ".kddddaaaaaaaadddk..", "..kkkkkkkkkkkkkkkk.."],
     ["....................", "....................", ".....kkkkkkkkkk.....", "...kkAAAAAAAAAAkk...", "..kAAhhAAAAAAAAAAk..", ".kaAhhAAAAAAAAAAAak.", "kaaAAAeeAAAAeeAAAaak", "kaaAAAeeAAAAeeAAAaak", "kaaaAAAAAAAAAAAAaaak", "kdaaaaaAAAAAAaaaaadk", "kddaaaaaaaaaaaaaaddk", "kdddddaaaaaaaaddddk.", ".kkkkkkkkkkkkkkkkkk."]
-  ].map(function (rows) { var c = mk(20, 13); sprite(c.getContext("2d"), 0, 0, rows, SL); return c; });
+  ], SLROWS = slimeF;
+  slimeF = SLROWS.map(function (rows) { var c = mk(20, 13); sprite(c.getContext("2d"), 0, 0, rows, SL); return c; });
+  // плюющийся слизень (его идея 2026-11-20): кислотно-зелёный, держится поодаль и стреляет слизью; в первых комнатах его нет, в зале — один-два
+  var SLG = { k: "#12240c", a: "#5a9a1e", A: "#9ad63a", h: "#eaffb0", d: "#34641a", e: "#0b0a10" };
+  var slimeG = SLROWS.map(function (rows) { var c = mk(20, 13); sprite(c.getContext("2d"), 0, 0, rows, SLG); return c; });
   var slimeHit = slimeF.map(function (src) { var c = mk(20, 13), g = c.getContext("2d"); g.drawImage(src, 0, 0); g.globalCompositeOperation = "source-atop"; g.fillStyle = "#ffffff"; g.fillRect(0, 0, 20, 13); return c; });
   var BONE = ["........kk..", ".......kWWk.", "......kWWWWk", ".....kWWkWwk", "....kWWk.kk.", "...kWWk.....", ".kkWWk......", "kWWkwk......", "kWWWwk......", ".kWwk.......", "..kk........"], BP = { k: "#3c362d", W: "#efe8d6", w: "#b9b09a" };
   var boneC = mk(12, 11); sprite(boneC.getContext("2d"), 0, 0, BONE, BP); sprite(document.getElementById("boneic").getContext("2d"), 0, 0, BONE, BP);
@@ -216,6 +220,9 @@
       for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !rm.props.some(function (p) { return p.i === i && p.j === j; }) && Math.hypot(i - ci, j - cj) > 1.5) free.push([i, j]);
       var nm = k === 0 ? 2 : Math.max(4, Math.round(free.length * Math.min(.55, .26 + .08 * rm.depth) * (.85 + rr() * .3)));
       for (tt = 0; tt < nm && free.length; tt++) { var f2 = free.splice(Math.floor(rr() * free.length), 1)[0]; rm.mobs.push({ u: f2[0] + .5, v: f2[1] + .5, hp: 3, t: rr() * 10, hit: 0, vu: 0, vv: 0, wu: 0, wv: 0, wt: 0 }); }
+      var nsp = rm.depth >= 4 ? 2 : rm.depth >= 2 ? 1 : 0;                        // стрелки: с третьей комнаты от входа — один, с пятой — два
+      for (tt = 0; tt < nsp && tt < rm.mobs.length; tt++) { var sp = rm.mobs[rm.mobs.length - 1 - tt]; sp.spit = true; sp.hp = 2; sp.cd = 1.5 + rr() * 2; sp.aim = 0; }
+      rm.shots = [];
       rm.drops = []; rm.seen = k === 0;
       // тайный зал — пустой и чистый: без слизней, предметов, люков и плиток с предметами
       if (rm.secret) { rm.mobs = []; rm.props = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.floor[j][i] >= 5) rm.floor[j][i] = 0; rm.altar = { u: 3, v: 3, struck: false, hitT: 0, loot: null, lootT: 0, got: false };   // его алтарь — на четырёх средних клетках (2026-11-19)
@@ -386,21 +393,35 @@
       if (hero.u < -.25) go(-1, 0); else if (hero.u > cur.w + .25) go(1, 0); else if (hero.v < -.25) go(0, -1); else if (hero.v > cur.h + .25) go(0, 1);
     } else hero.t += dt;
 
+    function hurt(dmg, fu, fv, inv) {                                              // герой получил урон от (fu, fv)
+      var hx = hero.u - fu, hy = hero.v - fv, hd = Math.hypot(hx, hy) || 1;
+      hero.hp -= dmg; hero.inv = inv; hero.st = "hurt"; hero.t = 0; hero.dir = "side"; hero.flip = S(fu, fv)[0] > S(hero.u, hero.v)[0] ? 1 : -1;
+      var nu3 = hero.u + hx / hd * .18, nv3 = hero.v + hy / hd * .18; if (!blocked(nu3, nv3)) { hero.u = nu3; hero.v = nv3; } hud();
+      if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", (lootGot ? "Карта и всё найденное потеряно" : "Всё найденное потеряно") + (RUN ? ", здоровье в убежище −20" : "")); }
+    }
+    var shots = cur.shots || (cur.shots = []);
     mobs.forEach(function (m) {
       if (m.hp <= 0) return;
       m.t += dt; m.hit = Math.max(0, m.hit - dt);
       var du2 = hero.u - m.u, dv2 = hero.v - m.v, d = Math.hypot(du2, dv2) || 1, hop = Math.max(0, Math.sin(m.t * 5.5)), mu = 0, mv = 0;
-      if (hero.st !== "dead" && d < 3) { mu = du2 / d * .55 * hop * dt; mv = dv2 / d * .55 * hop * dt; }
+      if (m.spit && hero.st !== "dead" && d < 6) {                                 // стрелок: держит расстояние 2–4 клетки, раз в ~2,5 с плюёт туда, где герой стоит сейчас
+        var sgn = d < 2 ? -1 : d > 4 ? 1 : 0; mu = du2 / d * .4 * sgn * hop * dt; mv = dv2 / d * .4 * sgn * hop * dt;
+        if (m.aim > 0) { m.aim -= dt; mu = mv = 0;                                 // надувается 0,45 с — видно, что сейчас плюнет
+          if (m.aim <= 0) { shots.push({ u: m.u, v: m.v, du: du2 / d * 2.4, dv: dv2 / d * 2.4, t: 0 }); m.cd = 2.2 + Math.random() * .8; } }
+        else { m.cd -= dt; if (m.cd <= 0) m.aim = .45; }
+      }
+      else if (hero.st !== "dead" && d < 3) { mu = du2 / d * .55 * hop * dt; mv = dv2 / d * .55 * hop * dt; }
       else { m.wt -= dt; if (m.wt <= 0) { m.wt = 1 + Math.random() * 2; var a = Math.random() * 6.28; m.wu = Math.cos(a); m.wv = Math.sin(a); } mu = m.wu * .22 * hop * dt; mv = m.wv * .22 * hop * dt; }
       mu += m.vu * dt; mv += m.vv * dt; m.vu *= Math.pow(.002, dt); m.vv *= Math.pow(.002, dt);
       if (!blocked(m.u + mu, m.v)) m.u += mu; if (!blocked(m.u, m.v + mv)) m.v += mv;
       m.u = Math.max(.2, Math.min(cur.w - .2, m.u)); m.v = Math.max(.2, Math.min(cur.h - .2, m.v));
-      if (hero.st !== "dead" && d < .3 && hero.inv <= 0) {
-        hero.hp -= 12; hero.inv = .9; hero.st = "hurt"; hero.t = 0; hero.dir = "side"; hero.flip = S(m.u, m.v)[0] > S(hero.u, hero.v)[0] ? 1 : -1;
-        var nu2 = hero.u - du2 / d * .18, nv2 = hero.v - dv2 / d * .18; if (!blocked(nu2, nv2)) { hero.u = nu2; hero.v = nv2; } hud();
-        if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", (lootGot ? "Карта и всё найденное потеряно" : "Всё найденное потеряно") + (RUN ? ", здоровье в убежище −20" : "")); }
-      }
+      if (hero.st !== "dead" && d < .3 && hero.inv <= 0) hurt(12, m.u, m.v, .9);
     });
+    // плевки: летят прямо, гаснут о стену, предмет или через 2,5 с; попадание — 8 урона (слабее касания), от плевка можно уйти
+    cur.shots = shots.filter(function (b) { b.t += dt; b.u += b.du * dt; b.v += b.dv * dt;
+      if (hero.st !== "dead" && hero.inv <= 0 && Math.hypot(b.u - hero.u, b.v - hero.v) < .32) { hurt(8, b.u - b.du, b.v - b.dv, .6); fx.push({ k: "splat", u: b.u, v: b.v, t: 0 }); return false; }
+      if (b.t > 2.5 || blocked(b.u, b.v)) { fx.push({ k: "splat", u: b.u, v: b.v, t: 0 }); return false; }
+      return true; });
     for (i = 0; i < mobs.length; i++) for (var j = i + 1; j < mobs.length; j++) {
       var a2 = mobs[i], b2 = mobs[j]; if (a2.hp <= 0 || b2.hp <= 0) continue; var eu = b2.u - a2.u, ev = b2.v - a2.v, ed = Math.hypot(eu, ev) || 1;
       if (ed < .32) { var push = (.32 - ed) / 2; a2.u -= eu / ed * push; a2.v -= ev / ed * push; b2.u += eu / ed * push; b2.v += ev / ed * push; }
@@ -948,11 +969,17 @@
       var s = S(p.i + .5, p.j + .5), im = IMG[k], x0 = Math.round(s[0] - im.width / 2), y0 = Math.round(s[1] - im.height + 16); img(k, x0, y0); } }); });
     cur.drops.forEach(function (d) { list.push({ z: d.u + d.v, f: function () { var s = S(d.u, d.v), bob = Math.round(Math.sin(d.t * 5) * 2); px(ctx, s[0] - 5, s[1], 10, 2, "rgba(8,6,10,.4)"); ctx.drawImage(boneC, Math.round(s[0] - 6), Math.round(s[1] - 12 + bob)); } }); });
     if (cur.altar) list.push({ z: cur.altar.u + cur.altar.v, f: function () { altarDraw(cur.altar, t); } });
+    (cur.shots || []).forEach(function (b) { list.push({ z: b.u + b.v, f: function () {      // плевок: зелёный комок с хвостом и тенью
+      var s = S(b.u, b.v), x = Math.round(s[0]), y = Math.round(s[1] - 9);
+      px(ctx, x - 2, s[1] - 1, 5, 2, "rgba(8,6,10,.4)");
+      px(ctx, x - 2 - Math.sign(b.du - b.dv) * 3, y, 2, 2, "#5a9a1e"); px(ctx, x - 2, y - 1, 5, 4, "#34641a"); px(ctx, x - 1, y - 2, 3, 5, "#34641a"); px(ctx, x - 1, y - 1, 3, 3, "#9ad63a"); px(ctx, x - 1, y - 1, 1, 1, "#eaffb0");
+    } }); });
     cur.mobs.forEach(function (m) { if (m.hp <= 0) return; list.push({ z: m.u + m.v, f: function () {
       var s = S(m.u, m.v), fr = Math.sin(m.t * 5.5) > 0 ? 0 : 1, jump = Math.round(Math.max(0, Math.sin(m.t * 5.5)) * 4);
       px(ctx, s[0] - 8, s[1] - 1, 16, 3, "rgba(8,6,10,.45)");
-      ctx.drawImage((m.hit > 0 ? slimeHit : slimeF)[fr], Math.round(s[0] - 10), Math.round(s[1] - 12 - jump));
-      if (m.hp < 3) { px(ctx, s[0] - 8, s[1] - 20 - jump, 16, 4, "#14151b"); px(ctx, s[0] - 7, s[1] - 19 - jump, 14 * m.hp / 3, 2, "#e2574b"); }
+      if (m.spit && m.aim > 0) { fr = 0; jump = 0; }                               // перед плевком замирает и вспыхивает
+      ctx.drawImage((m.hit > 0 || (m.spit && m.aim > 0 && Math.floor(m.aim * 20) % 2) ? slimeHit : m.spit ? slimeG : slimeF)[fr], Math.round(s[0] - 10), Math.round(s[1] - 12 - jump));
+      if (m.hp < (m.spit ? 2 : 3)) { px(ctx, s[0] - 8, s[1] - 20 - jump, 16, 4, "#14151b"); px(ctx, s[0] - 7, s[1] - 19 - jump, 14 * m.hp / (m.spit ? 2 : 3), 2, "#e2574b"); }
     } }); });
     // герой за линией задней стены (уходит в арку) — рисуется раньше стен, виден только в проёме
     list.push({ z: hero.u < 0 || hero.v < 0 ? -5 : hero.u + hero.v, f: function () {
@@ -973,6 +1000,7 @@
       glow(s[0], s[1] - 20, 100, c2, .55 * gk); });
     for (j = 0; j < cur.h; j++) for (i = 0; i < cur.w; i++) if (cur.floor[j][i] === 7 && cur.open[j][i]) { var rs2 = S(i + .5, j + .5); glow(rs2[0], rs2[1], 80, "rgba(120,180,255,A)", .55 + .2 * Math.sin(t * 2.2 + i)); }   // руна светится
     var hs = S(hero.u, hero.v); glow(hs[0], hs[1] - 18, 90, "rgba(225,215,255,A)", .7);
+    (cur.shots || []).forEach(function (b) { var s = S(b.u, b.v); glow(s[0], s[1] - 9, 26, "rgba(170,240,90,A)", .5); });
     cur.walls.forEach(function (wl) { if (wl.burn) { var eb = sdoorEye(wl), kb = Math.max(0, 1 - (T - wl.burn) / BURN_T); glow(eb[0], eb[1] + 6, 120, "rgba(255,140,60,A)", 1.2 * kb); } });   // дверь горит — оранжевый свет
     cur.walls.forEach(function (wl) { if (!wl.secret) return; var e = sdoorEye(wl); glow(e[0], e[1], 110, "rgba(255,70,70,A)", .85 + Math.sin(t * 2.6) * .2); });   // красный свет от глаза странной двери
     if (cur.heal) { var hs3 = S(cur.heal.u, cur.heal.v), hk = cur.heal.used ? .05 : .45 + .15 * Math.sin(t * 2) + cur.heal.t / 3 * 1.1; glow(hs3[0], hs3[1] - 4, 110, "rgba(110,230,170,A)", hk); }   // платформа: разгорается, пока стоишь
@@ -986,7 +1014,8 @@
       [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) { px(ctx, jx + q[0] * sz - (q[0] > 0 ? 3 : 0), jy + q[1] * sz, 4, 1, c3); px(ctx, jx + q[0] * sz, jy + q[1] * sz - (q[1] > 0 ? 3 : 0), 1, 4, c3); }); }
     fx.forEach(function (f) {
       var k = f.t / .32, s = S(f.u, f.v);
-      if (f.k === "spark") { for (i = 0; i < 6; i++) { var a3 = i * 1.05, d3 = 4 + k * 14; px(ctx, s[0] + Math.cos(a3) * d3, s[1] - 8 + Math.sin(a3) * d3, 2, 2, k < .5 ? "#ffffff" : "#bfeeff"); } }
+      if (f.k === "splat") { for (i = 0; i < 6; i++) { var a5 = i * 1.05 + 0.4, d5 = 2 + k * 9; px(ctx, s[0] + Math.cos(a5) * d5, s[1] - 7 + Math.sin(a5) * d5 * .6, 2, 2, k < .5 ? "#eaffb0" : "#9ad63a"); } }
+      else if (f.k === "spark") { for (i = 0; i < 6; i++) { var a3 = i * 1.05, d3 = 4 + k * 14; px(ctx, s[0] + Math.cos(a3) * d3, s[1] - 8 + Math.sin(a3) * d3, 2, 2, k < .5 ? "#ffffff" : "#bfeeff"); } }
       else if (f.k === "poof") { for (i = 0; i < 8; i++) { var a4 = i * .785, d4 = 3 + k * 12; px(ctx, s[0] + Math.cos(a4) * d4 - 1, s[1] - 6 + Math.sin(a4) * d4 - 1 - k * 6, 3 - Math.floor(k * 2), 3 - Math.floor(k * 2), k < .5 ? "#bfeeff" : "#5cc0ee"); } }
       else if (f.k === "plus") { var yy = s[1] - 10 - f.t * 22; ctx.globalAlpha = 1 - f.t / .8; px(ctx, s[0] - 3, yy, 7, 1, "#efe8d6"); px(ctx, s[0], yy - 3, 1, 7, "#efe8d6"); ctx.drawImage(boneC, Math.round(s[0] + 6), Math.round(yy - 6)); ctx.globalAlpha = 1; }
     });
