@@ -42,6 +42,8 @@
   <div id="over"><div class="pan"><span id="overt"></span><small id="overs"></small><button id="again" type="button">Ещё раз</button><button id="home" type="button">В убежище</button></div></div>
 </div>
 <script>
+// старая проба боя — только у себя на компьютере; на сайте закрыто (утечка 2026-11-20)
+if (!/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) { document.documentElement.innerHTML = "<body style='margin:0;background:#0b0710;color:#cfc4e0;font:600 15px/1.4 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center'><div>Подземелье пока закрыто.<br><a href='../index.html' style='color:#ffcf7a'>В гильдию</a></div></body>"; throw new Error("closed"); }
 (function () {
   // Вид — вдвое крупнее прежнего: экран показывает 180×320 точек мира (его просьба 2026-11-17 «в подземелье всё крупнее»).
   // Уровень — несколько комнат, каждая ровно в экран; проём у края ведёт в соседнюю комнату.
