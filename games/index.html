@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611201556";
+    var BUILD = "202611201557";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -6647,7 +6647,7 @@
     var cs = (F.cards || []).slice().sort(function (a, b) { return (b.kind === "legend") - (a.kind === "legend") || b.at - a.at; });
     if (!cs.length) { $("collsub").textContent = ""; var e = el("div", "coll-empty"); e.appendChild(el("b", "", "Карт пока нет"));
       e.appendChild(el("p", "", "Карты выпадают в подземелье, в странной комнате.")); box.appendChild(e); return; }
-    $("collsub").textContent = "Карты из странной комнаты подземелья. Рисунки и свойства откроются позже.";
+    $("collsub").textContent = "";                                              // пояснение над картами убрано (его правка 2026-11-20)
     var h = el("div", "mono", "Подземелье · карты · " + cs.length); h.style.marginTop = "18px"; box.appendChild(h);
     var g = el("div", "vgrid cgrid");
     cs.forEach(function (c) { var K = CARDK[c.kind] || CARDK.rare, b = el("button", "vrec crec"); b.type = "button"; var cv = el("canvas"); cardThumb(cv, c.kind); b.appendChild(cv);
