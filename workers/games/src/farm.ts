@@ -1995,6 +1995,15 @@ export async function forgetFarm(uid: number) {
                      "DELETE FROM f_levels WHERE user = ?", "DELETE FROM f_jobtake WHERE user = ?"]) await q(sql, [uid]);
   await q("DELETE FROM f_given WHERE from_user = ? OR to_user = ?", [uid, uid]);
   await q("DELETE FROM f_feed WHERE actor = ? OR target = ?", [uid, uid]);              // из ленты новостей — тоже
+  // всё, что добавилось после (его решение 2026-11-20: удалил данные — теряешь всё наигранное): украшения, улей, подземелье…
+  for (const t of ["f_chest", "f_stars", "f_cratercrop", "f_prices", "f_mono", "f_monomark", "f_clumps", "f_notify", "f_orders", "f_decor", "f_style",
+                   "f_yard", "f_shell", "f_honey", "f_hive", "f_wet", "f_fert", "d_hero", "d_pack", "d_bite", "d_myth", "d_brew", "d_secret", "d_armor", "d_altar"])
+    await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
+  // карты отвязываются: становятся ничьими (user = 0), в журнал — запись «владелец удалил данные». Сами карты и журнал не стираются
+  for (const [id] of await q("SELECT id FROM d_cards WHERE user = ?", [uid])) {
+    await q("UPDATE d_cards SET user = 0 WHERE id = ?", [Number(id)]);
+    await cardLog(Number(id), "forgotten", uid, null, "владелец удалил свои данные");
+  }
 }
 
 // ---------- Лунный странник (его идея 2026-11-16) ----------

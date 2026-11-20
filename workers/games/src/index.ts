@@ -463,7 +463,7 @@ async function handle(req: Request): Promise<Response> {
     }
     if (req.method === "POST" && url.pathname === "/bot/forget") {
       const uid = Number((await req.json()).user);
-      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
+      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items", "g_refs", "g_daypts", "g_playtime"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
       await farm.forgetFarm(uid);
       return json({ ok: true });
     }
