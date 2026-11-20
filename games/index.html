@@ -11,12 +11,15 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611202105";
+    var BUILD = "202611202110";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
           v = (v || "").trim();
-          if (document.querySelector(".dgwrap")) return;                    // идёт подземелье — не перезагружать посреди похода (его просьба 2026-11-20); проверим, когда выйдет
+          // обновляемся только на главном экране игр (его жалоба 2026-11-20: при каждой выкладке закрывалась ферма, а посреди похода — подземелье);
+          // на ферме, в «Угадай трек» и в подземелье ждём — проверка повторится при возврате на главный экран (show("home"))
+          var scr = document.body && document.body.dataset.screen;
+          if (document.querySelector(".dgwrap") || (scr && scr !== "home")) return;
           if (v && v !== BUILD && sessionStorage.getItem("games-reload") !== v) {
             sessionStorage.setItem("games-reload", v);                       // не больше одной перезагрузки на версию
             var q = new URLSearchParams(location.search); q.set("v", v);
