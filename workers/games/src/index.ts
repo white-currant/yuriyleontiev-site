@@ -171,7 +171,7 @@ async function profile(u: any, g?: any) {
   // имя — как его показывает бот (хозяин — названием канала, привязавший — каналом); своё фото — только себе
   const name = link?.state === "linked" ? link.title : sname || nameOf(u);
   const avatar = savatar ? `/avatar/${savatar}` : (link === null || link?.state === "linked") ? null : (u.photo_url || null);
-  return { name, avatar, link, dg: farm.DG_OPEN || String(u.id) === String(owner || ""),   // подземелье видно: всем после открытия, до него — хозяину
+  return { name, avatar, link, dg: farm.dgOpen() || String(u.id) === String(owner || ""), dg_at: farm.DG_OPEN_AT, now: Math.floor(Date.now() / 1000),   // подземелье: до открытия — хозяину, остальным — отсчёт   // подземелье видно: всем после открытия, до него — хозяину
            points, karma: karma == null ? KARMA_START : Number(karma), place: sp != null ? Number(place) : null, ...rankOf(points),
            today: { scored: g.scored, max: SCORED_PER_DAY, earned: g.earned }, streak: g.streak, best_streak: g.best,
            played: g.played, correct: g.correct };

@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611201557";
+    var BUILD = "202611201603";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -188,6 +188,9 @@
   .seed .cost { font-family: var(--mono); font-size: 13px; color: var(--gold); }
   .seed[disabled] { opacity: .4; }
   .vgrid { margin-top: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 10px; }
+  .dg-card.dg-locked .art { filter: blur(4px) brightness(.8) saturate(.9); transform: scale(1.05); cursor: default; }   /* до открытия — размыто (2026-11-20) */
+  .dg-card .art { transition: filter .8s, transform .8s; }
+  .dg-card.dg-locked .btn:disabled { opacity: 1; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
   .devlink { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; margin: 14px 0 0; padding: 14px 16px; border-radius: 14px;
     background: rgba(255, 255, 255, .06); color: inherit; text-decoration: none; }
   .devlink b { font-size: 15px; } .devlink span { grid-column: 1; font-size: 12.5px; color: rgba(246, 239, 227, .6); }
@@ -983,7 +986,7 @@
         <img class="art" id="dgart" src="dg/card.webp" alt="" style="object-fit:cover">
         <div class="art-body">
           <h2>Подземелье</h2>
-          <p>Спускайся за костями, бей слизней, добывай удобрения.</p>
+          <p id="dgdesc">Спускайся за костями, бей слизней, добывай удобрения.</p>
           <button class="btn" id="todg">В подземелье</button>
         </div>
       </div>
@@ -1133,8 +1136,10 @@
     $("title").textContent = p.title; $("name").textContent = p.name;
     $("sigil").textContent = initial(p.name);
     setPhoto($("sigil"), p.avatar); rankFrame($("sigil"), p.title, 36);
-    $("dgcard").hidden = !(p.dg || ("link" in p && p.link === null)); fertTab(!$("dgcard").hidden);   // подземелье — по флагу сервера: до открытия только хозяину (2026-11-20)
-    try { if ($("dgcard").hidden) localStorage.removeItem("dg-owner"); else localStorage.setItem("dg-owner", "1"); } catch (e) {}   // хозяин — запомнить: карточка подземелья сразу при старте (2026-11-20)   // удобрение в лавке — только хозяину (его срочная правка 2026-11-19): у остальных вкладки нет вовсе                 // подземелье — пока только хозяину: у него одного нет привязки канала
+    // подземелье (его решение 2026-11-20): открывается всем в 00:00 21 ноября (UTC+3); до этого у остальных — размытая картинка и отсчёт на кнопке
+    var dgMine = !!(p.dg || ("link" in p && p.link === null)); $("dgcard").hidden = !(dgMine || p.dg_at); fertTab(dgMine);
+    dgLock(dgMine ? 0 : p.dg_at, p.now);
+    try { if (dgMine) localStorage.setItem("dg-owner", "1"); else localStorage.removeItem("dg-owner"); } catch (e) {}   // заранее показываем только тому, кому открыто   // хозяин — запомнить: карточка подземелья сразу при старте (2026-11-20)   // удобрение в лавке — только хозяину (его срочная правка 2026-11-19): у остальных вкладки нет вовсе                 // подземелье — пока только хозяину: у него одного нет привязки канала
     $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
     $("karma").textContent = p.karma; $("place").textContent = p.place || "—";
     var lad = [0, 30, 100, 250, 500, 1000, 2000, 5000, 12000, 25000, 50000], prev = 0;
@@ -6880,7 +6885,17 @@
     if (!(bb && bb.isVisible)) w.appendChild(x);                                    // вне Телеграма (или старый клиент) «Назад» нет — свой крестик       // в Телеграме выход — его кнопка «Назад» в шапке (её ловит back()), свой крестик не налезает на кнопки игры
     document.body.appendChild(w); document.documentElement.classList.add("locked");
   }
-  $("todg").onclick = openDungeon; $("dgart").onclick = openDungeon;
+  var dgLockTimer = 0, dgLocked = false;
+  function dgLock(at, srvNow) {                                  // отсчёт до открытия: разница часов телефона и сервера учитывается
+    clearInterval(dgLockTimer); var off = srvNow ? srvNow - Date.now() / 1000 : 0, card = $("dgcard"), b = $("todg");
+    var tick = function () { var left = Math.max(0, Math.round(at - (Date.now() / 1000 + off)));
+      dgLocked = left > 0; card.classList.toggle("dg-locked", dgLocked); b.disabled = dgLocked;
+      $("dgdesc").style.visibility = dgLocked ? "hidden" : "";                 // до открытия описания нет (его правка 2026-11-20)
+      if (!dgLocked) { clearInterval(dgLockTimer); b.textContent = "В подземелье"; if (at) fertTab(true); return; }
+      var h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), sec = left % 60; b.textContent = (h ? h + ":" : "") + String(m).padStart(h ? 2 : 1, "0") + ":" + String(sec).padStart(2, "0"); };
+    tick(); if (dgLocked) dgLockTimer = setInterval(tick, 1000);
+  }
+  $("todg").onclick = function () { if (!dgLocked) openDungeon(); }; $("dgart").onclick = function () { if (!dgLocked) openDungeon(); };
   $("toneighbors").onclick = openNeighbors;
   $("toshop").onclick = function () { openShop("buy"); };
   $("decorbtn").onclick = function () { haptic("light"); decorSheet(); };
