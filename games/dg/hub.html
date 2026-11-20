@@ -629,6 +629,7 @@
       // в углу — сытость; у надкусанного — остаток «3/4»; мифическое сытостью не платит — в углу «✦» (его решения 2026-11-20)
       g.appendChild(iconCell(it && it.item, null, it && (it.myth ? "✦" : it.bite ? it.sat + "/" + it.full : it.sat), it ? function () {   // из рюкзака — обратно в амбар
         if (it.bite) return tell("Надкусанное в амбар не вернуть");
+        if (it.item === "p:ration") return tell("Сухпайки — только в рюкзаке");
         D.pack = D.pack.filter(function (p) { return p.slot !== i; }); D.sat -= it.sat; addFood(it.item, 1); packView();
         apply(seq("/api/dg/pack", { slot: i }));
       } : null));

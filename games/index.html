@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611201822";
+    var BUILD = "202611201904";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3752,6 +3752,7 @@
     "p:honeypie":  ["...kk.kk.kk...", "..kRpkRpkRpk..", ".kkrRkrRkrRkk.", "kFFFFFFFFFFFFk", "kFoFFFFFFoFFOk", "kbFbhFbhbFbhBk", "kbhbFbhbhbFbBk", ".kBbFbbbbFbBk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],   // ягодный медовый пирог: ягоды сверху, медовая глазурь стекает по корочке (его правка 2026-11-18: «похож на звёздный»)
     "p:honeycandy": [".kkk....kkk...", "kFFsk..kFFsk..", "kFooOk.kFooOk.", ".kOOk...kOOk..", "..m..kkk..m...", "..m.kFFsk.m...", "..m.kFooOkm...", "..m..kOOk.m...", ".kkkkkkkkkkkk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],   // хрустальные леденцы: все три — в цвет мёда, а значит и растения (его правка 2026-11-18)
     "p:honeypumpkin": ["......N.......", ".....kNk......", "...kkoOokk....", "..kooFoooOk...", ".kooFyooooOk..", ".koooooyoOOk..", ".kOoooooOOOk..", "..kkOyOOOkk...", ".kkkkkkkkkkkk.", "kcccccccccccCk", ".kkkkkkkkkkkk."],   // тыква в меду
+    "p:ration":  ["..kkkkkkkkkk..", ".ksssszzzzzAk.", "kAzzzzzzzzzzAk", ".keGGGGGGGGGk.", ".keccccccccGk.", ".kecQQcQQccGk.", ".keccccccccGk.", ".keGGGGGGGGGk.", "kAzzzzzzzzzzAk", ".kAAAAAAAAAAk.", "..kkkkkkkkkk.."],   // сухпайки — консервная банка (его выбор 2026-11-20)
     "p:jam":     ["....kkkkkk....", "....kmmmmk....", "...kkkkkkkk...", "...kWRRRRrk...", "...kRRpRRrk...", "...kRRRRRrk...", "...kRyyyyrk...", "...kRyyyyrk...", "...krRRRrrk...", "....kkkkkk...."],
   };
   // pal — палитра сорта колосьев: корочка и метка на мешке муки берут его цвет (пшеница — как есть)

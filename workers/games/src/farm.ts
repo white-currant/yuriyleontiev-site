@@ -2135,7 +2135,10 @@ export const FERT_BONES = 40, FERT_SEC = 20 * 60,   // котёл — 20 мин�
   DG_SLOTS = 6, BREW_MAX = 20;
 // здоровье героя в убежище (его решение 2026-11-19): гибель в походе отнимает 20, лечат чаи из амбара; при нуле в поход нельзя
 export const HP_MAX = 100, HP_DEATH = 20, HP_TEA: Record<string, number> = { tea: 30, honeytea: 50 };
-function satOf(id: string) { const r = RECIPES[recipeOf(id)]; return id.startsWith("p:") && r && r.kind === "oven" ? r.points : 0; }
+// сухпайки (его подарок 2026-11-20): 4 пайка по 1 сытости в первой ячейке рюкзака у всех; едятся по одному, в амбар не возвращаются
+PRODUCTS["p:ration"] = { name: "Сухпайки", dust: 5 };
+export const RATION_SAT = 4;
+function satOf(id: string) { if (id === "p:ration") return RATION_SAT; const r = RECIPES[recipeOf(id)]; return id.startsWith("p:") && r && r.kind === "oven" ? r.points : 0; }
 // открытие подземелья всем (его решение 2026-11-20: подготовить к релизу, но пока не открывать) — один переключатель: подземелье,
 // удобрение в лавке, на рынке и в новостях, вкладка «Удобрение». false — всё это видит только хозяин
 // открывается само в 00:00 21 ноября 2026 по UTC+3 (его решение 2026-11-20) — до этого только хозяину
@@ -2183,7 +2186,7 @@ export async function dgState(u: any, got = 0) {
   const [d] = await q("SELECT dust FROM f_farms WHERE user = ?", [u.id]);
   const hasBarn = (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length > 0;
   const [fs] = await q("SELECT listed FROM f_stall WHERE user = ? AND item = 'p:fert'", [u.id]), own = (await ownPrices(u.id))["p:fert"];
-  const satmap = Object.fromEntries(Object.entries(RECIPES).filter(([, r]) => r.kind === "oven" && r.points > 0).map(([k, r]) => [k, r.points]));
+  const satmap = { ...Object.fromEntries(Object.entries(RECIPES).filter(([, r]) => r.kind === "oven" && r.points > 0).map(([k, r]) => [k, r.points])), ration: RATION_SAT };
   const cards = (await q("SELECT id, kind FROM d_cards WHERE user = ? ORDER BY id", [u.id])).map(([id, kind]) => ({ id: Number(id), kind: String(kind) }));
   const secret = !!h.run && (await q("SELECT 1 FROM d_secret WHERE user = ? AND run = ?", [u.id, h.run])).length > 0;   // начатый поход — можно продолжить (страница не загрузилась, связь пропала)
   const [ar] = h.run ? await q("SELECT armor FROM d_armor WHERE user = ? AND run = ?", [u.id, h.run]) : [];
@@ -2196,6 +2199,7 @@ export async function dgPack(u: any, item: string, slot: number) {        // ite
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   if (slot >= 0) {
     if ((await q("SELECT 1 FROM d_bite WHERE user = ? AND slot = ?", [u.id, slot])).length) return { error: "Надкусанное блюдо в амбар не вернуть — доешь его в походах" };
+    if ((await q("SELECT 1 FROM d_pack WHERE user = ? AND slot = ? AND item = 'p:ration'", [u.id, slot])).length) return { error: "Сухпайки — только в рюкзаке, в амбар их не убрать" };
     const h = await dgHero(u.id);
     if (h.run && (await q("SELECT 1 FROM d_myth WHERE user = ? AND run = ? AND slot = ?", [u.id, h.run, slot])).length) return { error: "Мифическое блюдо сейчас в походе" };
     const [p] = await q("DELETE FROM d_pack WHERE user = ? AND slot = ? RETURNING item", [u.id, slot]);
