@@ -76,10 +76,19 @@
   // странная комната — из его пяти листов (2026-11-19, исходники «Подземелье — прототип/исходники/странная_комната»): iso/sr.json — что есть по видам
   // (алтари, углы, плиты стен, пол, убранство); каждый поход комната собирается заново из этого набора
   var SR = null;
-  fetch("iso/sr.json?v=20").then(function (r) { return r.json(); }).then(function (m) { SR = m; var ns = [];
-    Object.keys(m).forEach(function (k) { m[k].forEach(function (n) { ns.push(n); }); }); wait += ns.length;
-    ns.forEach(function (n) { var im = new Image(); im.onload = im.onerror = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=25"; IMG[n] = im; });
-    if (!--wait) start(); }).catch(function () { if (!--wait) start(); });
+  // картинки странной комнаты (≈100 штук) грузятся только для похода, где она есть (его жалоба 2026-11-20: бой открывался 15+ секунд
+  // чёрным экраном — ждал их и в малом подземелье). Сам список (sr.json) — сразу, он маленький
+  var srWait = null;
+  function srLoad(then) {
+    if (!SR) return then();
+    if (!srWait) { srWait = []; var ns = [], left = 0;
+      Object.keys(SR).forEach(function (k) { SR[k].forEach(function (n) { if (typeof n === "string" && !IMG[n]) ns.push(n); }); }); left = ns.length;
+      var fin = function () { var w = srWait; srWait = true; w.forEach(function (f) { f(); }); };
+      if (!left) fin();
+      ns.forEach(function (n) { var im = new Image(); im.onload = im.onerror = function () { if (!--left) fin(); }; im.src = "iso/" + n + ".png?v=25"; IMG[n] = im; }); }
+    if (srWait === true) then(); else srWait.push(then);
+  }
+  fetch("iso/sr.json?v=20").then(function (r) { return r.json(); }).then(function (m) { SR = m; if (!--wait) start(); }).catch(function () { if (!--wait) start(); });
   var CW = 64, CH = 56, AX = 32, AY = 53;
   var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
 
@@ -209,13 +218,31 @@
         if (rn.length) { var rc = rn[Math.floor(rr() * rn.length)]; rm.floor[rc[1]][rc[0]] = 7; } }
       rm.props = []; var kinds = ["crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "rocks", "rock_big", "brazier", "stalag", "mush", "mush2", "t_blue", "t_violet", "t_lava"];
       var TILEP = { t_blue: 8, t_violet: 9, t_lava: 10 };   // его плитки с предметом (2026-11-18): плита — в пол, предмет — по глубине
-      if (kind === "hall") { for (j = 2; j < rm.h - 1; j += 3) for (i = 2; i < rm.w - 1; i += 3) if (rm.open[j][i] && !lane[j][i]) rm.props.push({ i: i, j: j, k: rr() < .5 ? "stalag" : "crys_big" }); }
+      // предмет ставится, только если комната остаётся проходимой (его баг 2026-11-20: в комнате с поворотом костёр и кристалл перекрыли путь):
+      // от центра до каждой свободной клетки, а значит и до каждой двери, должен быть путь по соседним клеткам
+      var nOpen = 0; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i]) nOpen++;
+      function passable(pi, pj) {
+        var busy = {}; rm.props.forEach(function (p3) { busy[p3.i + "," + p3.j] = 1; }); busy[pi + "," + pj] = 1;
+        var s0 = rm.open[cj] && rm.open[cj][ci] && !busy[ci + "," + cj] ? [ci, cj] : null; if (!s0) return false;
+        var seen = {}, st = [s0], n = 0; seen[s0[0] + "," + s0[1]] = 1;
+        while (st.length) { var c4 = st.pop(); n++;
+          [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (dd) { var x = c4[0] + dd[0], y = c4[1] + dd[1], k = x + "," + y;
+            if (x < 0 || y < 0 || x >= rm.w || y >= rm.h || seen[k] || busy[k] || !rm.open[y][x]) return; seen[k] = 1; st.push([x, y]); }); }
+        return n === nOpen - rm.props.length - 1;
+      }
+      if (kind === "hall") { for (j = 2; j < rm.h - 1; j += 3) for (i = 2; i < rm.w - 1; i += 3) if (rm.open[j][i] && !lane[j][i] && passable(i, j)) rm.props.push({ i: i, j: j, k: rr() < .5 ? "stalag" : "crys_big" }); }
       else { var openCells = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !lane[j][i]) openCells.push([i, j]);
         var np = Math.min(openCells.length, Math.floor(openCells.length / 9) + 1);
         for (tt = 0; tt < np; tt++) { var cc = openCells.splice(Math.floor(rr() * openCells.length), 1)[0]; var pk2 = kinds[Math.floor(rr() * kinds.length)];
+          if (!passable(cc[0], cc[1])) continue;                                   // перекрыл бы проход — сюда не ставим
           if (TILEP[pk2]) { if (rm.floor[cc[1]][cc[0]] >= 6) pk2 = "crys_teal"; else rm.floor[cc[1]][cc[0]] = TILEP[pk2]; }   // на люк и руну плитку с предметом не кладём
           rm.props.push({ i: cc[0], j: cc[1], k: pk2 }); } }
-      rm.decor = []; for (tt = 0; tt < 4; tt++) { var di = Math.floor(rr() * rm.w), dj = Math.floor(rr() * rm.h); if (rm.open[dj][di]) rm.decor.push({ u: di + .2 + rr() * .6, v: dj + .2 + rr() * .6, k: rr() < .5 ? "bones" : "skull" }); }
+      // кости (его правка 2026-11-20): грудная клетка — препятствие, как ящик (сквозь неё ходить странно), и только там, где не перекроет путь;
+      // череп — мелочь под ногами. Ни то ни другое — не в проходах от дверей (большие кости закрывали дверь)
+      rm.decor = []; for (tt = 0; tt < 4; tt++) { var di = Math.floor(rr() * rm.w), dj = Math.floor(rr() * rm.h), bk = rr() < .5 ? "bones" : "skull";
+        if (!rm.open[dj][di] || lane[dj][di] || rm.props.some(function (p5) { return p5.i === di && p5.j === dj; })) continue;
+        if (bk === "bones") { if (kind !== "hall" && passable(di, dj)) rm.props.push({ i: di, j: dj, k: "bones" }); }
+        else rm.decor.push({ u: di + .2 + rr() * .6, v: dj + .2 + rr() * .6, k: "skull" }); }
       // круг с руной теперь только у платформ лечения и в тайном зале (его решение 2026-11-19) — чтобы не путать с украшением
       // слизни — на свободных клетках, не у входа
       // слизней — в разы больше (его правка 2026-11-19): доля свободных клеток растёт с глубиной — у входа 2, дальше 26% клеток + 8% за каждую
@@ -311,6 +338,11 @@
   function finish(title, sub) { done = true; report(hero.st === "dead" ? 0 : bones).catch(function () {}); hubPrefetch();   // убежище — в кэш, пока читает итог
     document.getElementById("overt").textContent = title; document.getElementById("overs").textContent = sub; setTimeout(function () { document.getElementById("over").classList.add("on"); }, 700); }
   if (RUN) document.getElementById("again").hidden = true;                    // новый поход — снова через убежище: он стоит еды
+  // пока грузятся картинки — не чёрный экран, а «Спускаемся…» (2026-11-20)
+  var ldA = document.getElementById("again").hidden, ldH = document.getElementById("home").hidden;
+  document.getElementById("overt").textContent = "Спускаемся…"; document.getElementById("overs").textContent = "";
+  document.getElementById("again").hidden = true; document.getElementById("home").hidden = true; document.getElementById("over").classList.add("on");
+  function ldDone() { document.getElementById("again").hidden = ldA; document.getElementById("home").hidden = ldH; }
   document.getElementById("again").onclick = reset;
   document.getElementById("home").onclick = home;
   // «выйти» посреди похода (его решение 2026-11-19): игра на паузе и предупреждение — уйдёшь с половиной костей; находка алтаря остаётся целиком.
@@ -1095,13 +1127,13 @@
         if (r.error) { document.getElementById("overt").textContent = r.error; document.getElementById("home").hidden = false; return; }
         RUN = r.run; SECRET = !!r.secret; REVIVE = Number(r.revive) || 0;
         try { history.replaceState(null, "", "iso.html?size=" + r.size + "&run=" + r.run + (r.secret ? "&secret=1" : "") + (REVIVE ? "&rv=" + REVIVE : "") + "&v=" + Date.now()); } catch (e) {}
-        document.getElementById("home").hidden = false; reset(); if (SRJ) srJump(); requestAnimationFrame(loop);
+        (SECRET ? srLoad : function (f) { f(); })(function () { document.getElementById("home").hidden = false; reset(); if (SRJ) srJump(); requestAnimationFrame(loop); });
       }).catch(function () { document.getElementById("overt").textContent = "Нет связи с сервером — еда не потрачена"; document.getElementById("home").hidden = false; });
       return;
     }
     // пробный бой без сервера — только у себя на компьютере (утечка 2026-11-20: по прямой ссылке подземелье открывалось до релиза)
     if (!RUN && !/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) { closedPage(); return; }
-    reset(); if (SRJ) srJump(); requestAnimationFrame(loop);
+    (SECRET ? srLoad : function (f) { f(); })(function () { ldDone(); reset(); if (SRJ) srJump(); requestAnimationFrame(loop); });
   }
   function closedPage() { document.documentElement.innerHTML = "<body style='margin:0;background:#0b0710;color:#cfc4e0;font:600 15px/1.4 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center'><div>Подземелье пока закрыто.<br><a href='../index.html' style='color:#ffcf7a'>В гильдию</a></div></body>"; }
   setTimeout(hubPrefetch, 3000);                                               // убежище — заранее, в начале боя

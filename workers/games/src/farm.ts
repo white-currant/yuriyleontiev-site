@@ -636,6 +636,9 @@ async function checkMono(uid: number) {
   return out;
 }
 // мифическое растение: созрело — ждёт сутки, потом рассыпается; вместе с ним гаснут отметки соседей
+// событие «Мифическое семя» кончается вместе с мифическим растением (его жалоба 2026-11-20: собрал давно, а событие идёт до конца суток):
+// собрал, выкопал или пропало — until = сейчас (строку не удаляем: по started считается пауза до следующего большого события)
+async function mythEnd(uid: number) { const t = now(); await q("UPDATE f_mono SET until = ? WHERE user = ? AND kind = 'myth' AND until > ?", [t, uid, t]); }
 async function mythTick(uid: number) {
   const t = now(), boost = await boostOf(uid), plots = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [uid]);
   const ss = await strains(plots.map((p) => String(p[1])));
@@ -649,7 +652,8 @@ async function mythTick(uid: number) {
     if (m && Number(m[0]) <= t) await DB.batch([
       DB.prepare("DELETE FROM f_plots WHERE user = ? AND idx = ?").bind(uid, i),
       DB.prepare("DELETE FROM f_monomark WHERE user = ? AND kind IN ('myth', 'mythripe')").bind(uid),
-      DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'myth_lost', ?)").bind(uid, t)]);
+      DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'myth_lost', ?)").bind(uid, t),
+      DB.prepare("UPDATE f_mono SET until = ? WHERE user = ? AND kind = 'myth' AND until > ?").bind(t, uid, t)]);
   }
 }
 // мука и выпечка, смолотые до сортов, — разложить по новым ключам (раз для каждого игрока; ничего не теряется, одинаковое складывается)
@@ -787,7 +791,7 @@ export async function dig(u: any, idx: number) {
   const wild = (await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind = 'wild' RETURNING 1", [u.id, idx])).length > 0;
   await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind IN ('g2', 'gseed', 'gcross')", [u.id, idx]);          // самоцветная пыль пропадает вместе с растением
   if (del.length && (await strains([String(del[0][0])]))[String(del[0][0])]?.myth)            // выкопал мифическое — соседство гаснет, второй раз не зажжётся
-    await q("DELETE FROM f_monomark WHERE user = ? AND kind IN ('myth', 'mythripe')", [u.id]);
+    { await q("DELETE FROM f_monomark WHERE user = ? AND kind IN ('myth', 'mythripe')", [u.id]); await mythEnd(u.id); }
   if (!del.length) return { error: "Тут ничего не растёт" };
   const crop = String(del[0][0]), t = now();
   // выкопал — очки за посадку и за полив этой посадки забираем: иначе «посадил → полил → выкопал» накручивал очки
@@ -991,7 +995,7 @@ export async function harvest(u: any, idx: number) {
   if (hon.length && Number(hon[0][0]) === Number(p[2]) && !Number(hon[0][2]) && Number(hon[0][1]) <= t)   // таймер вышел, а улей ещё не знал — баночка сейчас
     await q("INSERT INTO f_hive (user, item, count) VALUES (?, ?, 1) ON CONFLICT(user, item) DO UPDATE SET count = count + 1", [u.id, String(hon[0][3])]);
   await q("DELETE FROM f_plotev WHERE user = ? AND idx = ? AND kind NOT IN ('frost', 'crater')", [u.id, idx]);   // несостоявшиеся события грядки — прочь
-  if (s && s.myth) await q("DELETE FROM f_monomark WHERE user = ? AND kind IN ('myth', 'mythripe')", [u.id]);
+  if (s && s.myth) { await q("DELETE FROM f_monomark WHERE user = ? AND kind IN ('myth', 'mythripe')", [u.id]); await mythEnd(u.id); }
   if (s && s.odd && !all.some((x) => Number(x[0]) !== idx && ss[x[1]]?.odd))                 // странное собрано (или убрано засохшим) — следующая посадка начнёт новые сутки
     await q("DELETE FROM f_evlog WHERE user = ? AND kind = 'odd:win'", [u.id]);
   if (st.dead) return { withered: true, farm: await farmState(u) };       // засохшее — просто убрали (звезда созвездия на грядке остаётся)
