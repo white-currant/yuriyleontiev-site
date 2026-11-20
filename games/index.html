@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611202310";
+    var BUILD = "202611202315";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3646,11 +3646,19 @@
       disc(c, 96, 14, 12, "rgba(235,240,255,.18)"); disc(c, 96, 14, 9, "#f4f1e4"); disc(c, 93, 11, 2, "#dcd6c2"); disc(c, 100, 17, 2, "#dcd6c2"); px(c, 98, 9, 2, 2, "#e4dfcc");
       c.fillStyle = "rgba(200,215,255,.06)"; c.fillRect(0, 0, FW, FH);
     }
-    if (rain) {                                                                    // дождь звёздной пыли
-      c.fillStyle = "rgba(255,214,140,.07)"; c.fillRect(0, 0, FW, FH);
-      for (i = 0; i < 44; i++) {
-        var ry = ((t / 22 + i * 37) % (FH + 12)) - 12, rx = (i * 41 + ry * .35) % FW;
-        px(c, rx | 0, ry | 0, 1, 2, i % 3 ? C.gold : "#ffffff"); if (i % 7 === 0) px(c, (rx | 0) - 1, (ry | 0) + 1, 3, 1, "#fff6df");
+    if (rain) {                                                                    // звёздный дождь — частые метеоры в небе (его правка 2026-11-20: падающие искры по всей ферме походили на ливень)
+      c.fillStyle = "rgba(255,214,140,.04)"; c.fillRect(0, 0, FW, FH);
+      for (i = 0; i < 4; i++) {                                                    // четыре «дорожки», в каждой метеор раз в 1,3–2,1 с, место и угол — новые каждый раз
+        var per = 1300 + i * 270, cyc = Math.floor((t + i * 517) / per), ph = ((t + i * 517) % per) / per;
+        if (ph > .55) continue;                                                    // пролёт — первые 55% цикла, дальше пауза
+        var h1 = Math.sin(cyc * 12.9898 + i * 78.233) * 43758.5453, r1 = h1 - Math.floor(h1), h2 = Math.sin(cyc * 39.346 + i * 11.135) * 24634.634, r2 = h2 - Math.floor(h2);
+        var x0 = 30 + r1 * 150, y0 = 2 + r2 * 10, len = 26 + r2 * 18, k = ph / .55, hx = x0 - len * k, hy = y0 + len * .42 * k;
+        var fade = k < .15 ? k / .15 : k > .8 ? (1 - k) / .2 : 1;
+        for (var q = 0; q < 12; q++) {                                             // хвост: от яркой головы к прозрачному концу
+          var tx = hx + q * 1.1, ty = hy - q * .46, a = fade * (1 - q / 12);
+          if (ty < 0 || tx < 0 || tx >= FW) continue;
+          c.fillStyle = q < 2 ? "rgba(255,255,255," + a.toFixed(2) + ")" : "rgba(255,214,140," + (a * .85).toFixed(2) + ")"; c.fillRect(tx | 0, ty | 0, 1, 1);
+        }
       }
     }
   }
