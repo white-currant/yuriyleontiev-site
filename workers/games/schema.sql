@@ -117,6 +117,8 @@ CREATE TABLE IF NOT EXISTS d_brew (user INTEGER PRIMARY KEY, n INTEGER NOT NULL 
 -- тайная комната (2026-11-19): поход со Странной похлёбкой и легендарные карты для будущей карточной игры (пока скрыты)
 CREATE TABLE IF NOT EXISTS d_secret (user INTEGER PRIMARY KEY, run TEXT NOT NULL);
 -- находка алтаря странной комнаты: card / coal / seed; выдаётся на ферму при итоге похода, погиб — пропала (2026-11-19)
+-- возрождение похода (столбец armor = число возрождений, 0/1): мифическое блюдо, съеденное на спуск (его решение 2026-11-20)
+CREATE TABLE IF NOT EXISTS d_armor (user INTEGER PRIMARY KEY, run TEXT NOT NULL, armor INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS d_altar (user INTEGER PRIMARY KEY, run TEXT NOT NULL, loot TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS d_cards (id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS d_cards_u ON d_cards (user);

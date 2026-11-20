@@ -629,6 +629,8 @@
     var mk = el("div", "marks");
     [["s", "малое"], ["m", "среднее"], ["l", "большое"]].forEach(function (z) { mk.appendChild(el("span", D.sat >= need[z[0]] ? "ok" : "", z[1] + " " + need[z[0]] + (D.sat >= need[z[0]] ? " ✓" : ""))); });
     box.appendChild(mk);
+    var nm = D.pack.filter(function (p) { var pr = D.products && D.products[p.item]; return pr && pr.myth; }).length;   // мифические блюда — возрождение на спуск (2026-11-20)
+    if (nm) box.appendChild(el("div", "sh-t", "Мифическое блюдо в рюкзаке: если на спуске его съешь, герой один раз поднимется после гибели — с полным здоровьем."));
     box.appendChild(el("div", "sh-t", "Сытость в рюкзаке: " + D.sat + ". Число в углу ячейки — сытость блюда. На спуск съедается столько, сколько нужно, с наименьшим перебором; остальное остаётся в рюкзаке до следующего спуска — лишнее не пропадает."));
     if (false && D.cards && D.cards.length) {                                       // карты в рюкзаке не показываем — они в «Коллекции» гильдии (его правка 2026-11-20)                                                // карты тайной комнаты (редкие и легендарные) — пока под туманом
       box.appendChild(el("div", "sh-s", "Карты"));
@@ -771,7 +773,7 @@
   pick.firstElementChild.appendChild(shx(function () { pick.classList.remove("on"); }));   // крестик выбора подземелья — свой обработчик, мимо кнопок спуска
   pick.addEventListener("click", function (e) { e.stopPropagation(); var b = e.target.closest("button"); if (!b || b.classList.contains("shx")) { pick.classList.remove("on"); return; }
     if (b.id === "srtest") { pick.querySelectorAll("button").forEach(function (x) { x.disabled = true; }); goBattle("iso.html?size=l&pay=1&sr=1&v=" + Date.now()); return; }
-    if (b.id === "resume") { b.disabled = true; goBattle("iso.html?size=" + D.size + "&run=" + D.run + (D.secret ? "&secret=1" : "") + "&v=" + Date.now()); return; }   // уже оплачен — без новой еды
+    if (b.id === "resume") { b.disabled = true; goBattle("iso.html?size=" + D.size + "&run=" + D.run + (D.secret ? "&secret=1" : "") + (D.revive ? "&rv=" + D.revive : "") + "&v=" + Date.now()); return; }   // уже оплачен — без новой еды
     if (!dgCall) { location.href = "iso.html?size=" + b.dataset.size + "&v=" + Date.now(); return; }
     pick.querySelectorAll("button").forEach(function (x) { x.disabled = true; });
     goBattle("iso.html?size=" + b.dataset.size + "&pay=1&v=" + Date.now());   // еду спишет страница боя, когда откроется (2026-11-19)

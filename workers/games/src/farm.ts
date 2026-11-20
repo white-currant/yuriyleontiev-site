@@ -2155,7 +2155,8 @@ export async function dgState(u: any, got = 0) {
   const satmap = Object.fromEntries(Object.entries(RECIPES).filter(([, r]) => r.kind === "oven" && r.points > 0).map(([k, r]) => [k, r.points]));
   const cards = (await q("SELECT id, kind FROM d_cards WHERE user = ? ORDER BY id", [u.id])).map(([id, kind]) => ({ id: Number(id), kind: String(kind) }));
   const secret = !!h.run && (await q("SELECT 1 FROM d_secret WHERE user = ? AND run = ?", [u.id, h.run])).length > 0;   // начатый поход — можно продолжить (страница не загрузилась, связь пропала)
-  return { free: DG_FREE, secret, cards, hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
+  const [ar] = h.run ? await q("SELECT armor FROM d_armor WHERE user = ? AND run = ?", [u.id, h.run]) : [];
+  return { free: DG_FREE, revive: ar ? Number(ar[0]) : 0, secret, cards, hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
            fert_stall: Number(fs?.[0] || 0), fert_price: sellerPrice(stallPrice(PRODUCTS["p:fert"].dust), own), satmap,
            pack, slots: DG_SLOTS, food, sat: pack.reduce((a, p) => a + p.sat, 0), need: DG_NEED, products: pr.products,
            brew: { n: br.n, started: br.started, per: FERT_SEC, bones: FERT_BONES, max: BREW_MAX }, got: got + br.got, now: now() };
@@ -2187,7 +2188,7 @@ export async function dgStart(u: any, size: string) {                      // в
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
   const need = DG_NEED[size]; if (!need) return { error: "Нет такого подземелья" };
   if ((await dgHero(u.id)).hp <= 0) return { error: "Герою нужно подлечиться — выпей чаю" };
-  const pack = (await q("SELECT slot, item FROM d_pack WHERE user = ?", [u.id])).map(([s, it]) => ({ slot: Number(s), sat: satOf(String(it)), brew: recipeOf(String(it)) === "brew" }));
+  const pack = (await q("SELECT slot, item FROM d_pack WHERE user = ?", [u.id])).map(([s, it]) => ({ slot: Number(s), item: String(it), sat: satOf(String(it)), brew: recipeOf(String(it)) === "brew" }));
   // Странная похлёбка (его решение 2026-11-19): открывает странную дверь в тайную комнату — и только в большом подземелье; там съедается всегда,
   // её сытость тоже идёт в счёт. В малое и среднее похлёбка не берётся: остаётся в рюкзаке, платит другая еда
   if (size !== "l" && pack.some((p) => p.brew)) return { error: "Со Странной похлёбкой в рюкзаке — только в большое подземелье" };   // его правка 2026-11-20
@@ -2201,6 +2202,9 @@ export async function dgStart(u: any, size: string) {                      // в
   if (DG_FREE) { best = 0; bs = 0; }                                         // проба: ничего не съедается
   const secret = !!must || (DG_FREE && size === "l");                         // проба: в большом — странная дверь всегда
   if (best < 0) return { error: "Мало еды в рюкзаке: нужно сытости " + need + (skip ? " (Странная похлёбка — только для большого подземелья)" : "") };
+  // возрождение (его решение 2026-11-20, вместо брони): съел на спуск мифическое блюдо — одно возрождение с полным здоровьем, сколько бы их ни было; в пробе — весь рюкзак
+  const pr = await productsFor(pack.map((p) => p.item)), eatenItems = DG_FREE ? pack : pack.filter((_, i) => best >> i & 1);
+  const revive = eatenItems.some((p) => pr.products[p.item]?.myth) ? 1 : 0;
   const eat = pack.filter((_, i) => best >> i & 1).map((p) => p.slot), run = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await dgHero(u.id);
   await DB.batch([
@@ -2208,9 +2212,10 @@ export async function dgStart(u: any, size: string) {                      // в
     DB.prepare("UPDATE d_hero SET run = ?, size = ?, started = ? WHERE user = ?").bind(run, size, now(), u.id),
     DB.prepare("DELETE FROM d_secret WHERE user = ?").bind(u.id),
     DB.prepare("DELETE FROM d_altar WHERE user = ?").bind(u.id),            // находка брошенного похода пропала
+    DB.prepare("INSERT INTO d_armor (user, run, armor) VALUES (?, ?, ?) ON CONFLICT(user) DO UPDATE SET run = excluded.run, armor = excluded.armor").bind(u.id, run, revive),
     ...(secret ? [DB.prepare("INSERT INTO d_secret (user, run) VALUES (?, ?)").bind(u.id, run)] : []),
   ]);
-  return { run, size, ate: bs, secret };
+  return { run, size, ate: bs, secret, revive };
 }
 // странная комната (его решения 2026-11-19): поход со Странной похлёбкой — за дверью с глазом красный зал, в центре алтарь, обвитый щупальцем.
 // Удар по алтарю — одна находка за поход, бросок на сервере: карта — чаще всего (иначе семя не будет редкостью), и карты бывают

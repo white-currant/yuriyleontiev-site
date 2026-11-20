@@ -16,6 +16,10 @@
   #hp { position: relative; width: calc(var(--u) * 120); height: calc(var(--u) * 20); }
   #hp i { position: absolute; left: calc(var(--u) * 4); top: calc(var(--u) * 4); bottom: calc(var(--u) * 4); width: calc(100% - var(--u) * 8); background: linear-gradient(#e2574b 0 45%, #b8322c 45%); transform-origin: left; }
   #hp b { position: absolute; inset: 0; display: grid; place-items: center; font-size: calc(var(--u) * 11); font-weight: 800; text-shadow: 0 var(--u) 0 rgba(0, 0, 0, .7); }
+  #armor { position: absolute; left: 0; top: calc(100% + var(--u) * 4); padding: 0 calc(var(--u) * 9); height: calc(var(--u) * 20); display: flex; align-items: center; gap: calc(var(--u) * 5); font-size: calc(var(--u) * 12); font-weight: 800; color: #e4ccff; }
+  #armor[hidden] { display: none; }
+  #armor canvas { width: calc(var(--u) * 13); height: auto; image-rendering: pixelated; }   /* под полоской здоровья, слева */
+  #armor.hit { animation: armorHit .3s; } @keyframes armorHit { 50% { filter: brightness(2.2); transform: translateY(calc(var(--u) * -1)); } }
   #bones { padding: 0 calc(var(--u) * 10); height: calc(var(--u) * 20); display: flex; align-items: center; gap: calc(var(--u) * 6); font-size: calc(var(--u) * 12); font-weight: 800; }
   #bones canvas { width: calc(var(--u) * 12); height: calc(var(--u) * 11); image-rendering: pixelated; }
   #over { position: absolute; inset: 0; display: none; place-items: center; background: rgba(6, 5, 9, .6); }
@@ -39,7 +43,7 @@
 <div id="stage">
   <canvas id="cv" width="216" height="384"></canvas>
   <canvas id="map" width="40" height="40"></canvas>
-  <div id="hud"><div id="hp" class="pan"><i></i><b>100</b></div><div id="bones" class="pan"><canvas id="boneic" width="12" height="11"></canvas><span id="bonen">0</span></div></div>
+  <div id="hud"><div id="hp" class="pan"><i></i><b>100</b><div id="armor" class="pan" hidden><canvas id="armoric" width="9" height="10"></canvas><span id="armorn">×1</span></div></div><div id="bones" class="pan"><canvas id="boneic" width="12" height="11"></canvas><span id="bonen">0</span></div></div>
   
   <button id="leave" class="pan" type="button">выйти</button>
   <div id="over"><div class="pan"><span id="overt"></span><small id="overs"></small><button id="again" type="button">Ещё раз</button><button id="home" type="button">В убежище</button><button id="stay" type="button" hidden>Остаться</button><button id="quit" type="button" hidden>Выйти</button></div></div>
@@ -256,12 +260,20 @@
     if (cur && cur.secret && cur.decor.some(function (d) { return d.solid && Math.abs(u - d.u) < .38 && Math.abs(v - d.v) < .38; })) return true; return !cellOpen(Math.floor(u - r), Math.floor(v - r)) || !cellOpen(Math.floor(u + r), Math.floor(v - r)) || !cellOpen(Math.floor(u - r), Math.floor(v + r)) || !cellOpen(Math.floor(u + r), Math.floor(v + r)); }
   function reset() {
     rooms = makeLevel(Date.now() & 0xffffff); cur = rooms[0];
-    hero = { u: cur.ci + .5, v: cur.cj + .5, dir: "front", flip: 1, st: "idle", t: 0, hp: 100, inv: 0, hitDone: false };
+    hero = { u: cur.ci + .5, v: cur.cj + .5, dir: "front", flip: 1, st: "idle", t: 0, hp: 100, inv: 0, hitDone: false, revive: REVIVE, revmax: REVIVE };
     fx = []; bones = 0; done = false; trans = null; lootGot = null; lootEx = null; leftEarly = false; banner = 0; var p0 = P(hero.u, hero.v); camX = p0[0]; camY = p0[1];
     document.getElementById("over").classList.remove("on"); hud(); drawMap();
   }
+  (function () { var c = document.getElementById("armoric").getContext("2d"), R = [".KK...KK.", "KBBK.KBBK", "KBLBKBBBK", "KBLBBBBBK", "KBBBBBBDK", ".KBBBBDK.", "..KBBDK..", "...KBK...", "....K....", "........."], P = { K: "#140a1c", B: "#a66bff", L: "#e8d4ff", D: "#6a3ab0" };
+    R.forEach(function (r, y) { for (var x = 0; x < 9; x++) if (P[r[x]]) { c.fillStyle = P[r[x]]; c.fillRect(x, y, 1, 1); } }); })();   // значок возрождения — фиолетовое сердце
+  function reviveHero() {                                       // встаёт с полным здоровьем, 2 с неуязвим, слизни отлетают, фиолетовая вспышка
+    hero.revive = 0; hero.hp = 100; hero.inv = 2; hero.st = "idle"; hero.t = 0;
+    cur.mobs.forEach(function (m) { if (m.hp <= 0) return; var du = m.u - hero.u, dv = m.v - hero.v, d = Math.hypot(du, dv) || 1; if (d < 3) { m.vu = du / d * 6; m.vv = dv / d * 6; m.hit = .3; } });
+    if (cur.shots) cur.shots.length = 0; fx.push({ k: "revive", u: hero.u, v: hero.v, t: 0 }); say("Мифическая сила", "герой поднялся"); hud();
+  }
   function hud() {
     document.querySelector("#hp i").style.transform = "scaleX(" + Math.max(0, hero.hp) / 100 + ")"; document.querySelector("#hp b").textContent = Math.max(0, Math.round(hero.hp));
+    var ae = document.getElementById("armor"); ae.hidden = !(hero.revmax > 0); document.getElementById("armorn").textContent = "×" + (hero.revive || 0); ae.style.opacity = hero.revive > 0 ? 1 : .4;
     document.getElementById("bonen").textContent = bones;
   }
   var mapC = document.getElementById("map"), mg = mapC.getContext("2d");
@@ -399,6 +411,7 @@
       var hx = hero.u - fu, hy = hero.v - fv, hd = Math.hypot(hx, hy) || 1;
       hero.hp -= dmg; hero.inv = inv; hero.st = "hurt"; hero.t = 0; hero.dir = "side"; hero.flip = S(fu, fv)[0] > S(hero.u, hero.v)[0] ? 1 : -1;
       var nu3 = hero.u + hx / hd * .18, nv3 = hero.v + hy / hd * .18; if (!blocked(nu3, nv3)) { hero.u = nu3; hero.v = nv3; } hud();
+      if (hero.hp <= 0 && hero.revive > 0) { reviveHero(); return; }               // мифическое блюдо: одно возрождение с полным здоровьем (его решение 2026-11-20)
       if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", (lootGot ? "Карта и всё найденное потеряно" : "Всё найденное потеряно") + (RUN ? ", здоровье в убежище −20" : "")); }
     }
     var shots = cur.shots || (cur.shots = []);
@@ -434,7 +447,7 @@
       var md = Math.hypot(d2.u - hero.u, d2.v - hero.v);                         // лёгкое притяжение (его просьба 2026-11-20; радиус уменьшен по его правке 1,5 → 1,1 клетки): кость плавно летит к герою,
       if (hero.st !== "dead" && d2.t > .25 && md < 1.1) { var mk2 = Math.min(1, dt * (1.2 + (1.1 - md) * 5)); d2.u += (hero.u - d2.u) * mk2; d2.v += (hero.v - d2.v) * mk2; }   // чем ближе — тем быстрее; застрявшая в предмете тоже долетит
       if (hero.st !== "dead" && d2.t > .3 && Math.hypot(d2.u - hero.u, d2.v - hero.v) < .3) { bones++; hud(); fx.push({ k: "plus", u: d2.u, v: d2.v, t: 0 }); drawMap(); return false; } return true; });
-    fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : f.k === "heal" ? 1.4 : .32); });
+    fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : f.k === "heal" ? 1.4 : f.k === "revive" ? 1.6 : .32); });
     var al = cur.altar;                                                                  // алтарь: дрожит от удара, находка поднимается над ним и — в руки
     if (al && al.hitT) al.hitT += dt;
     banner = Math.max(0, banner - dt);
@@ -512,7 +525,7 @@
   function lootLow() { return lootGot ? LOOT[lootGot].low + (lootEx ? " и " + LOOT[lootEx].low : "") : ""; }
   var lootDummy = null;     // шансы — как на сервере (ALTAR_LOOT); пробный бой без сервера бросает сам
   function say(a, b) { banT = a; banS = b || ""; banner = 2.6; }
-  var SRJ = /[?&]sr=1/.test(location.search);                 // запомнить сразу: после оплаты адрес страницы меняется и метка пропадает (его жалоба 2026-11-20)
+  var SRJ = /[?&]sr=1/.test(location.search), REVIVE = Number((location.search.match(/[?&]rv=(\d+)/) || [])[1] || 0);   // возрождение похода: мифическое блюдо (2026-11-20)                 // запомнить сразу: после оплаты адрес страницы меняется и метка пропадает (его жалоба 2026-11-20)
   function srJump() {                                         // проба (его правка 2026-11-20): в зал, где странная дверь, — перед самой дверью
     var hk = Object.keys(rooms).filter(function (k) { return rooms[k].walls && rooms[k].walls.some(function (w) { return w.secret; }); })[0]; if (!hk) return; var R = rooms[hk];
     cur = R; cur.seen = true; if (R.door.mu != null && R.secDir === "mu") { hero.u = 1.3; hero.v = R.door.mu + .5; } else if (R.door.mv != null) { hero.u = R.door.mv + .5; hero.v = 1.3; } else { hero.u = R.ci + .5; hero.v = R.cj + .5; }
@@ -1027,6 +1040,14 @@
       ctx.lineWidth = 2; ctx.strokeStyle = "rgba(10,20,16,.6)"; ctx.beginPath(); ctx.arc(hp3[0], hp3[1] - 52, 7, 0, 7); ctx.stroke();
       ctx.strokeStyle = "#8ff0bf"; ctx.beginPath(); ctx.arc(hp3[0], hp3[1] - 52, 7, -Math.PI / 2, -Math.PI / 2 + k3 * Math.PI * 2); ctx.stroke();
       px(ctx, hp3[0] - 1, hp3[1] - 55, 2, 6, "#8ff0bf"); px(ctx, hp3[0] - 3, hp3[1] - 53, 6, 2, "#8ff0bf"); }
+    fx.forEach(function (f) { if (f.k !== "revive") return; var s8 = S(f.u, f.v), k8 = f.t / 1.6, q8;   // возрождение: столб света, кольцо и фиолетовые искры вверх
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = Math.max(0, 1 - k8 * 1.2) * .8; var gcol = ctx.createLinearGradient(0, s8[1] - 90, 0, s8[1]); gcol.addColorStop(0, "rgba(180,120,255,0)"); gcol.addColorStop(1, "rgba(200,150,255,.9)");
+      ctx.fillStyle = gcol; ctx.fillRect(s8[0] - 9 + k8 * 6, s8[1] - 90, 18 - k8 * 12, 90);
+      ctx.globalAlpha = Math.max(0, 1 - k8 * 1.5); ctx.strokeStyle = "#d9b8ff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(s8[0], s8[1], 6 + k8 * 46, 3 + k8 * 23, 0, 0, 7); ctx.stroke();
+      for (q8 = 0; q8 < 28; q8++) { var dl = (q8 % 7) * .04, kk = Math.max(0, Math.min(1, (k8 - dl) / (1 - dl))); if (!kk) continue; var an = q8 * 2.39;
+        ctx.globalAlpha = 1 - kk; px(ctx, s8[0] + Math.cos(an) * (6 + kk * 22), s8[1] - 10 - kk * (30 + (q8 % 5) * 9) + Math.sin(an) * 4, q8 % 3 ? 1 : 2, q8 % 3 ? 1 : 2, q8 % 2 ? "#e8d4ff" : "#a66bff"); }
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over"; });
     fx.forEach(function (f) { if (f.k !== "heal") return; var s9 = S(f.u, f.v), k9 = f.t / 1.4, rp = runePx(),          // вылечился: искры взлетают с рисунка руны
       ox9 = Math.round(s9[0] - IMG.circle.width / 2), oy9 = Math.round(s9[1] - IMG.circle.height / 2);
       if (k9 < .25) { ctx.globalAlpha = 1 - k9 / .25; ctx.fillStyle = "#ffffff"; rp.forEach(function (q) { ctx.fillRect(ox9 + q[0], oy9 + q[1], 1, 1); }); }   // вспышка всего рисунка
@@ -1071,8 +1092,8 @@
       document.getElementById("again").hidden = true; document.getElementById("home").hidden = true; ov.classList.add("on");
       dgCall("/api/dg/start", { size: SIZEK }).then(function (r) {
         if (r.error) { document.getElementById("overt").textContent = r.error; document.getElementById("home").hidden = false; return; }
-        RUN = r.run; SECRET = !!r.secret;
-        try { history.replaceState(null, "", "iso.html?size=" + r.size + "&run=" + r.run + (r.secret ? "&secret=1" : "") + "&v=" + Date.now()); } catch (e) {}
+        RUN = r.run; SECRET = !!r.secret; REVIVE = Number(r.revive) || 0;
+        try { history.replaceState(null, "", "iso.html?size=" + r.size + "&run=" + r.run + (r.secret ? "&secret=1" : "") + (REVIVE ? "&rv=" + REVIVE : "") + "&v=" + Date.now()); } catch (e) {}
         document.getElementById("home").hidden = false; reset(); if (SRJ) srJump(); requestAnimationFrame(loop);
       }).catch(function () { document.getElementById("overt").textContent = "Нет связи с сервером — еда не потрачена"; document.getElementById("home").hidden = false; });
       return;
