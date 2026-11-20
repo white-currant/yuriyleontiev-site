@@ -230,11 +230,14 @@
             if (x < 0 || y < 0 || x >= rm.w || y >= rm.h || seen[k] || busy[k] || !rm.open[y][x]) return; seen[k] = 1; st.push([x, y]); }); }
         return n === nOpen - rm.props.length - 1;
       }
+      function roomy(x, y) { for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) { var yy = y + dy, xx = x + dx; if (yy < 0 || xx < 0 || yy >= rm.h || xx >= rm.w || !rm.open[yy][xx]) return false; } return true; }   // вокруг клетки — только пол
       if (kind === "hall") { for (j = 2; j < rm.h - 1; j += 3) for (i = 2; i < rm.w - 1; i += 3) if (rm.open[j][i] && !lane[j][i] && passable(i, j)) rm.props.push({ i: i, j: j, k: rr() < .5 ? "stalag" : "crys_big" }); }
       else { var openCells = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.open[j][i] && !lane[j][i]) openCells.push([i, j]);
         var np = Math.min(openCells.length, Math.floor(openCells.length / 9) + 1);
         for (tt = 0; tt < np; tt++) { var cc = openCells.splice(Math.floor(rr() * openCells.length), 1)[0]; var pk2 = kinds[Math.floor(rr() * kinds.length)];
           if (!passable(cc[0], cc[1])) continue;                                   // перекрыл бы проход — сюда не ставим
+          // широкие (шире ~¾ клетки: скала, россыпь камней, зелёный кристалл, сталагмит) — не вплотную к задней стене: иначе край залезает на стену (его баг 2026-11-20)
+          if (/^(rock_big|rocks|crys_green|stalag)$/.test(pk2) && !roomy(cc[0], cc[1])) pk2 = ["crys_blue", "crys_teal", "crate", "barrel", "mush"][Math.floor(rr() * 5)];
           if (TILEP[pk2]) { if (rm.floor[cc[1]][cc[0]] >= 6) pk2 = "crys_teal"; else rm.floor[cc[1]][cc[0]] = TILEP[pk2]; }   // на люк и руну плитку с предметом не кладём
           rm.props.push({ i: cc[0], j: cc[1], k: pk2 }); } }
       // кости (его правка 2026-11-20): грудная клетка — препятствие, как ящик (сквозь неё ходить странно), и только там, где не перекроет путь;
@@ -283,6 +286,15 @@
   }
   // интервал между плевками (его правка 2026-11-20): случайный, и глубже — чаще: в ближних залах 3–5 с, в дальних 2–3,5 с
   function spitGap() { var k = Math.min(1, Math.max(0, ((cur && cur.depth) || 2) - 2) / 4); return (3 - k) + Math.random() * (2 - .5 * k); }
+  // куда отпрыгнуть стрелку (его правка 2026-11-20: в углу он не мог отскочить): сначала прочь от героя, если там стена или предмет —
+  // наискосок, потом вбок, в тупике — проскочить мимо героя; путь проверяем на 0,4 / 0,8 / 1,2 клетки
+  function jumpDir(m, au, av) {
+    var a0 = Math.atan2(av, au), sg = Math.random() < .5 ? 1 : -1, offs = [0, .79, -.79, 1.57, -1.57, 2.36, -2.36];
+    for (var k = 0; k < offs.length; k++) { var a = a0 + offs[k] * sg, cu = Math.cos(a), cv = Math.sin(a), ok = true;
+      for (var s1 = .4; s1 <= 1.21 && ok; s1 += .4) if (blocked(m.u + cu * s1, m.v + cv * s1)) ok = false;
+      if (ok) return [cu, cv]; }
+    return null;
+  }
   function blocked(u, v) { var r = .13, al = cur && cur.altar; if (al && Math.abs(u - al.u) < 1.02 && Math.abs(v - al.v) < 1.02) return true;
     if (cur && cur.secret && cur.decor.some(function (d) { return d.solid && Math.abs(u - d.u) < .38 && Math.abs(v - d.v) < .38; })) return true; return !cellOpen(Math.floor(u - r), Math.floor(v - r)) || !cellOpen(Math.floor(u + r), Math.floor(v - r)) || !cellOpen(Math.floor(u - r), Math.floor(v + r)) || !cellOpen(Math.floor(u + r), Math.floor(v + r)); }
   function reset() {
@@ -457,7 +469,7 @@
           if (m.aim <= 0) { shots.push({ u: m.u, v: m.v, du: du2 / d * 2.4, dv: dv2 / d * 2.4, t: 0 }); m.cd = spitGap(); } }
         else { m.cd -= dt; if (m.cd <= 0) m.aim = .45; }
         m.jcd = Math.max(0, (m.jcd || 0) - dt); m.jump = Math.max(0, (m.jump || 0) - dt);                                    // отскок (его правка 2026-11-20): подошёл вплотную — с шансом 50% отпрыгивает назад,
-        if (d < 1.1 && m.jcd <= 0 && m.hit <= 0) { m.jcd = 2.2; if (Math.random() < .5) { m.vu = -du2 / d * 5; m.vv = -dv2 / d * 5; m.aim = 0; m.jump = .35; } }   // потом 2,2 с не может
+        if (d < 1.1 && m.jcd <= 0 && m.hit <= 0) { m.jcd = 1.2; if (Math.random() < .85) {   /* чаще (его правка 2026-11-20): было 50% и раз в 2,2 с */ var jd = jumpDir(m, -du2 / d, -dv2 / d); if (jd) { m.vu = jd[0] * 5; m.vv = jd[1] * 5; m.aim = 0; m.jump = .35; } } }   // потом 2,2 с не может
       }
       else if (hero.st !== "dead" && d < 3) { mu = du2 / d * .55 * hop * dt; mv = dv2 / d * .55 * hop * dt; }
       else { m.wt -= dt; if (m.wt <= 0) { m.wt = 1 + Math.random() * 2; var a = Math.random() * 6.28; m.wu = Math.cos(a); m.wv = Math.sin(a); } mu = m.wu * .22 * hop * dt; mv = m.wv * .22 * hop * dt; }
@@ -1032,7 +1044,8 @@
       if (m.hp < (m.spit ? 2 : 3)) { px(ctx, s[0] - 8, s[1] - 20 - jump, 16, 4, "#14151b"); px(ctx, s[0] - 7, s[1] - 19 - jump, 14 * m.hp / (m.spit ? 2 : 3), 2, "#e2574b"); }
     } }); });
     // герой за линией задней стены (уходит в арку) — рисуется раньше стен, виден только в проёме
-    list.push({ z: hero.u < 0 || hero.v < 0 ? -5 : hero.u + hero.v, f: function () {
+    // в проёме (за линией стены, до перехода) — поверх арки и соседних плит; раньше рисовался позади стен, и колонны арки закрывали героя (его баг 2026-11-20)
+    list.push({ z: hero.u < 0 || hero.v < 0 ? hero.u + hero.v + 1 : hero.u + hero.v, f: function () {
       var s = S(hero.u, hero.v), fr = heroFrame(), blink = hero.inv > 0 && hero.st !== "dead" && Math.floor(t * 16) % 2;
       var hx = Math.round(s[0] * Z) / Z, hy = Math.round(s[1] * Z) / Z;       // герой — точно в середине кадра, в сетке 1/Z, вместе с камерой
       ctx.fillStyle = "rgba(8,6,10,.5)"; ctx.fillRect(hx - 10, hy - 2, 20, 4); ctx.fillStyle = "rgba(8,6,10,.35)"; ctx.fillRect(hx - 7, hy - 3, 14, 6);
