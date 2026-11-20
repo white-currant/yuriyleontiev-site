@@ -755,20 +755,25 @@
 
   // котёл (его правка 2026-11-19): ячейка с костями → стрелка → ячейка с удобрением, счётчик сколько варить, меньше текста
   var brewN = 1;
+  function plural(n, a, b, c) { var m = n % 100, k = n % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k > 1 && k < 5 ? b : c; }
   function boneCell(n) { var b = el("div", "cell"), c = el("canvas"), src = $("i-bone"); c.width = src.width; c.height = src.height; c.getContext("2d").drawImage(src, 0, 0); b.appendChild(c); b.appendChild(el("b", "", String(n))); return b; }
   function brewView() {
     head("Перегонный куб"); if (!D) return noServer();
     var br = D.brew, nowS = Date.now() / 1000 - D.t0, left = br.n ? br.per - ((nowS - br.started) % br.per) : 0, can = Math.max(0, Math.min(Math.floor(D.bones / br.bones), br.max - br.n));
     brewN = Math.max(can ? 1 : 0, Math.min(brewN, can));
     var row = el("div", "brew"), arrow = el("div", "arrow"); arrow.appendChild(el("i"));   // труба: по ней течёт зелёная жижа
-    row.appendChild(boneCell(brewN * br.bones)); row.appendChild(arrow); row.appendChild(iconCell("p:fert", null, null, null)); row.lastChild.appendChild(el("b", "", "×" + brewN));
+    // не хватает костей (его правка 2026-11-20: «0 костей → ×0» непонятно): на костях «24/70», на удобрении «×1», вместо счётчика — сколько ещё нужно
+    var full = br.n >= br.max;
+    row.appendChild(boneCell(can ? brewN * br.bones : D.bones + "/" + br.bones)); row.appendChild(arrow); row.appendChild(iconCell("p:fert", null, null, null)); row.lastChild.appendChild(el("b", "", "×" + (can ? brewN : 1)));
     box.appendChild(row);
     box.appendChild(el("div", "sh-t c", "костей у тебя " + D.bones + " · " + br.bones + " на одно · " + Math.round(br.per / 60) + " мин"));
-    var st = el("div", "step"), mi = el("button", "btn alt", "−"), nn = el("div", "num", String(brewN)), pl = el("button", "btn alt", "+");
-    mi.type = pl.type = "button"; mi.disabled = brewN <= 1; pl.disabled = brewN >= can;
-    mi.onclick = function (e) { e.stopPropagation(); brewN--; brewView(); }; pl.onclick = function (e) { e.stopPropagation(); brewN++; brewView(); };
-    st.appendChild(mi); st.appendChild(nn); st.appendChild(pl); box.appendChild(st);
-    var one = el("div", "one"), go = el("button", "btn", can ? "Переплавить" : "Мало костей"); go.type = "button"; go.disabled = !can || !D.barn;
+    if (can) {
+      var st = el("div", "step"), mi = el("button", "btn alt", "−"), nn = el("div", "num", String(brewN)), pl = el("button", "btn alt", "+");
+      mi.type = pl.type = "button"; mi.disabled = brewN <= 1; pl.disabled = brewN >= can;
+      mi.onclick = function (e) { e.stopPropagation(); brewN--; brewView(); }; pl.onclick = function (e) { e.stopPropagation(); brewN++; brewView(); };
+      st.appendChild(mi); st.appendChild(nn); st.appendChild(pl); box.appendChild(st);
+    }
+    var one = el("div", "one"), go = el("button", "btn", can ? "Переплавить" : full ? "Котёл полон" : "Нужно ещё " + (br.bones - D.bones % br.bones) + " " + plural(br.bones - D.bones % br.bones, "кость", "кости", "костей")); go.type = "button"; go.disabled = !can || !D.barn;
     go.onclick = function (e) { e.stopPropagation(); var n = brewN; D.bones -= n * br.bones; if (!br.n) br.started = Date.now() / 1000 - D.t0; br.n += n; brewN = 1; hud(); brewView(); apply(seq("/api/dg/brew", { n: n })); };
     one.appendChild(go); box.appendChild(one);
     var pi = null, pt = null;
