@@ -1044,8 +1044,7 @@
       if (m.hp < (m.spit ? 2 : 3)) { px(ctx, s[0] - 8, s[1] - 20 - jump, 16, 4, "#14151b"); px(ctx, s[0] - 7, s[1] - 19 - jump, 14 * m.hp / (m.spit ? 2 : 3), 2, "#e2574b"); }
     } }); });
     // герой за линией задней стены (уходит в арку) — рисуется раньше стен, виден только в проёме
-    // в проёме (за линией стены, до перехода) — поверх арки и соседних плит; раньше рисовался позади стен, и колонны арки закрывали героя (его баг 2026-11-20)
-    list.push({ z: hero.u < 0 || hero.v < 0 ? hero.u + hero.v + 1 : hero.u + hero.v, f: function () {
+    list.push({ z: hero.u < 0 || hero.v < 0 ? -5 : hero.u + hero.v, f: function () {   // в проёме — за стенами, как было (его решение 2026-11-20: пусть входит в арку как раньше)
       var s = S(hero.u, hero.v), fr = heroFrame(), blink = hero.inv > 0 && hero.st !== "dead" && Math.floor(t * 16) % 2;
       var hx = Math.round(s[0] * Z) / Z, hy = Math.round(s[1] * Z) / Z;       // герой — точно в середине кадра, в сетке 1/Z, вместе с камерой
       ctx.fillStyle = "rgba(8,6,10,.5)"; ctx.fillRect(hx - 10, hy - 2, 20, 4); ctx.fillStyle = "rgba(8,6,10,.35)"; ctx.fillRect(hx - 7, hy - 3, 14, 6);

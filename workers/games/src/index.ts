@@ -172,7 +172,7 @@ async function profile(u: any, g?: any) {
   const name = link?.state === "linked" ? link.title : sname || nameOf(u);
   const avatar = savatar ? `/avatar/${savatar}` : (link === null || link?.state === "linked") ? null : (u.photo_url || null);
   return { name, avatar, link, dg: farm.dgOpen() || String(u.id) === String(owner || ""), dg_at: farm.DG_OPEN_AT,
-    dg_art: farm.dgOpen() || String(u.id) === String(owner || "") ? "dg/card-853b1e7af1ae.webp" : null,   // настоящая картинка — только кому открыто; на сайте card.webp — размытая (2026-11-20)
+    dg_art: farm.dgOpen() || String(u.id) === String(owner || "") ? "dg/card-1875ac22ed65.webp" : null,   // настоящая картинка — только кому открыто; на сайте card.webp — размытая (2026-11-20)
     now: Math.floor(Date.now() / 1000),   // подземелье: до открытия — хозяину, остальным — отсчёт   // подземелье видно: всем после открытия, до него — хозяину
            points, karma: karma == null ? KARMA_START : Number(karma), place: sp != null ? Number(place) : null, ...rankOf(points),
            today: { scored: g.scored, max: SCORED_PER_DAY, earned: g.earned }, streak: g.streak, best_streak: g.best,
