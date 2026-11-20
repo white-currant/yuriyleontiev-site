@@ -605,13 +605,21 @@
   $("hpbar").addEventListener("click", function (e) { e.stopPropagation(); if (open === hpView) return hide(); show(hpView); });
   function closedPage() { document.documentElement.innerHTML = "<body style='margin:0;background:#0b0710;color:#cfc4e0;font:600 15px/1.4 -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center'><div>Подземелье пока закрыто.<br><a href='../index.html' style='color:#ffcf7a'>В гильдию</a></div></body>"; }
   if (!dgCall && !/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) { closedPage(); return; }   // по прямой ссылке, без игры — не пускаем (утечка 2026-11-20)
-  function load() { if (!dgCall) return Promise.resolve(); return dgCall("/api/dg").then(function (r) { if (r.error) { if (r.error === "Подземелье пока закрыто") return closedPage(); tell(r.error); return; } D = r; D.t0 = Date.now() / 1000 - r.now; fresh = true; try { parent.__dgD = D; } catch (e) {} hud(); if (open) open(); if (pick.classList.contains("on")) pickView(); }).catch(function (e) { tell(e.message); if (!fresh) $("pickneed").textContent = "Нет связи — закрой и открой ещё раз"; }); }
+  function load() { if (!dgCall) return Promise.resolve(); return dgCall("/api/dg").then(function (r) { if (r.error) { if (r.error === "Подземелье пока закрыто") return closedPage(); tell(r.error); return; } if (pend > 0) return; D = r; D.t0 = Date.now() / 1000 - r.now; fresh = true; try { parent.__dgD = D; } catch (e) {} hud(); if (open) open(); if (pick.classList.contains("on")) pickView(); }).catch(function (e) { tell(e.message); if (!fresh) $("pickneed").textContent = "Нет связи — закрой и открой ещё раз"; }); }
   // прошлое состояние убежища — из памяти главного окна: окна открываются сразу, а сервер обновляет их в фоне (его жалоба 2026-11-19)
   try { if (dgCall && parent.__dgD) { D = parent.__dgD; } if (dgCall && parent.__dgM) M = parent.__dgM; } catch (e) {}
   // запросы убежища — строго по очереди: быстрые нажатия не обгоняют друг друга на сервере
   var chain = Promise.resolve();
   function seq(path, body) { var p = chain.then(function () { return dgCall(path, body); }); chain = p.catch(function () {}); return p; }
-  function apply(p) { return p.then(function (r) { if (r && r.error) tell(r.error); if (r && "bones" in r && "pack" in r) { D = r; D.t0 = Date.now() / 1000 - r.now; try { parent.__dgD = D; } catch (e) {} hud(); if (open) open(); } else return load(); }).catch(function (e) { tell(e.message); load(); }); }
+  // ответ сервера — только от последнего запроса очереди (его баг 2026-11-20: нажал несколько раз — еда исчезала, возвращалась и снова исчезала:
+  // каждый ответ перерисовывал рюкзак состоянием на свой момент). Промежуточные ответы пропускаем, после ошибки — перечитать в конце
+  var pend = 0, pendErr = false;
+  function apply(p) { pend++;
+    return p.then(function (r) { pend--; if (r && r.error) { tell(r.error); pendErr = true; }
+      if (pend > 0) return;
+      var bad = pendErr; pendErr = false;
+      if (!bad && r && "bones" in r && "pack" in r) { D = r; D.t0 = Date.now() / 1000 - r.now; try { parent.__dgD = D; } catch (e) {} hud(); if (open) open(); } else return load(); })
+      .catch(function (e) { pend--; tell(e.message); if (pend > 0) { pendErr = true; return; } pendErr = false; load(); }); }
   var sheet = $("sheet"), box = $("sheetbox");
   function show(fn) { pick.classList.remove("on"); open = fn; sheet.classList.add("on"); fn(); }   // окно одно: выбор спуска закрывается
   function hide() { open = null; sheet.classList.remove("on"); clearInterval(tick); }
@@ -643,8 +651,9 @@
     var mk = el("div", "marks");
     [["s", "малое"], ["m", "среднее"], ["l", "большое"]].forEach(function (z) { mk.appendChild(el("span", D.sat >= need[z[0]] ? "ok" : "", z[1] + " " + need[z[0]] + (D.sat >= need[z[0]] ? " ✓" : ""))); });
     box.appendChild(mk);
-    var nm = D.pack.filter(function (p) { var pr = D.products && D.products[p.item]; return pr && pr.myth; }).length;   // мифические блюда — возрождение на спуск (2026-11-20)
+    var nm = D.pack.filter(function (p) { var pr = D.products && D.products[p.item]; return pr && pr.myth && rec(p.item) !== "brew"; }).length;   // мифические блюда — возрождение (похлёбка, даже мифическая, — похлёбка)
     if (nm) box.appendChild(el("div", "sh-t", "Мифическое блюдо ✦ — не еда на спуск, а возрождение: погибнешь — герой один раз поднимется с полным здоровьем. Тратится, только если герой поднялся; иначе остаётся в рюкзаке."));
+    if (D.pack.some(function (p) { return rec(p.item) === "brew"; })) box.appendChild(el("div", "sh-t", "Странная похлёбка в рюкзаке: в большом подземелье за странной дверью ждёт тайная комната. Похлёбка съедается при спуске в большое подземелье. В малое и среднее она не берётся."));
     box.appendChild(el("div", "sh-t", "Сытость в рюкзаке: " + D.sat + ". Число в углу ячейки — сытость блюда. На спуск съедается ровно столько, сколько нужно: сначала надкусанное, потом целое. Остаток блюда лежит в рюкзаке до следующих спусков (в углу «3/4»), в амбар его не вернуть."));
     if (false && D.cards && D.cards.length) {                                       // карты в рюкзаке не показываем — они в «Коллекции» гильдии (его правка 2026-11-20)                                                // карты тайной комнаты (редкие и легендарные) — пока под туманом
       box.appendChild(el("div", "sh-s", "Карты"));
@@ -654,7 +663,6 @@
         b.appendChild(el("span", "fog")); b.onclick = function (e) { e.stopPropagation(); tell(nm + " — откроется позже"); }; gc.appendChild(b); });
       box.appendChild(gc);
     }
-    if (D.pack.some(function (p) { return rec(p.item) === "brew"; })) box.appendChild(el("div", "sh-t", "Странная похлёбка в рюкзаке: в большом подземелье за странной дверью ждёт тайная комната. Похлёбка съедается при спуске в большое, в малое и среднее она не берётся."));
     box.appendChild(el("div", "sh-s", "Амбар — еда"));
     if (!D.barn) { box.appendChild(el("div", "sh-t", "На ферме нет амбара — еду хранят в нём.")); return; }
     if (!D.food.length) { box.appendChild(el("div", "sh-t", "В амбаре нет еды. Приготовь её в печи на ферме или купи на рынке.")); return; }
@@ -664,7 +672,7 @@
         var used = D.pack.map(function (p) { return p.slot; }), free = -1;
         for (var j = 0; j < D.slots; j++) if (used.indexOf(j) < 0) { free = j; break; }
         if (free < 0) return tell("Рюкзак полон");
-        var my = !!(D.products && D.products[f.item] && D.products[f.item].myth);   // мифическое — на возрождение, сытостью не платит
+        var my = !!(D.products && D.products[f.item] && D.products[f.item].myth) && rec(f.item) !== "brew";   // мифическое — на возрождение, сытостью не платит (похлёбка — нет)
         D.pack.push({ slot: free, item: f.item, sat: my ? 0 : f.sat, full: f.sat, myth: my }); D.sat += my ? 0 : f.sat; addFood(f.item, -1); packView();
         apply(seq("/api/dg/pack", { item: f.item }));
       }));

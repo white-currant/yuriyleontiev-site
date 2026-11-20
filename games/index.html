@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611202239";
+    var BUILD = "202611202245";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -4937,7 +4937,7 @@
       if (inf.s.odd) { haptic("error"); return toast("Странное растение не торопится — удобрение на него не действует"); }
       if (inf.ripe) { haptic("error"); return toast("Уже созрело — собери урожай"); }
       if (fn >= 2) { haptic("error"); return toast("Больше двух удобрений на одну посадку нельзя"); }
-      var cr = Math.round(inf.left * (1 - (1 + fn / 3) / (1 + (fn + 1) / 3)));
+      var cr = Math.round(inf.left * (1 - (1 + fn) / (2 + fn)));   // скорость ×2, ×3 (его решение 2026-11-20; было +⅓ за пакетик)
       var q3 = F.state.plots[pl.idx] || pl;                                          // правим саму грядку в состоянии фермы — экран сразу показывает новое время
       haptic("success"); fb2.count--; q3.grown += cr; q3.fert = fn + 1; q3.fert_c = (q3.fert_c || 0) + cr; if (q3 !== pl) { pl.grown = q3.grown; pl.fert = q3.fert; pl.fert_c = q3.fert_c; }
       if (typeof statics !== "undefined") statics = {}; renderHotbar(); renderFarm();
@@ -5380,7 +5380,7 @@
   }
   function selText() {
     var s = F.state;
-    if (F.sel === "fert") return "Удобрение: нажми на растущую грядку — растёт на треть быстрее, второй пакетик — ещё на треть. Не больше двух, странное растение не ускоряет.";
+    if (F.sel === "fert") return "Удобрение: нажми на растущую грядку — растёт вдвое быстрее, второй пакетик — втрое. Не больше двух, странное растение не ускоряет.";
     if (F.sel === "gem") { var gkk = GEMK[F.gemKind] || GEMK.moon;
       return itemName(gkk.dust) + ": нажми " + (gkk.mark ? "на грядку" : "на растущую грядку") + " — " + gkk.does + "."; }
     if (F.sel === "shovel") return "Лопата: нажми на посаженную грядку, чтобы выкопать растение — семя вернётся в инвентарь (очки за посадку и полив спишутся). Созревшее лопата просто соберёт.";
@@ -6198,7 +6198,7 @@
         if (picked) {
           var v = picked, r = v.r, d = el("div", "ovpick");
           d.appendChild(el("b", "", itemName(v.pid) || r.name));
-          var s1 = el("small", "", v.parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + v.info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : "") + (r.kind === "oven" && r.points ? " · сытость " + r.points : ""));
+          var s1 = el("small", "", v.parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + v.info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : "") + (r.kind === "oven" && r.points ? " · сытость " + ((F.state && F.state.satmap && F.state.satmap[v.k]) || r.points) : ""));
           d.appendChild(s1); d.appendChild(s2); if (v.k === "brew") d.appendChild(el("small", "", BREW_SAYS)); pl.appendChild(d);
           if (!slot) { var no = btn("Все ячейки заняты", "ghost", function () {}); no.disabled = true; pl.appendChild(no); }
           else qtyBox(pl, { key: "cook:" + v.k + ":" + v.sort, max: function () { return v.can; },
@@ -6273,7 +6273,7 @@
         var k = v.k, sort = v.sort, r = v.r, can = v.can, outKey = v.outKey, pid = v.pid, info = v.info, parts = v.parts;
         var row = el("div", "seed"), cv = el("canvas", "pix"); itemIcon(cv, pid); row.appendChild(cv);
         var tx = el("span"); tx.appendChild(el("b", "", itemName(pid) || r.name));
-        var s1 = el("small", "", parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : "") + (r.kind === "oven" && r.points ? " · сытость " + r.points : ""));
+        var s1 = el("small", "", parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : "") + (r.kind === "oven" && r.points ? " · сытость " + ((F.state && F.state.satmap && F.state.satmap[k]) || r.points) : ""));
         s1.style.display = s2.style.display = "block"; tx.appendChild(s1); tx.appendChild(s2);
         row.appendChild(tx); sh.appendChild(row);
         var acts = el("div", "invacts");

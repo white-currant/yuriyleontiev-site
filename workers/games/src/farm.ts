@@ -1013,7 +1013,7 @@ export async function harvest(u: any, idx: number) {
   const mythNear = !s.myth && marks.includes("myth") && all.some((x) => near4(idx).includes(Number(x[0])) && ss[x[1]]?.myth);
   // удобрение (его решение 2026-11-19): очки за сбор — по фактическому времени роста, только за ускорение удобрением
   const [fz] = await q("DELETE FROM f_fert WHERE user = ? AND idx = ? RETURNING planted, credit", [u.id, idx]);
-  const fFrac = fz && Number(fz[0]) === Number(p[2]) ? Math.min(.6, Number(fz[1]) / (s.minutes * 60)) : 0;
+  const fFrac = fz && Number(fz[0]) === Number(p[2]) ? Math.min(.7, Number(fz[1]) / (s.minutes * 60)) : 0;
   const points = fFrac ? Math.max(POINTS_HARVEST_MIN, Math.round(s.points * (1 - fFrac))) : s.points;
   const hasBarn = (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length > 0;
   const cometDust = evHere === "comet" ? COMET_DUST_X * s.dust : 0;      // комета: прибавка пыли сразу, сверх урожая
@@ -2188,7 +2188,7 @@ async function brewTick(uid: number, name = "") {                          // г
 async function packOf(uid: number) {
   const rows = await q("SELECT p.slot, p.item, b.left FROM d_pack p LEFT JOIN d_bite b ON b.user = p.user AND b.slot = p.slot WHERE p.user = ? ORDER BY p.slot", [uid]);
   const pr = await productsFor(rows.map((r) => String(r[1])));
-  return rows.map(([slot, item, left]) => { const it = String(item), full = satOf(it), myth = !!pr.products[it]?.myth, bite = left != null;
+  return rows.map(([slot, item, left]) => { const it = String(item), full = satOf(it), myth = !!pr.products[it]?.myth && recipeOf(it) !== "brew", bite = left != null;   // мифическая Странная похлёбка — всё равно похлёбка (ключ к странной комнате), а не возрождение
     return { slot: Number(slot), item: it, full, sat: myth ? 0 : bite ? Number(left) : full, bite, myth, brew: recipeOf(it) === "brew" }; });
 }
 export async function dgState(u: any, got = 0) {
@@ -2385,7 +2385,7 @@ export async function dgBrew(u: any, n: number) {                          // в
 }
 
 // ---------- удобрение на грядку (его решения 2026-11-19) ----------
-// Пакетик ускоряет рост посадки на треть, второй — ещё на треть (скорость складывается: ×4/3, ×5/3), больше двух нельзя.
+// Пакетик ускоряет рост вдвое, второй — втрое (скорость ×2, ×3; было ×4/3, ×5/3 — его решение 2026-11-20), больше двух нельзя.
 // Сделано как прибавка к росту: оставшееся время сразу сокращается (R → R·старая/новая скорость). Странное растение не ускоряется.
 // Очки за сбор потом урезаются на ту же долю (credit) — очки в час остаются честными. Пакетик берётся из амбара («p:fert»).
 export const FERT_MAX = 2;
@@ -2405,7 +2405,7 @@ export async function fertilize(u: any, idx: number) {
   const n = f && Number(f[1]) === Number(p[2]) ? Number(f[0]) : 0, had = f && Number(f[1]) === Number(p[2]) ? Number(f[2]) : 0;
   if (n >= FERT_MAX) return { error: "Больше двух удобрений на одну посадку нельзя" };
   const total = s.minutes * 60 * (1 - (1 - ODD_NEAR) * Number(fast)), rem = Math.max(0, total - growth(p, t, boost, rainSlow(s)));
-  const credit = Math.round(rem * (1 - (1 + n / 3) / (1 + (n + 1) / 3)));
+  const credit = Math.round(rem * (1 - (1 + n) / (2 + n)));   // скорость ×2, второй пакетик ×3 (его решение 2026-11-20; было +⅓ за пакетик)
   if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = 'p:fert' AND count > 0 RETURNING 1", [u.id])).length) return { error: "В амбаре нет удобрения" };
   await DB.batch([
     DB.prepare("UPDATE f_plots SET grown = grown + ? WHERE user = ? AND idx = ? AND planted = ?").bind(credit, u.id, idx, p[2]),
