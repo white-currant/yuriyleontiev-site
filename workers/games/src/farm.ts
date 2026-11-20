@@ -108,6 +108,7 @@ export function setup(deps: any) { ({ q, DB, now, today, nameOf, prefetch, preCl
 // Находки лежат в общей таблице предметов g_items (game = farm, kind = vinyl) — их показывает и профиль гильдии.
 const TIER_ODDS: [string, number][] = [["common", 62], ["rare", 25], ["epic", 10], ["legendary", 3]];
 const FINISH_ODDS: [string, number][] = [["plain", 85], ["foil", 12], ["star", 3]];
+const CARD_ODDS: [string, number][] = [["common", 70], ["rare", 22], ["epic", 6], ["legend", 2]];   // карты с фермы (2026-11-20)
 const DUP_DUST: Record<string, number> = { common: 5, rare: 10, epic: 25, legendary: 60 };
 let catalog: { id: string; date: string }[] = [], catalogAt = 0;
 async function catalogList() {
@@ -1051,7 +1052,10 @@ export async function harvest(u: any, idx: number) {
     await q(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1`, [u.id, h.id]);
     hybrid = { ...h, parents: [s.name, other.name], fresh: !Number(had) };
   }
-  const vinyl = await dropVinyl(u.id, s.vinyl * (s.bonus === "lucky" ? 2 : 1) * (weatherOn(t) === "fullmoon" ? 2 : 1));
+  const luck = (s.bonus === "lucky" ? 2 : 1) * (weatherOn(t) === "fullmoon" ? 2 : 1);
+  const vinyl = await dropVinyl(u.id, s.vinyl * luck);
+  // тайная карта при сборе (его решение 2026-11-20): шанс — половина шанса пластинки (в среднем ~5% сборов), базовые чаще всего
+  const card = !s.odd && Math.random() < s.vinyl * .5 * luck ? await giveCard(u.id, roll(CARD_ODDS), "сбор урожая · " + s.name) : null;
   // ледяной: может заморозить свою грядку; солнечный: луч с неба — другая растущая грядка сразу созревает
   let frost = 0, sunbeam = -1, thawed: number[] = [];
   if (s.color === "ember") {                                          // собрал огненное — лёд рядом тоже тает
@@ -1071,7 +1075,7 @@ export async function harvest(u: any, idx: number) {
                       DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'sun', ?)").bind(u.id, t)]);
     }
   }
-  return { crop, dust, wet: wetGrain ? t + WET_DRY : 0, honey_lost: honeyLost, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
+  return { card, crop, dust, wet: wetGrain ? t + WET_DRY : 0, honey_lost: honeyLost, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
 }
 
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
@@ -2246,8 +2250,7 @@ async function altarGive(uid: number, loot: string) {                     // н�
   const coal = async () => { if (await hasBarn()) await q("INSERT INTO f_barn (user, strain, count) VALUES (?, 'p:coal', 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [uid]);
     else await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [COAL_DUST, uid]); return "coal"; };
   if (loot === "rare" || loot === "legend" || loot === "card") { const k = loot === "rare" ? "rare" : "legend";   // «card» — старое имя легендарной
-    const [[cid]] = await q("INSERT INTO d_cards (user, kind, at) VALUES (?, ?, ?) RETURNING id", [uid, k, now()]);
-    await cardLog(Number(cid), "found", null, uid, "странная комната подземелья"); return k; }
+    await giveCard(uid, k, "странная комната подземелья"); return k; }
   if (loot === "seed") {                                                   // правило «не больше двух странных у игрока»: третье вытесняет одно из мешка;
     if ((await oddHeld(uid)) >= ODD_PER_USER && !(await oddEvict(uid))) return coal();   // оба растут — вместо семени уголь
     await q("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, 'anomaly', 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [uid]);
@@ -2266,17 +2269,25 @@ export async function cardLog(card: number, ev: string, from: number | null, to:
   const hash = await sha(JSON.stringify([prev, card, ev, from, to, at, info]));
   await q("INSERT INTO d_card_log (card, ev, from_user, to_user, at, info, prev, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [card, ev, from, to, at, info, prev, hash]);
 }
-async function cardLedgerSync() {                                          // карты, найденные до журнала, — первая запись «нашёл» с их датой
+// сверка старых карт (до журнала) — разовая, уже сделана; из коллекции не вызываем: читала всю таблицу карт на каждое открытие (2026-11-20)
+export async function cardLedgerSync() {                                          // карты, найденные до журнала, — первая запись «нашёл» с их датой
   for (const [id, user, at] of await q("SELECT c.id, c.user, c.at FROM d_cards c WHERE NOT EXISTS (SELECT 1 FROM d_card_log l WHERE l.card = c.id) ORDER BY c.id"))
     await cardLog(Number(id), "found", null, Number(user), "странная комната подземелья", Number(at));
 }
+// выдать карту: запись, фольга с шансом, первая запись журнала. Категории (его решение 2026-11-20): common (базовая), rare, epic, legend
+export const CARD_FOIL = 0.10;
+export async function giveCard(uid: number, kind: string, info: string) {
+  const [[cid]] = await q("INSERT INTO d_cards (user, kind, at) VALUES (?, ?, ?) RETURNING id", [uid, kind, now()]);
+  const foil = Math.random() < CARD_FOIL; if (foil) await q("INSERT INTO d_card_fx (card, finish) VALUES (?, 'foil')", [Number(cid)]);
+  await cardLog(Number(cid), "found", null, uid, info + (foil ? " · фольга" : ""));
+  return { id: Number(cid), serial: String(cid).padStart(6, "0"), kind, foil };
+}
 export async function cardsOf(uid: number) {
-  await cardLedgerSync();
-  return (await q("SELECT id, kind, at FROM d_cards WHERE user = ? ORDER BY at DESC", [uid])).map(([id, kind, at]) => ({ id: Number(id), serial: String(id).padStart(6, "0"), kind: String(kind), at: Number(at) }));
+  return (await q("SELECT c.id, c.kind, c.at, f.finish FROM d_cards c LEFT JOIN d_card_fx f ON f.card = c.id WHERE c.user = ? ORDER BY c.at DESC", [uid]))
+    .map(([id, kind, at, fin]) => ({ id: Number(id), serial: String(id).padStart(6, "0"), kind: String(kind), at: Number(at), foil: fin === "foil" }));
 }
 export async function cardHistory(u: any, id: number) {
-  await cardLedgerSync();
-  const [c] = await q("SELECT user, kind, at FROM d_cards WHERE id = ?", [id]); if (!c) return { error: "Такой карты нет" };
+  const [c] = await q("SELECT c.user, c.kind, c.at, f.finish FROM d_cards c LEFT JOIN d_card_fx f ON f.card = c.id WHERE c.id = ?", [id]); if (!c) return { error: "Такой карты нет" };
   if (String(c[0]) !== String(u.id)) return { error: "Это не твоя карта" };
   const all = await q("SELECT seq, card, ev, from_user, to_user, at, info, prev, hash FROM d_card_log ORDER BY seq");
   let prev = GENESIS, ok = true;
@@ -2286,7 +2297,7 @@ export async function cardHistory(u: any, id: number) {
   }
   const events = all.filter((r) => Number(r[1]) === id).map(([seq, , ev, from, to, at, info, , h]) => ({ seq: Number(seq), ev: String(ev), at: Number(at), info: String(info),
     mine_from: from != null && String(from) === String(u.id), mine_to: to != null && String(to) === String(u.id), hash: String(h).slice(0, 12) }));
-  return { id, serial: String(id).padStart(6, "0"), kind: String(c[1]), at: Number(c[2]), ok, chain: all.length, events };
+  return { id, serial: String(id).padStart(6, "0"), kind: String(c[1]), at: Number(c[2]), foil: c[3] === "foil", ok, chain: all.length, events };
 }
 export async function dgFinish(u: any, run: string, bones: number, dead = false, left = false) {      // итог похода: погиб — кости 0; закрыл игру посреди похода — итог не пришёл, всё пропало
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };

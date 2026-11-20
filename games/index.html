@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611201603";
+    var BUILD = "202611201646";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -200,6 +200,13 @@
   .vrec canvas { width: 100%; aspect-ratio: 1; }
   .crec canvas { aspect-ratio: 180 / 272; border-radius: 6px; }
   .crec .serial { margin-top: 6px; font: 600 10.5px/1 var(--mono, ui-monospace, monospace); letter-spacing: .08em; color: rgba(246, 239, 227, .55); }
+  .foilwrap { position: relative; display: block; overflow: hidden; border-radius: 8px; }
+  .foilwrap::after { content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: color-dodge; opacity: .55;
+    background: linear-gradient(115deg, transparent 20%, rgba(255,120,200,.55) 35%, rgba(120,220,255,.6) 45%, rgba(255,240,140,.55) 55%, transparent 70%) 0 0 / 300% 100%;
+    animation: foilShine 3.2s linear infinite; }
+  .foilwrap:has(.cardbig) { width: 46%; margin: 4px auto 12px; } .foilwrap .cardbig { width: 100%; margin: 0; }
+  .crec .foilwrap { border-radius: 6px; } .crec .foilwrap canvas { display: block; width: 100%; }
+  @keyframes foilShine { from { background-position: 150% 0; } to { background-position: -150% 0; } }   /* фольга: радужный блик ползёт по карте (2026-11-20) */
   .cardbig { display: block; width: 46%; margin: 4px auto 12px; aspect-ratio: 180 / 272; border-radius: 8px; }
   .cardhist { margin-top: 14px; text-align: left; }
   .cardev { padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, .08); }
@@ -3892,7 +3899,8 @@
     return 450;                                                                             // Огненная ночь: грядки вспыхивают сами (evSpot)
   }
   if (local) window.__monoIntro = function (m) { return monoIntro(m); };                    // проверка у себя: показать вступление события
-  if (local) window.__farmF = function () { return F; };                                      // проверка у себя: состояние фермы (погода и т. п.)
+  if (local) window.__farmF = function () { return F; };   // проверка у себя: состояние фермы (погода и т. п.)
+  if (local) window.__cardFound = function (c, v) { showCardFound(c, v ? function () { showVinyl(v.id, v); } : null); };   // проверка у себя: окно найденной карты
   function sceneShake(ms) { var b = $("scenecv") && $("scenecv").parentNode; if (!b || !b.animate) return;
     b.animate([0, 1, 2, 3, 4, 5, 6].map(function (k) { var a = (6 - k) / 6 * 3; return { transform: "translate(" + (k % 2 ? a : -a) + "px," + (k % 3 - 1) * a * .6 + "px)" }; }), { duration: ms }); }
   function drawEvFx(c, ev, t, kx, ky, dpr, spark) {
@@ -4825,9 +4833,10 @@
         }
         if (inf.s.odd) setTimeout(function () { if (r.seeds) flySeeds(pl.idx, inf.s); setTimeout(function () { floatText(pl.idx, !r.seeds ? "…семени не осталось" : "…осталось странное семя", "big"); }, 450); }, Math.max(0, 1900 - (Date.now() - tH)));
         else if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в инвентарь", "seedf"); }, 450);
-        if (r.vinyl) F.items = null;
+        if (r.vinyl || r.card) F.items = null;
         var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl); };
-        if (r.hybrid) setTimeout(function () { showHybrid(r.hybrid, next); }, 500); else if (r.vinyl) setTimeout(next, 500);
+        var next2 = r.card ? function () { showCardFound(r.card, next); } : next;   // тайная карта при сборе (его решение 2026-11-20)
+        if (r.hybrid) setTimeout(function () { showHybrid(r.hybrid, next2); }, 500); else if (r.vinyl || r.card) setTimeout(next2, 500);
       }).catch(function () {});
     }
     if (F.sel === "fert") {                                                         // удобрение: оставшееся время сразу сокращается (как на сервере)
@@ -6639,7 +6648,21 @@
 
   // карты коллекции: рубашка (его рисунок) в цвете редкости, посередине «?» — рисунки и достоинства пока скрыты
   var CARDBACK = new Image(); CARDBACK.src = "dg/iso/cardback.png";
-  var CARDK = { rare: ["Редкая тайная карта", "rgba(70,130,230,.75)", "#b8d0ec", "#8fb4ff"], legend: ["Легендарная тайная карта", "rgba(230,170,60,.75)", "#ffcf5a", "#ffcf5a"] };
+  // категории (его решение 2026-11-20): базовая, редкая, эпическая, легендарная; фольга — отдельный признак любой карты
+  var CARDK = { common: ["Базовая тайная карта", "rgba(170,175,190,.7)", "#d6dae4", "#c4c9d6"], rare: ["Редкая тайная карта", "rgba(70,130,230,.75)", "#b8d0ec", "#8fb4ff"],
+                epic: ["Эпическая тайная карта", "rgba(160,90,230,.75)", "#d9b8ff", "#c79bff"], legend: ["Легендарная тайная карта", "rgba(230,170,60,.75)", "#ffcf5a", "#ffcf5a"] };
+  var CARDRANK = { legend: 4, epic: 3, rare: 2, common: 1 };
+  function cardWrap(cv, foil) { if (!foil) return cv; var w = el("span", "foilwrap"); w.appendChild(cv); return w; }   // фольга — переливающийся блик поверх
+  function showCardFound(c, then) {
+    var K = CARDK[c.kind] || CARDK.common;
+    sheet(function (sh, close) {
+      var n = el("div", "mono", "Тайная карта!"); n.style.color = K[3]; sh.appendChild(n);
+      var cv = el("canvas", "cardbig"); cardThumb(cv, c.kind); sh.appendChild(cardWrap(cv, c.foil));
+      sh.appendChild(el("h3", "", K[0] + (c.foil ? " · фольга" : "")));
+      sh.appendChild(el("div", "sub", "№ " + (c.serial || String(c.id).padStart(6, "0")) + ". Добавлена в твою коллекцию."));
+      sh.appendChild(btn("Здорово", "", function () { close(); if (then) setTimeout(then, 250); }));
+    });
+  }
   function cardThumb(cv, kind) {
     var K = CARDK[kind] || CARDK.rare, w = 180, h = 272, g = cv.getContext("2d"); cv.width = w; cv.height = h;
     var draw = function () { g.clearRect(0, 0, w, h); g.drawImage(CARDBACK, 0, 0, w, h); g.globalCompositeOperation = "color"; g.fillStyle = K[1]; g.fillRect(0, 0, w, h);
@@ -6649,15 +6672,15 @@
     if (CARDBACK.complete && CARDBACK.naturalWidth) draw(); else CARDBACK.addEventListener("load", draw, { once: true });
   }
   function renderCards(box) {
-    var cs = (F.cards || []).slice().sort(function (a, b) { return (b.kind === "legend") - (a.kind === "legend") || b.at - a.at; });
+    var cs = (F.cards || []).slice().sort(function (a, b) { return (CARDRANK[b.kind] || 0) - (CARDRANK[a.kind] || 0) || (b.foil ? 1 : 0) - (a.foil ? 1 : 0) || b.at - a.at; });
     if (!cs.length) { $("collsub").textContent = ""; var e = el("div", "coll-empty"); e.appendChild(el("b", "", "Карт пока нет"));
-      e.appendChild(el("p", "", "Карты выпадают в подземелье, в странной комнате.")); box.appendChild(e); return; }
+      e.appendChild(el("p", "", "Карты иногда выпадают при сборе урожая.")); box.appendChild(e); return; }
     $("collsub").textContent = "";                                              // пояснение над картами убрано (его правка 2026-11-20)
-    var h = el("div", "mono", "Подземелье · карты · " + cs.length); h.style.marginTop = "18px"; box.appendChild(h);
+    var h = el("div", "mono", "Тайные карты · " + cs.length); h.style.marginTop = "18px"; box.appendChild(h);   // без «подземелья» — не выдаём скрытое (2026-11-20)
     var g = el("div", "vgrid cgrid");
-    cs.forEach(function (c) { var K = CARDK[c.kind] || CARDK.rare, b = el("button", "vrec crec"); b.type = "button"; var cv = el("canvas"); cardThumb(cv, c.kind); b.appendChild(cv);
+    cs.forEach(function (c) { var K = CARDK[c.kind] || CARDK.rare, b = el("button", "vrec crec"); b.type = "button"; var cv = el("canvas"); cardThumb(cv, c.kind); b.appendChild(cardWrap(cv, c.foil));
       b.appendChild(el("span", "serial", "№ " + (c.serial || String(c.id).padStart(6, "0"))));
-      b.appendChild(el("span", "", K[0])); var tl = el("span", "tier", "откроется позже"); tl.style.color = K[3]; b.appendChild(tl);
+      b.appendChild(el("span", "", K[0])); var tl = el("span", "tier", c.foil ? "фольга · откроется позже" : "откроется позже"); tl.style.color = K[3]; b.appendChild(tl);
       b.onclick = function () { haptic("light"); cardSheet(c); }; g.appendChild(b); });
     box.appendChild(g);
   }
@@ -6668,8 +6691,8 @@
   function cardSheet(c) {
     var K = CARDK[c.kind] || CARDK.rare, serial = c.serial || String(c.id).padStart(6, "0");
     sheet(function (sh, close) {
-      var cv = el("canvas", "cardbig"); cardThumb(cv, c.kind); sh.appendChild(cv);
-      sh.appendChild(el("h3", "", K[0]));
+      var cv = el("canvas", "cardbig"); cardThumb(cv, c.kind); sh.appendChild(cardWrap(cv, c.foil));
+      sh.appendChild(el("h3", "", K[0] + (c.foil ? " · фольга" : "")));
       sh.appendChild(el("div", "sub", "Тайная карта № " + serial + ". Рисунок и свойства откроются позже."));
       var hist = el("div", "cardhist"); hist.appendChild(el("div", "sub", "Загружаю историю…")); sh.appendChild(hist);
       call("/api/cards/history", { id: c.id }).then(function (r) {

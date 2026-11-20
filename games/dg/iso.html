@@ -454,7 +454,7 @@
     var hl = cur.heal;
     if (hl && !hl.used) { var onIt = hero.st !== "dead" && hero.hp < 100 && Math.hypot(hl.u - hero.u, hl.v - hero.v) < .6;
       if (!onIt || hero.st === "hurt") hl.t = 0; else { hl.t += dt; if (hl.t >= 3) { hl.used = true; hl.t = 0; hero.hp = 100; hud(); fx.push({ k: "heal", u: hl.u, v: hl.v, t: 0 }); drawMap(); } } }
-    var left = rooms.some(function (r2) { return r2.mobs.some(function (m) { return m.hp > 0; }) || r2.drops.length || (r2.altar && !r2.altar.got); });
+    var left = rooms.some(function (r2) { return r2.mobs.some(function (m) { return m.hp > 0; }) || r2.drops.length || (r2.altar && !(r2.altar.got && doorGone && T >= doorGone)); });   // странная комната: карту взял, вышел, дверь догорела
     if (!done && hero.st !== "dead" && !left) finish("Подземелье зачищено", "Добыча: костей " + bones + (lootGot ? " и " + lootLow() : ""));
     // камера держит героя на месте (без догоняния: оно давало ползущий по пикселю мир при остановке)
     var hp2 = P(hero.u, hero.v); camX = hp2[0]; camY = hp2[1];
@@ -481,8 +481,9 @@
       n[i] = .55 * edge + .3 * vn(px2, py2, 9) + .15 * vn(px2, py2, 3); }
     var src = mk(128, 128); src.getContext("2d").putImageData(da, 0, 0);
     return (BURNM[side] = { n: n, src: src, data: src.getContext("2d").getImageData(0, 0, 128, 128) }); }
+  var doorGone = 0;   // когда дверь странной комнаты догорела — только после этого поход завершается (его правка 2026-11-20)
   function burnStart(wl) {
-    wl.burn = T; wl.secret = false; wl.k = "plain"; wl.img = (wl.side === "u" ? "wu_" : "wv_") + "plain1";   // проход закрыт сразу — под дверью простая стена
+    wl.burn = T; doorGone = T + BURN_T * 1.15 + .5; wl.secret = false; wl.k = "plain"; wl.img = (wl.side === "u" ? "wu_" : "wv_") + "plain1";   // проход закрыт сразу — под дверью простая стена
     if (wl.side === "u") cur.mu = false; else cur.mv = false; drawMap();
   }
   function burnDoor(wl) {

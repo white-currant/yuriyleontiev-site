@@ -126,5 +126,7 @@ CREATE INDEX IF NOT EXISTS d_cards_u ON d_cards (user);
 -- записи только добавляются; в каждой — отпечаток предыдущей (prev) и свой (hash = SHA-256), подделка истории рвёт цепочку
 CREATE TABLE IF NOT EXISTS d_card_log (seq INTEGER PRIMARY KEY AUTOINCREMENT, card INTEGER NOT NULL, ev TEXT NOT NULL, from_user INTEGER, to_user INTEGER, at INTEGER NOT NULL, info TEXT NOT NULL DEFAULT '', prev TEXT NOT NULL, hash TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS d_card_log_c ON d_card_log (card);
+-- фольга карты (его решение 2026-11-20): строка есть — карта фольговая
+CREATE TABLE IF NOT EXISTS d_card_fx (card INTEGER PRIMARY KEY, finish TEXT NOT NULL);
 -- удобрение на грядке (2026-11-19): сколько пакетиков на этой посадке и сколько секунд роста они дали (по ним урезаются очки за сбор)
 CREATE TABLE IF NOT EXISTS f_fert (user INTEGER NOT NULL, idx INTEGER NOT NULL, planted INTEGER NOT NULL, n INTEGER NOT NULL, credit INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, idx));
