@@ -70,9 +70,10 @@
     "wv_plain1", "wv_plain2", "wv_plain3", "wv_pil1", "wv_pil2", "wv_pil3", "wv_end", "wv_gate", "wv_door", "wv_arch", "wv_archin", "wv_torch1", "wv_torch2", "wv_torch3", "w_corner", "brazier_f0", "brazier_f1", "brazier_f2", "brazier_f3", "brazier_f4", "brazier_f5", "brazier_f6", "brazier_f7", "brazier_f8",
     "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag", "booster", "cardback", "bookicon", "sdoor_u", "sdoor_v"];   // бустер и рубашка — его рисунки (2026-11-19)
   NAMES.slice().forEach(function (n) { if (/^w[uv]_/.test(n) && !/in$/.test(n)) NAMES.push(n + "_x", n + "_t", n + "_xt"); });   // _t — с цоколем под колонной ближнего конца (за ним нет пола)   // *_x — дальний конец одиночной стены с косым срезом плиты (его правка 2026-11-19)
-  var wait = NAMES.length + 2;
+  var wait = NAMES.length + 3;
   NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=25"; IMG[n] = im; });
   var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png?v=2";
+  var STARBG = new Image(); STARBG.onload = function () { if (!--wait) start(); }; STARBG.src = "starfield.png?v=1";
   // странная комната — из его пяти листов (2026-11-19, исходники «Подземелье — прототип/исходники/странная_комната»): iso/sr.json — что есть по видам
   // (алтари, углы, плиты стен, пол, убранство); каждый поход комната собирается заново из этого набора
   var SR = null;
@@ -1003,7 +1004,7 @@
   var T = 0;
   function draw(ts) {
     var t = ts / 1000, i, j; T = t; camSet();
-    ctx.setTransform(Z, 0, 0, Z, 0, 0); ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#0b0912"; ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(Z, 0, 0, Z, 0, 0); ctx.globalCompositeOperation = "source-over"; ctx.drawImage(STARBG, 0, 0, W, H);
     ctx.setTransform(Z, 0, 0, Z, -camFX * Z, -camFY * Z);
     // пол комнаты — готовая картинка (рисуется один раз на комнату): плитки и плоский узор не «плывут» друг относительно друга, а кадр дешевле
     if (!cur.floorC) {
