@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611202348";
+    var BUILD = "202611230255";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -514,6 +514,9 @@
   .slot.empty { background: rgba(0, 0, 0, .1); }
   .invgrid .slot.empty { background: rgba(255, 255, 255, .03); }
   .slot .n { position: absolute; right: 6px; bottom: 3px; font-size: 11.5px; font-weight: 750; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+  .seed-new { position: absolute; z-index: 3; top: 4px; left: 4px; width: 11px; height: 20px; pointer-events: none;
+    background: linear-gradient(90deg, #ff4942 0 2px, #e92521 2px 9px, #af1b19 9px);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%); }
   .slot.more { font-size: 13px; font-weight: 700; color: rgba(255, 255, 255, .85); }
   .selnote { margin-top: 8px; min-height: 2.8em; font-size: 12.5px; line-height: 1.4; color: rgba(255, 255, 255, .82); }
   .sheet .selnote { color: var(--dim); }
@@ -589,6 +592,8 @@
   body[data-screen^="farm"] .sheet > .favstar { position: absolute; top: 10px; left: 10px; z-index: 3; }
   .slot .fav { position: absolute; left: 4px; top: 1px; font: 700 13px/1 var(--sans); color: #ffd166; text-shadow: 0 1px 0 #1c120b, 0 0 4px rgba(0, 0, 0, .7); pointer-events: none; }
   .slot .fav ~ .vars { left: 18px; }
+  .invgrid .slot:has(.seed-new) .fav { left: auto; right: 3px; top: 16px; }
+  .invgrid .slot:has(.seed-new) .vars { left: auto; right: 2px; top: 4px; font-size: 8px; line-height: 1; letter-spacing: 0; white-space: nowrap; }
   /* переключатель «одна / несколько ячеек» в амбаре: один кружок / три кружка (его просьба 2026-11-17) */
   .selmode { display: flex; justify-content: flex-end; gap: 8px; margin: 4px 3px -4px; }
   .selmode button { display: flex; align-items: center; justify-content: center; gap: 3px; width: 46px; height: 30px; padding: 0; border: 0; cursor: pointer;
@@ -5205,7 +5210,7 @@
   function varIds(name) { var s = F.state; return s.inv.filter(function (it) { return it.count > 0 && s.strains[it.strain] && s.strains[it.strain].name === name; }).map(function (it) { return it.strain; }).sort(); }
   function varLabel(id) { var st = F.state.strains[id]; if (!st) return ""; var ids = varIds(st.name), i = ids.indexOf(id); return ids.length > 1 && i >= 0 ? ROMAN[i] || String(i + 1) : ""; }
   // таблица сравнения вариантов одного названия: лучшее в столбце подсвечено, худшее приглушено; cnt(id) — число в последнем столбце
-  function variantTable(ids, selId, onPick, cnt, onAgain) {   // onAgain — тап по уже выбранной строке
+  function variantTable(ids, selId, onPick, cnt, onAgain, showSeedDrops) {   // onAgain — тап по уже выбранной строке
     var s = F.state, cols = [["minutes", -1, function (v) { return fmtLeft(v * 60); }], ["dust", 1, function (v) { return v; }],
                 ["thirst", 1, function (v) { return fmtLeft(v * 60); }], ["vinyl", 1, function (v) { return Math.round(v * 100) + "%"; }]];
     var t = el("div", "vtable"), hd = el("div", "vrow head");
@@ -5219,6 +5224,7 @@
         r.appendChild(el("span", "vc" + cls, c[2](v)));
       });
       r.appendChild(el("span", "cnt", "×" + cnt(id)));
+      if (showSeedDrops && freeOf(bagOf(id)) > 0) seedNewBadge(r, seedDropUntil(id));
       var ls = (bagOf(id) || { listed: 0 }).listed; if (ls > 0) { r.classList.add("sold"); r.appendChild(el("span", "vsale", "в продаже " + ls)); }
       r.onclick = function () {
         if (!onPick) return; haptic("light");
@@ -5758,7 +5764,7 @@
         box.appendChild(el("h3", "", name));
         box.appendChild(el("div", "sub", g.ids.length > 1 ? "Сортов: " + g.ids.length + ", семян всего " + g.total + ". У гибридов одного названия свойства немного разные — сравни и оставь лучшие." : "Семян: " + g.total + "."));
         box.appendChild(variantTable(g.ids, F.vsel, function (id) { F.vsel = id; confirmAll = false; draw(true); },   // выбор — сразу, на месте: без перестройки таблицы
-          function (id) { return freeOf(bagOf(id)); }, function (id) { more(F.state.strains[id]); }));   // второй тап по выбранному — «Подробнее» (его просьба 2026-11-18)
+          function (id) { return freeOf(bagOf(id)); }, function (id) { more(F.state.strains[id]); }, true));   // второй тап по выбранному — «Подробнее» (его просьба 2026-11-18)
         var bon = s.strains[g.ids[0]].bonus; if (bon) box.appendChild(el("div", "sub bonus", "★ " + ((s.bonuses || {})[bon] || "")));
         }
         // действия с выбранным
@@ -5798,6 +5804,33 @@
       draw();
     });
   }
+  function seedDropUntil(id) {
+    return F.state.seed_drops && F.state.seed_drops[id] || 0;
+  }
+  var seedBadgeTimer;
+  function expireSeedBadges() {
+    clearTimeout(seedBadgeTimer);
+    var now = farmNow(), next = Infinity;
+    document.querySelectorAll(".seed-new[data-until]").forEach(function (badge) {
+      var until = Number(badge.dataset.until);
+      if (until <= now) {
+        badge.parentElement.removeAttribute("aria-description");
+        badge.remove();
+      }
+      else next = Math.min(next, until);
+    });
+    if (next < Infinity) seedBadgeTimer = setTimeout(expireSeedBadges, Math.ceil((next - now) * 1000));
+  }
+  function seedNewBadge(slot, until) {
+    if (until <= farmNow()) return;
+    var badge = el("span", "seed-new");
+    badge.dataset.until = until;
+    badge.setAttribute("aria-hidden", "true");
+    slot.setAttribute("aria-description", "Новый гибрид");
+    slot.appendChild(badge);
+    clearTimeout(seedBadgeTimer);
+    seedBadgeTimer = setTimeout(expireSeedBadges, 0);
+  }
   function invSheet() {
     var s = F.state; if (!s) return;
     sheet(function (sh, close) {
@@ -5812,7 +5845,12 @@
         var cells = 0;
         seeds.forEach(function (g) {
           var n = g.key === "anomaly" ? Math.max(1, g.total) : 1;                // странное — каждое семя в своей ячейке
-          for (var j = 0; j < n; j++) { grid.appendChild(makeSlot(g.key, draw)); cells++; }
+          var latest = g.ids.reduce(function (last, id) { return Math.max(last, seedDropUntil(id)); }, 0);
+          for (var j = 0; j < n; j++) {
+            var slot = makeSlot(g.key, draw);
+            seedNewBadge(slot, latest);
+            grid.appendChild(slot); cells++;
+          }
           if (g.key === "anomaly" && !favOnly) for (j = 0; j < (s.shells || 0); j++) { grid.appendChild(shellSlot(draw)); cells++; }   // скорлупа — рядом, на месте пропавших
         });
         if (!favOnly && !seeds.some(function (g) { return g.key === "anomaly"; })) for (var j2 = 0; j2 < (s.shells || 0); j2++) { grid.appendChild(shellSlot(draw)); cells++; }

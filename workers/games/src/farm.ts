@@ -92,6 +92,13 @@ async function oddHeld(uid: number) {
 async function oddFresh(uid: number) { await q("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'odd:fresh', ?)", [uid, now()]); }   // купил или нашёл — «свежее» семя
 const POINTS_PLANT = 1, POINTS_WATER = 1;    // очки в звание за посадку и за полив сухой грядки (награда за саму игру, решение 2026-11-13)
 const SEEDS_MIN = 2, SEEDS_EXTRA = 0.35;     // семян с урожая: 2, с шансом 35% — 3
+const SEED_DROP_SECONDS = 5 * 60, SEED_DROP_KEY = "seed:hybrid:";
+const SEED_DROP_READ = "SELECT kind, at FROM f_evlog WHERE user = ? AND kind >= 'seed:hybrid:' AND kind < 'seed:hybrid;' AND at > ?";
+function clearDropBeforePurchase(uid: number, strain: string) {
+  return DB.prepare(`DELETE FROM f_evlog WHERE user = ? AND kind = ?
+                     AND NOT EXISTS (SELECT 1 FROM f_inv WHERE user = ? AND strain = ? AND count > 0)`)
+    .bind(uid, SEED_DROP_KEY + strain, uid, strain);
+}
 const CROSS_CHANCE = 0.4;                    // шанс семени-гибрида, если рядом созрел другой сорт
 const ODD_CROSS = 0.25;                      // со странным растением или «странным» гибридом — вчетверо реже
 const ODD_PASS = 0.25;                       // «странный» гибрид передаёт странность потомку в четверти случаев
@@ -701,6 +708,7 @@ function farmReads(uid: number, t: number): [string, any[]][] {
     ["SELECT dust, unlocked, pub, water FROM f_farms WHERE user = ?", [uid]],
     ["SELECT item, tier, finish, count FROM g_items WHERE user = ? AND game = 'farm' AND kind = 'vinyl'", [uid]],
     ["SELECT strain, count, listed FROM f_inv WHERE user = ? AND count > 0", [uid]],
+    [SEED_DROP_READ, [uid, t - SEED_DROP_SECONDS]],
     ["SELECT from_name, dust FROM f_gifts WHERE to_user = ? AND opened = 0 ORDER BY id LIMIT 20", [uid]],
     ["SELECT buyer_name, strain, price FROM f_sales WHERE seller = ? AND seen = 0 ORDER BY id LIMIT 20", [uid]],
     ["SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [uid]],
@@ -735,9 +743,9 @@ export async function farmState(u: any) {
   try { pre = await prefetch([["INSERT OR IGNORE INTO f_farms (user, pub, created, unlocked) VALUES (?, ?, ?, 3) RETURNING 1", [u.id, pub0, t0]], ...farmReads(u.id, t0)]); }
   catch (e) { console.error("prefetch", e); preClear(); await ensureFarm(u); }      // пакет не прошёл — грузим по-старому, по одному запросу
   if (pre && pre[0].length) await DB.batch(STARTER.map(([k, n]) => DB.prepare("INSERT OR IGNORE INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)").bind(u.id, k, n)));
-  try { return await farmState1(u); } finally { preClear(); }
+  try { return await farmState1(u, t0); } finally { preClear(); }
 }
-async function farmState1(u: any) {
+async function farmState1(u: any, t: number) {
   await normFlour(u.id);
   await mythTick(u.id); await mossEnd(u.id);
   const EVS = await plotEvents(u.id), HON = await honeyTick(u.id, EVS);
@@ -749,6 +757,10 @@ async function farmState1(u: any) {
     .map((v) => ({ id: v[0], tier: v[1], finish: v[2], count: Number(v[3]) }));
   const inv = (await q("SELECT strain, count, listed FROM f_inv WHERE user = ? AND count > 0", [u.id]))
     .map(([strain, count, listed]) => ({ strain, count: Number(count), listed: Number(listed) }));
+  const recentDrops = new Map<string, number>((await q(SEED_DROP_READ, [u.id, t - SEED_DROP_SECONDS]))
+    .map(([kind, at]) => [String(kind).slice(SEED_DROP_KEY.length), Number(at) + SEED_DROP_SECONDS]));
+  const seedDrops = Object.fromEntries(inv.filter((it) => it.count > it.listed && recentDrops.has(it.strain))
+    .map((it) => [it.strain, recentDrops.get(it.strain)]));
   const gifts = await q("SELECT from_name, dust FROM f_gifts WHERE to_user = ? AND opened = 0 ORDER BY id LIMIT 20", [u.id]);
   const sales = await q("SELECT buyer_name, strain, price FROM f_sales WHERE seller = ? AND seen = 0 ORDER BY id LIMIT 20", [u.id]);
   const barn = (await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])).map(([strain, count]) => ({ strain, count: Number(count) }));
@@ -772,7 +784,7 @@ async function farmState1(u: any) {
     ...kit, ...(await decorView(u.id)), recipes: RECIPES, satmap: satMap(), products: (await productsFor([...bs, ...kit.jobs.map((j: any) => "p:" + j.recipe)])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await metWanderer(u.id, await wandererView(u.id)), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
     slimes: !dgOpen() && (await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = 'promo:slimes'", [u.id])).length > 0,   // только до открытия подземелья (его решение: после 00:00 не запускать)   // нашествие слизней (промо подземелья, 2026-11-20)
-    vinyls, inv, barn, stall, chest, hive, shells: Number((await q("SELECT count FROM f_shell WHERE user = ?", [u.id]))[0]?.[0] || 0), shell_dust: SHELL_DUST, wet: await wetOf(u.id), seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
+    vinyls, inv, seed_drops: seedDrops, barn, stall, chest, hive, shells: Number((await q("SELECT count FROM f_shell WHERE user = ?", [u.id]))[0]?.[0] || 0), shell_dust: SHELL_DUST, wet: await wetOf(u.id), seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })), ...(await monoView(u.id)), feed_top: await feedTop(u.id),
     orders: await ordersOf(u.id, kit.builds),
   };
@@ -1056,9 +1068,16 @@ export async function harvest(u: any, idx: number) {
     const pool = gcross ? (near.filter((x) => !ss[x[1]].odd).length ? near.filter((x) => !ss[x[1]].odd) : nearAny) : near, base = Object.values(CROPS).filter((c) => !c.hidden && c.id !== s.id);
     const other = pick0 || (pool.length ? ss[pool[Math.floor(Math.random() * pool.length)][1]] : view(base[Math.floor(Math.random() * base.length)]));
     const h = await breed(s, other, gcross ? 3 : 1);
-    const [[had]] = await q("SELECT COUNT(*) FROM f_inv WHERE user = ? AND strain = ?", [u.id, h.id]);
-    await q(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1`, [u.id, h.id]);
-    hybrid = { ...h, parents: [s.name, other.name], fresh: !Number(had) };
+    // Строка сорта в f_inv остаётся после расхода всех семян. Проверка и выдача идут одним пакетом.
+    const foundAt = now();
+    const [discovery] = await DB.batch([
+      DB.prepare(`INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ?
+                  WHERE NOT EXISTS (SELECT 1 FROM f_inv WHERE user = ? AND strain = ?) RETURNING 1`)
+        .bind(u.id, SEED_DROP_KEY + h.id, foundAt, u.id, h.id),
+      DB.prepare("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1").bind(u.id, h.id),
+      DB.prepare("DELETE FROM f_evlog WHERE user = ? AND kind >= 'seed:hybrid:' AND kind < 'seed:hybrid;' AND at <= ?").bind(u.id, foundAt - SEED_DROP_SECONDS),
+    ]);
+    hybrid = { ...h, parents: [s.name, other.name], fresh: (discovery.results || []).length > 0 };
   }
   const luck = (s.bonus === "lucky" ? 2 : 1) * (weatherOn(t) === "fullmoon" ? 2 : 1);
   const vinyl = await dropVinyl(u.id, s.vinyl * luck);
@@ -1886,6 +1905,7 @@ export async function buy(u: any, pub: string, strain: string, myName: string, k
   const evicted = full && (await oddEvict(u.id));                          // третье — сначала пропадает одно старое, потом приходит новое
   await DB.batch([
     DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(price, f[0]),
+    clearDropBeforePurchase(u.id, strain),
     DB.prepare(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1`).bind(u.id, strain),
     DB.prepare("INSERT INTO f_sales (seller, buyer_name, strain, price, at) VALUES (?, ?, ?, ?, ?)").bind(f[0], myName, strain, price, now()),
   ]);
