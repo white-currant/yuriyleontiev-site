@@ -78,7 +78,7 @@
   NAMES.slice().forEach(function (n) { if (/^w[uv]_/.test(n) && !/in$/.test(n)) NAMES.push(n + "_x", n + "_t", n + "_xt"); });   // _t — с цоколем под колонной ближнего конца (за ним нет пола)   // *_x — дальний конец одиночной стены с косым срезом плиты (его правка 2026-11-19)
   var wait = NAMES.length + 3;
   NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=25"; IMG[n] = im; });
-  var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png?v=5";
+  var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png?v=908b9a1fb19f";
   var STARBG = new Image(); STARBG.onload = function () { if (!--wait) start(); }; STARBG.src = "starfield.png?v=1";
   // странная комната — из его пяти листов (2026-11-19, исходники «Подземелье — прототип/исходники/странная_комната»): iso/sr.json — что есть по видам
   // (алтари, углы, плиты стен, пол, убранство); каждый поход комната собирается заново из этого набора
@@ -356,7 +356,7 @@
   // в кэш браузера (GitHub разрешает хранить 10 минут) под одним адресом — переход берёт его оттуда. Нажатие сразу показывает «Возвращаемся…»
   var HUB = "hub.html?v=" + (((location.search.match(/[?&]v=(\d+)/) || [])[1]) || Date.now()), hubP = null;
   function hubReady() { if (!hubP) hubP = fetch(HUB).then(function (r) { if (!r.ok) throw 0; return r.blob(); }).catch(function (e) { hubP = null; throw e; }); return hubP; }
-  function hubPrefetch() { hubReady().catch(function () {}); ["hub-bg.webp", "hero.png?v=5"].forEach(function (f) { var im = new Image(); im.src = f; }); }
+  function hubPrefetch() { hubReady().catch(function () {}); ["hub-bg.webp", "hero.png?v=908b9a1fb19f"].forEach(function (f) { var im = new Image(); im.src = f; }); }
   function home() {
     var b = document.getElementById("leave"), hb = document.getElementById("home"), ov = document.getElementById("over");
     if (b.disabled && hb.disabled) return; b.disabled = hb.disabled = true;
