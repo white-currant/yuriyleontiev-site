@@ -27,9 +27,9 @@
   /* выход из подземелья (его правило 2026-11-17: найденное сохраняется, только если выйти вовремя или перебить всех) */
   #leave { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--u) * 10 + env(safe-area-inset-top)); height: calc(var(--u) * 20); padding: 0 calc(var(--u) * 10);
     font: inherit; font-size: calc(var(--u) * 11); font-weight: 800; color: #efe6d2; border: 0; cursor: pointer; }
-  #dodge { position: absolute; right: calc(var(--u) * 37); bottom: calc(var(--u) * 141);
-    width: calc(var(--u) * 66); aspect-ratio: 1; border: calc(var(--u) * 2.5) solid #b7a9c9;
-    border-radius: 50%; background: rgba(54,42,75,.8); color: #f1e7ff; font-family: inherit; font-size: calc(var(--u) * 13); font-weight: 700; line-height: 1; padding: 0; cursor: pointer; touch-action: none; }
+  #dodge { position: absolute; right: calc(var(--u) * 80); bottom: calc(var(--u) * 126);
+    width: calc(var(--u) * 54); aspect-ratio: 1; border: calc(var(--u) * 2.5) solid #b7a9c9;
+    border-radius: 50%; background: rgba(54,42,75,.8); color: #f1e7ff; font-family: inherit; font-size: calc(var(--u) * 12); font-weight: 700; line-height: 1; padding: 0; cursor: pointer; touch-action: none; }
   #dodge[aria-disabled="true"] { opacity: .5; }
   #dodge:active { background: #655083; }
   #over button + button { margin-left: calc(var(--u) * 8); }
@@ -111,6 +111,10 @@
   // плюющийся слизень (его идея 2026-11-20): кислотно-зелёный, держится поодаль и стреляет слизью; в первых комнатах его нет, в зале — один-два
   var SLG = { k: "#12240c", a: "#5a9a1e", A: "#9ad63a", h: "#eaffb0", d: "#34641a", e: "#0b0a10" };
   var slimeG = SLROWS.map(function (rows) { var c = mk(20, 13); sprite(c.getContext("2d"), 0, 0, rows, SLG); return c; });
+  var SLP = { k: "#36142e", a: "#c3478c", A: "#f582b9", h: "#ffe2f2", d: "#963767", e: "#2e1325" };
+  var slimeP = SLROWS.map(function (rows) { var c = mk(20, 13); sprite(c.getContext("2d"), 0, 0, rows, SLP); return c; });
+  var PINK_FUSE = 1.1, PINK_RADIUS = 1, PINK_DAMAGE = 20, PINK_FX_TIME = .42, PINK_MARK_TIME = 3;
+  var combatTime = 0, primedSlimes = [];
   var slimeHit = slimeF.map(function (src) { var c = mk(20, 13), g = c.getContext("2d"); g.drawImage(src, 0, 0); g.globalCompositeOperation = "source-atop"; g.fillStyle = "#ffffff"; g.fillRect(0, 0, 20, 13); return c; });
   var BONE = ["........kk..", ".......kWWk.", "......kWWWWk", ".....kWWkWwk", "....kWWk.kk.", "...kWWk.....", ".kkWWk......", "kWWkwk......", "kWWWwk......", ".kWwk.......", "..kk........"], BP = { k: "#3c362d", W: "#efe8d6", w: "#b9b09a" };
   var boneC = mk(12, 11); sprite(boneC.getContext("2d"), 0, 0, BONE, BP); sprite(document.getElementById("boneic").getContext("2d"), 0, 0, BONE, BP);
@@ -275,7 +279,9 @@
       for (tt = 0; tt < nm && free.length; tt++) { var f2 = free.splice(Math.floor(rr() * free.length), 1)[0]; rm.mobs.push({ u: f2[0] + .5, v: f2[1] + .5, hp: 3, t: rr() * 10, hit: 0, vu: 0, vv: 0, wu: 0, wv: 0, wt: 0 }); }
       var nsp = rm.depth >= 4 ? 2 : rm.depth >= 2 ? 1 : 0;                        // стрелки: с третьей комнаты от входа — один, с пятой — два
       for (tt = 0; tt < nsp && tt < rm.mobs.length; tt++) { var sp = rm.mobs[rm.mobs.length - 1 - tt]; sp.spit = true; sp.hp = 2; sp.cd = 2.5 + rr() * 2; sp.aim = 0; sp.jcd = 0; }   // два удара (его правка 2026-11-20); первый плевок не сразу
-      rm.shots = [];
+      var pink = rm.mobs.find(function (m) { return !m.spit; });
+      if (pink) { pink.pink = true; pink.maxHp = pink.hp = rm.depth < 3 ? 1 : 2; }
+      rm.shots = []; rm.slimeMarks = [];
       rm.drops = []; rm.seen = k === 0;
       // тайный зал — пустой и чистый: без слизней, предметов, люков и плиток с предметами
       if (rm.secret) { rm.mobs = []; rm.props = []; for (j = 0; j < rm.h; j++) for (i = 0; i < rm.w; i++) if (rm.floor[j][i] >= 5) rm.floor[j][i] = 0; rm.altar = { u: 3, v: 3, struck: false, hitT: 0, loot: null, lootT: 0, got: false };   // его алтарь — на четырёх средних клетках (2026-11-19)
@@ -321,6 +327,7 @@
     hero = { u: cur.ci + .5, v: cur.cj + .5, dir: "front", flip: 1, st: "idle", t: 0, hp: 100, inv: 0, hitDone: false, revive: REVIVE, revmax: REVIVE };
     hero.dodgeReady = 0;
     wantHit = wantDodge = false;
+    combatTime = 0; primedSlimes = [];
     fx = []; bones = 0; done = false; trans = null; lootGot = null; lootEx = null; leftEarly = false; banner = 0; var p0 = P(hero.u, hero.v); camX = p0[0]; camY = p0[1];
     document.getElementById("over").classList.remove("on"); hud(); drawMap();
   }
@@ -337,11 +344,12 @@
     document.getElementById("bonen").textContent = bones;
   }
   var mapC = document.getElementById("map"), mg = mapC.getContext("2d");
+  function hasSlimes(r) { return r.mobs.some(function (m) { return m.hp > 0 || m.fuseAt > 0; }); }
   function drawMap() {
     var xs = rooms.map(function (r2) { return r2.gx; }), ys = rooms.map(function (r2) { return r2.gy; }), mnx = Math.min.apply(0, xs), mny = Math.min.apply(0, ys);
     mg.clearRect(0, 0, 40, 40);
     rooms.forEach(function (r2) { if (!r2.seen) return; var x = 2 + (r2.gx - mnx) * 8, y = 2 + (r2.gy - mny) * 8;
-      var clear = !r2.mobs.some(function (m) { return m.hp > 0; }) && !r2.drops.length;
+      var clear = !hasSlimes(r2) && !r2.drops.length;
       mg.fillStyle = r2 === cur ? "#ffc469" : r2.secret ? "#e0505c" : clear ? "#6f6a86" : "#b7b0d6"; mg.fillRect(x, y, 6, 6);
       if (r2.heal && !r2.heal.used) { mg.fillStyle = "#5ee0a0"; mg.fillRect(x + 2, y + 2, 2, 2); }
       mg.fillStyle = "#4b4560"; if (r2.pu) mg.fillRect(x + 6, y + 2, 2, 2); if (r2.pv) mg.fillRect(x + 2, y + 6, 2, 2);
@@ -450,7 +458,7 @@
     if (from && from.secret && from.altar && from.altar.got) cur.walls.forEach(function (wl) { if (wl.secret) burnStart(wl); });   // карту забрал и вышел — дверь сгорает (2026-11-20)
     if (tr.du === 1) { hero.u = .5; hero.v = cur.door.mu + .5; } else if (tr.du === -1) { hero.u = cur.w - .5; hero.v = cur.door.pu + .5; }
     if (tr.dv === 1) { hero.v = .5; hero.u = cur.door.mv + .5; } else if (tr.dv === -1) { hero.v = cur.h - .5; hero.u = cur.door.pv + .5; }
-    cur.mobs.forEach(function (m) { if (Math.hypot(m.u - hero.u, m.v - hero.v) < 1.5) { m.u = cur.ci + .5; m.v = cur.cj + .5; } });
+    cur.mobs.forEach(function (m) { if (m.hp > 0 && Math.hypot(m.u - hero.u, m.v - hero.v) < 1.5) { m.u = cur.ci + .5; m.v = cur.cj + .5; } });
     var p1 = P(hero.u, hero.v); camX = p1[0]; camY = p1[1]; drawMap();
   }
 
@@ -484,7 +492,11 @@
     var steps = Math.ceil(Math.max(Math.abs(du), Math.abs(dv)) / .06);
     for (var n = 0; n < steps; n++) {
       var u = hero.u + du / steps, v = hero.v + dv / steps;
-      if (blocked(u, v)) { hero.dodgeU = hero.dodgeV = 0; break; }
+      if (blocked(u, v)) {
+        hero.dodgeU = hero.dodgeV = 0;
+        hero.st = "idle"; hero.t = 0;
+        return;
+      }
       hero.u = u; hero.v = v;
       if (u < -.25 || u > cur.w + .25 || v < -.25 || v > cur.h + .25) {
         hero.dodgeU = hero.dodgeV = 0;
@@ -498,8 +510,36 @@
     return hero.st !== "dead" && hero.inv <= 0 &&
       !(hero.st === "dodge" && hero.t >= .06 && hero.t < .28);
   }
+  function dropSlimeBones(r, m) {
+    var count = r.depth <= 1 ? 1 : r.depth <= 3 ? 2 : 3;
+    for (var i = 0; i < count; i++) {
+      var angle = i * 2.1 + m.u * 7, radius = count > 1 ? .22 : 0;
+      var u = m.u + Math.cos(angle) * radius, v = m.v + Math.sin(angle) * radius;
+      if (r !== cur || blocked(u, v)) { u = m.u; v = m.v; }
+      r.drops.push({ u: u, v: v, t: -i * .08 });
+    }
+    drawMap();
+  }
+  function detonateSlimes(hurtHero) {
+    primedSlimes = primedSlimes.filter(function (entry) {
+      var m = entry.mob, r = entry.room;
+      if (combatTime + 1e-9 < m.fuseAt) return true;
+      m.fuseAt = 0;
+      r.slimeMarks = r.slimeMarks.filter(function (mark) { return mark.until > combatTime; });
+      r.slimeMarks.push({ u: m.u, v: m.v, until: combatTime + PINK_MARK_TIME });
+      dropSlimeBones(r, m);
+      if (r === cur) {
+        fx.push({ k: "pinkBlast", u: m.u, v: m.v, room: r, t: 0 });
+        if (hurtHero && canTakeDamage() && Math.hypot(hero.u - m.u, hero.v - m.v) <= PINK_RADIUS) {
+          hurtHero(PINK_DAMAGE, m.u, m.v, .9);
+        }
+      }
+      return false;
+    });
+  }
   function update(dt) {
-    if (trans) { trans.t += dt; if (trans.t >= .16 && !trans.done) { trans.done = true; enter(trans); } if (trans.t >= .32) trans = null; return; }
+    combatTime += dt;
+    if (trans) { trans.t += dt; if (trans.t >= .16 && !trans.done) { trans.done = true; enter(trans); } if (trans.t >= .32) trans = null; detonateSlimes(); return; }
     var mobs = cur.mobs, i;
     if (hero.st !== "dead") {
       var jx = joy.dx + ((keys.ArrowRight || keys.KeyD) ? 1 : 0) - ((keys.ArrowLeft || keys.KeyA) ? 1 : 0), jy = joy.dy + ((keys.ArrowDown || keys.KeyS) ? 1 : 0) - ((keys.ArrowUp || keys.KeyW) ? 1 : 0), jl = Math.hypot(jx, jy);
@@ -513,14 +553,23 @@
         hero.t += dt;
         if (hero.t >= HIT_FRAMES[1] && !hero.hitDone) { hero.hitDone = true; var hs = S(hero.u, hero.v);
           mobs.forEach(function (m) { if (m.hp <= 0) return; var s2 = S(m.u, m.v), dx = (s2[0] - hs[0]) * hero.flip, dy = s2[1] - hs[1];
-            if (dx > -10 && dx < 44 && Math.abs(dy) < 24) { m.hp--; m.hit = .18; var kd = Math.hypot(m.u - hero.u, m.v - hero.v) || 1; m.vu = (m.u - hero.u) / kd * 2; m.vv = (m.v - hero.v) / kd * 2;
+            if (dx > -10 && dx < 44 && Math.abs(dy) < 24) {
+              m.hp--; m.hit = .18;
               fx.push({ k: "spark", u: m.u, v: m.v, t: 0 });
-              if (m.hp <= 0) { fx.push({ k: "poof", u: m.u, v: m.v, t: 0 });
-                var nb = cur.depth <= 1 ? 1 : cur.depth <= 3 ? 2 : 3;                // глубже — больше костей с одного слизня (2026-11-19)
-                for (var b9 = 0; b9 < nb; b9++) { var a9 = b9 * 2.1 + m.u * 7, r9 = nb > 1 ? .22 : 0, du9 = m.u + Math.cos(a9) * r9, dv9 = m.v + Math.sin(a9) * r9;
-                  if (blocked(du9, dv9)) { du9 = m.u; dv9 = m.v; }                       // кость не падает в стену или предмет — иначе её не взять и уровень не кончится (2026-11-20)
-                  cur.drops.push({ u: du9, v: dv9, t: -b9 * .08 }); }
-                drawMap(); } } });
+              if (m.pink && m.hp === 0) {
+                m.hit = 0;
+                m.fuseAt = combatTime + PINK_FUSE;
+                primedSlimes.push({ mob: m, room: cur });
+                return;
+              }
+              var kd = Math.hypot(m.u - hero.u, m.v - hero.v) || 1;
+              m.vu = (m.u - hero.u) / kd * 2; m.vv = (m.v - hero.v) / kd * 2;
+              if (m.hp <= 0) {
+                fx.push({ k: "poof", u: m.u, v: m.v, t: 0 });
+                dropSlimeBones(cur, m);
+              }
+            }
+          });
         }
         if (hero.t > .3) { hero.st = "idle"; hero.t = 0; }
       } else if (hero.st === "hurt") { hero.t += dt; if (hero.t > .28) { hero.st = "idle"; hero.t = 0; } }
@@ -549,6 +598,7 @@
       if (hero.hp <= 0 && hero.revive > 0) { reviveHero(); return; }               // мифическое блюдо: одно возрождение с полным здоровьем (его решение 2026-11-20)
       if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", (lootGot ? "Карта и всё найденное потеряно" : "Всё найденное потеряно") + (RUN ? ", здоровье в убежище −20" : "")); }
     }
+    detonateSlimes(hurt);
     var shots = cur.shots || (cur.shots = []);
     mobs.forEach(function (m) {
       if (m.hp <= 0) return;
@@ -582,14 +632,14 @@
       var md = Math.hypot(d2.u - hero.u, d2.v - hero.v);                         // лёгкое притяжение (его просьба 2026-11-20; радиус уменьшен по его правке 1,5 → 1,1 клетки): кость плавно летит к герою,
       if (hero.st !== "dead" && d2.t > .25 && md < 1.1) { var mk2 = Math.min(1, dt * (1.2 + (1.1 - md) * 5)); d2.u += (hero.u - d2.u) * mk2; d2.v += (hero.v - d2.v) * mk2; }   // чем ближе — тем быстрее; застрявшая в предмете тоже долетит
       if (hero.st !== "dead" && d2.t > .3 && Math.hypot(d2.u - hero.u, d2.v - hero.v) < .3) { bones++; hud(); fx.push({ k: "plus", u: d2.u, v: d2.v, t: 0 }); drawMap(); return false; } return true; });
-    fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : f.k === "heal" ? 1.4 : f.k === "revive" ? 1.6 : .32); });
+    fx = fx.filter(function (f) { f.t += dt; return f.t < (f.k === "plus" ? .8 : f.k === "heal" ? 1.4 : f.k === "revive" ? 1.6 : f.k === "pinkBlast" ? PINK_FX_TIME : .32); });
     var al = cur.altar;                                                                  // алтарь: дрожит от удара, находка поднимается над ним и — в руки
     if (al && al.hitT) al.hitT += dt;
     banner = Math.max(0, banner - dt);
     var hl = cur.heal;
     if (hl && !hl.used) { var onIt = hero.st !== "dead" && hero.hp < 100 && Math.hypot(hl.u - hero.u, hl.v - hero.v) < .6;
       if (!onIt || hero.st === "hurt" || hero.st === "dodge") hl.t = 0; else { hl.t += dt; if (hl.t >= 3) { hl.used = true; hl.t = 0; hero.hp = 100; hud(); fx.push({ k: "heal", u: hl.u, v: hl.v, t: 0 }); drawMap(); } } }
-    var left = rooms.some(function (r2) { return r2.mobs.some(function (m) { return m.hp > 0; }) || r2.drops.length || (r2.altar && !(r2.altar.got && doorGone && T >= doorGone)); });   // странная комната: карту взял, вышел, дверь догорела
+    var left = rooms.some(function (r2) { return hasSlimes(r2) || r2.drops.length || (r2.altar && !(r2.altar.got && doorGone && T >= doorGone)); });   // странная комната: карту взял, вышел, дверь догорела
     if (!done && hero.st !== "dead" && !left) finish("Подземелье зачищено", "Добыча: костей " + bones + (lootGot ? " и " + lootLow() : ""));
     // камера держит героя на месте (без догоняния: оно давало ползущий по пикселю мир при остановке)
     var hp2 = P(hero.u, hero.v); camX = hp2[0]; camY = hp2[1];
@@ -1087,6 +1137,24 @@
     ctx.globalCompositeOperation = "source-over";
   }
   function img(name, x, y) { var im = IMG[name]; ctx.drawImage(im, Math.round(x), Math.round(y)); }
+  function drawPinkGround(origin) {
+    var marks = cur.slimeMarks.filter(function (mark) { return mark.until > combatTime; });
+    if (!marks.length) return;
+    ctx.save();
+    ctx.translate(origin[0], origin[1]);
+    ctx.clip(cur.floorMask);
+    ctx.translate(-origin[0], -origin[1]);
+    marks.forEach(function (mark) {
+      var s = S(mark.u, mark.v);
+      ctx.globalAlpha = Math.min(1, (mark.until - combatTime) / 1.3);
+      for (var n = 0; n < 21; n++) {
+        var a = n * 2.39996, r = PINK_RADIUS * Math.sqrt((n + 1) / 22) * .92;
+        var d = P(Math.cos(a) * r, Math.sin(a) * r);
+        px(ctx, s[0] + d[0] - 2, s[1] + d[1], 3 + n % 5, 1 + n % 3, n % 3 ? "#c75393" : "#ee95c8");
+      }
+    });
+    ctx.restore();
+  }
   var T = 0;
   function draw(ts) {
     var t = ts / 1000, i, j; T = t; camSet();
@@ -1101,10 +1169,20 @@
       var fc = mk(mxX - mnX + 2, mxY - mnY + 2), fg = fc.getContext("2d"); fg.imageSmoothingEnabled = false;
       tiles.sort(function (p, q) { return (p[0] + p[1]) - (q[0] + q[1]); }).forEach(function (q) { var p = P(q[0], q[1]); fg.drawImage(cur.secret ? IMG[srFloor(q[0], q[1])] : IMG["floor" + q[2]], p[0] - TW / 2 - mnX, p[1] - mnY); });
       cur.decor.forEach(function (d) { if (!d.flat) return; var p = P(d.u, d.v), im = IMG[d.k]; fg.drawImage(im, Math.round(p[0] - im.width / 2 - mnX), Math.round(p[1] - im.height / 2 - mnY)); });
-      cur.floorC = fc; cur.floorO = [mnX, mnY];
+      var mask = new Path2D();
+      tiles.forEach(function (q) {
+        var p = P(q[0], q[1]);
+        mask.moveTo(p[0], p[1]);
+        mask.lineTo(p[0] + TW / 2, p[1] + TH / 2);
+        mask.lineTo(p[0], p[1] + TH);
+        mask.lineTo(p[0] - TW / 2, p[1] + TH / 2);
+        mask.closePath();
+      });
+      cur.floorC = fc; cur.floorO = [mnX, mnY]; cur.floorMask = mask;
     }
     var o0 = S(0, 0), p00 = P(0, 0); ctx.drawImage(cur.floorC, o0[0] - p00[0] + cur.floorO[0], o0[1] - p00[1] + cur.floorO[1]);
     if (cur.heal && IMG.circle.complete) runeDraw(cur.heal);
+    drawPinkGround(o0);
     // стены, предметы, герой и слизни — по глубине (стена за клеткой: глубина середины её края)
     var list = [];
     // стены — его тайлы (2026-11-19): кадр 128×128 рисуется со сдвигом (−64, −66) от верхней вершины клетки; дальние раньше ближних —
@@ -1133,12 +1211,16 @@
       px(ctx, x - 2, s[1] - 1, 5, 2, "rgba(8,6,10,.4)");
       px(ctx, x - 2 - Math.sign(b.du - b.dv) * 3, y, 2, 2, "#5a9a1e"); px(ctx, x - 2, y - 1, 5, 4, "#34641a"); px(ctx, x - 1, y - 2, 3, 5, "#34641a"); px(ctx, x - 1, y - 1, 3, 3, "#9ad63a"); px(ctx, x - 1, y - 1, 1, 1, "#eaffb0");
     } }); });
-    cur.mobs.forEach(function (m) { if (m.hp <= 0) return; list.push({ z: m.u + m.v, f: function () {
+    cur.mobs.forEach(function (m) { if (m.hp <= 0 && !m.fuseAt) return; list.push({ z: m.u + m.v, f: function () {
       var s = S(m.u, m.v), fr = Math.sin(m.t * 5.5) > 0 ? 0 : 1, jump = Math.round(Math.max(0, Math.sin(m.t * 5.5)) * 4) + (m.jump > 0 ? Math.round(Math.sin((1 - m.jump / .35) * Math.PI) * 12) : 0);   // отскок — дугой
       px(ctx, s[0] - 8, s[1] - 1, 16, 3, "rgba(8,6,10,.45)");
-      if (m.spit && m.aim > 0) { fr = 0; jump = 0; }                               // перед плевком замирает и вспыхивает
-      ctx.drawImage((m.hit > 0 || (m.spit && m.aim > 0 && Math.floor(m.aim * 20) % 2) ? slimeHit : m.spit ? slimeG : slimeF)[fr], Math.round(s[0] - 10), Math.round(s[1] - 12 - jump));
-      if (m.hp < (m.spit ? 2 : 3)) { px(ctx, s[0] - 8, s[1] - 20 - jump, 16, 4, "#14151b"); px(ctx, s[0] - 7, s[1] - 19 - jump, 14 * m.hp / (m.spit ? 2 : 3), 2, "#e2574b"); }
+      if (m.fuseAt || (m.spit && m.aim > 0)) { fr = 0; jump = 0; }
+      var aimFlash = m.spit && m.aim > 0 && Math.floor(m.aim * 20) % 2;
+      var fuseFlash = m.fuseAt && Math.floor((PINK_FUSE - (m.fuseAt - combatTime)) * 15) % 2;
+      var appearance = m.hit > 0 || aimFlash || fuseFlash ? slimeHit : m.pink ? slimeP : m.spit ? slimeG : slimeF;
+      ctx.drawImage(appearance[fr], Math.round(s[0] - 10), Math.round(s[1] - 12 - jump));
+      var maxHp = m.maxHp || (m.spit ? 2 : 3);
+      if (m.hp > 0 && m.hp < maxHp) { px(ctx, s[0] - 8, s[1] - 20 - jump, 16, 4, "#14151b"); px(ctx, s[0] - 7, s[1] - 19 - jump, 14 * m.hp / maxHp, 2, "#e2574b"); }
     } }); });
     // герой за линией задней стены (уходит в арку) — рисуется раньше стен, виден только в проёме
     list.push({ z: hero.u < 0 || hero.v < 0 ? -5 : hero.u + hero.v, f: function () {   // в проёме — за стенами, как было (его решение 2026-11-20: пусть входит в арку как раньше)
@@ -1177,6 +1259,17 @@
       if (f.k === "splat") { for (i = 0; i < 6; i++) { var a5 = i * 1.05 + 0.4, d5 = 2 + k * 9; px(ctx, s[0] + Math.cos(a5) * d5, s[1] - 7 + Math.sin(a5) * d5 * .6, 2, 2, k < .5 ? "#eaffb0" : "#9ad63a"); } }
       else if (f.k === "spark") { for (i = 0; i < 6; i++) { var a3 = i * 1.05, d3 = 4 + k * 14; px(ctx, s[0] + Math.cos(a3) * d3, s[1] - 8 + Math.sin(a3) * d3, 2, 2, k < .5 ? "#ffffff" : "#bfeeff"); } }
       else if (f.k === "poof") { for (i = 0; i < 8; i++) { var a4 = i * .785, d4 = 3 + k * 12; px(ctx, s[0] + Math.cos(a4) * d4 - 1, s[1] - 6 + Math.sin(a4) * d4 - 1 - k * 6, 3 - Math.floor(k * 2), 3 - Math.floor(k * 2), k < .5 ? "#bfeeff" : "#5cc0ee"); } }
+      else if (f.k === "pinkBlast" && f.room === cur) {
+        var phase = f.t / PINK_FX_TIME, radius = PINK_RADIUS * (1 - (1 - phase) * (1 - phase));
+        ctx.globalAlpha = 1 - phase;
+        for (var n = 0; n < 18; n++) {
+          var angle = n * 2.39996, spread = radius * (.6 + n % 4 * .1);
+          var point = P(Math.cos(angle) * spread, Math.sin(angle) * spread);
+          var rise = (5 + n % 5 * 4) * Math.sin(phase * Math.PI);
+          px(ctx, s[0] + point[0], s[1] + point[1] - rise, 2 + n % 2, 2, n % 3 ? "#ff88bd" : "#ffe8f4");
+        }
+        ctx.globalAlpha = 1;
+      }
       else if (f.k === "plus") { var yy = s[1] - 10 - f.t * 22; ctx.globalAlpha = 1 - f.t / .8; px(ctx, s[0] - 3, yy, 7, 1, "#efe8d6"); px(ctx, s[0], yy - 3, 1, 7, "#efe8d6"); ctx.drawImage(boneC, Math.round(s[0] + 6), Math.round(yy - 6)); ctx.globalAlpha = 1; }
     });
     if (cur.heal && cur.heal.t > 0) { var hp3 = S(hero.u, hero.v), k3 = cur.heal.t / 3;                          // кольцо отсчёта над героем
