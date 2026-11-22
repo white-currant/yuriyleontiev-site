@@ -105,9 +105,11 @@ if (!/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) { document.documentEl
   var boneC = mk(12, 11); sprite(boneC.getContext("2d"), 0, 0, BONE, BP); sprite(document.getElementById("boneic").getContext("2d"), 0, 0, BONE, BP);
 
   // ---------- лист героя ----------
-  var HERO = new Image(); HERO.src = "hero.png";
-  var CW = 64, CH = 56, AX = 32, AY = 53;
-  var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], run_side: [6, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
+  var HERO = new Image(); HERO.src = "hero.png?v=5";
+  var CW = 64, CH = 56, AX = 32, AY = 53, HIT_CW = 96, HIT_AX = 40;
+  var HIT_FRAMES = [.045, .09, .16, .225];
+  var IDLE_FRAMES = [1, 2, 3, 2];
+  var ROW = { idle_front: [0, 4], idle_back: [1, 4], idle_side: [2, 4], walk_front: [3, 6], walk_back: [4, 6], walk_side: [5, 6], run_side: [6, 4], hit_side: [7, 5], hurt_side: [8, 3], die: [9, 3] };
 
   // ---------- уровень: комнаты на сетке, соединённые проёмами ----------
   var rooms, cur, hero, fx, bones, done, trans;
@@ -204,7 +206,7 @@ if (!/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) { document.documentEl
       hero.inv = Math.max(0, hero.inv - dt);
       if (hero.st === "hit") {                                                      // удар: три кадра, урон — на втором
         hero.t += dt;
-        if (hero.t > .09 && !hero.hitDone) { hero.hitDone = true;
+        if (hero.t >= HIT_FRAMES[1] && !hero.hitDone) { hero.hitDone = true;
           mobs.forEach(function (m) { if (m.hp <= 0) return; var dx = (m.x - hero.x) * hero.flip, dy = m.y - hero.y;
             if (dx > -10 && dx < 46 && Math.abs(dy) < 30) { m.hp--; m.hit = .18; m.vx = hero.flip * 150; m.vy = dy * 2;
               fx.push({ k: "spark", x: m.x, y: m.y - 8, t: 0 });
@@ -256,10 +258,10 @@ if (!/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) { document.documentEl
   function heroFrame() {
     var name, i;
     if (hero.st === "dead") { name = "die"; i = Math.min(2, Math.floor(hero.t / .22)); }
-    else if (hero.st === "hit") { name = "hit_side"; i = hero.t < .09 ? 0 : hero.t < .2 ? 1 : 2; }
+    else if (hero.st === "hit") { name = "hit_side"; i = HIT_FRAMES.findIndex(function (end) { return hero.t < end; }); if (i < 0) i = HIT_FRAMES.length; }
     else if (hero.st === "hurt") { name = "hurt_side"; i = Math.min(2, Math.floor(hero.t / .1)); }
-    else if (hero.st === "walk") { name = "walk_" + hero.dir; i = Math.floor(hero.t / .13) % 4; }
-    else { name = "idle_" + hero.dir; i = Math.floor(hero.t / .55) % 2; }
+    else if (hero.st === "walk") { name = "walk_" + hero.dir; i = Math.floor(hero.t / .115) % 6; }
+    else { name = "idle_" + hero.dir; i = IDLE_FRAMES[Math.floor(hero.t / .5) % IDLE_FRAMES.length]; }
     return [ROW[name][0], i];
   }
   function draw(ts) {
@@ -279,7 +281,8 @@ if (!/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) { document.documentEl
       px(ctx, hero.x - 10, hero.y - 2, 20, 4, "rgba(8,6,10,.5)"); px(ctx, hero.x - 7, hero.y - 3, 14, 6, "rgba(8,6,10,.35)");
       if (blink) return;
       ctx.save(); ctx.translate(Math.round(hero.x), Math.round(hero.y)); ctx.scale(hero.flip < 0 && (hero.dir === "side" || hero.st === "dead") ? -1 : 1, 1);
-      ctx.drawImage(HERO, fr[1] * CW, fr[0] * CH, CW, CH, -AX, -AY + 2, CW, CH); ctx.restore();
+      var strike = fr[0] === ROW.hit_side[0], width = strike ? HIT_CW : CW, anchor = strike ? HIT_AX : AX;
+      ctx.drawImage(HERO, fr[1] * width, fr[0] * CH, width, CH, -anchor, -AY + 2, width, CH); ctx.restore();
     } });
     list.sort(function (a, c) { return a.y - c.y; }).forEach(function (o) { o.f(); });
 

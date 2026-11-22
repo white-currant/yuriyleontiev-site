@@ -389,14 +389,16 @@
   var embers = [];
   function noise(a, t) { return Math.sin(a * 12.9898 + t * 3.1) * .5 + Math.sin(a * 4.37 - t * 5.3) * .3 + Math.sin(a * 27.1 + t * 9.7) * .2; }
 
-  // герой — из его листов (hero.png, как в пробе боя): рисуется отдельным слоем вдвое плотнее сцены, в родных пикселях,
+  // герой из общего листа подземелья (hero.png): рисуется отдельным слоем вдвое плотнее сцены, в родных пикселях,
   // а свет сцены переносится на него по месту, где он стоит (его просьба 2026-11-17: «возьми моего героя»)
-  var HIMG = new Image(); HIMG.src = "hero.png";
+  var HIMG = new Image();
   HIMG.onload = function () {                                                          // портрет в углу — голова его героя из кадра «лицом», родные пиксели
     var fc = document.getElementById("i-face"), fg = fc.getContext("2d"); fc.width = 18; fc.height = 18; size(fc, 1);
-    fg.imageSmoothingEnabled = false; fg.clearRect(0, 0, 18, 18); fg.drawImage(HIMG, 22, 12, 18, 18, 0, 0, 18, 18);
+    fg.imageSmoothingEnabled = false; fg.clearRect(0, 0, 18, 18); fg.drawImage(HIMG, 20, 9, 24, 24, 0, 0, 18, 18);
   };
-  var HCW = 64, HCH = 56, HAX = 32, HAY = 53, HROW = { idle_side: [2, 2], walk_side: [5, 4] };
+  HIMG.src = "hero.png?v=5";
+  var HCW = 64, HCH = 56, HAX = 32, HAY = 53, HROW = { idle_side: [2, 4], walk_side: [5, 6] };
+  var HERO_IDLE = [1, 2, 3, 2];
   var hl = document.getElementById("herol"), hctx = hl.getContext("2d"), HK = 2;
   function lightAt(x, y, t) {
     x = Math.max(0, Math.min(W - 1, Math.round(x))); y = Math.max(0, Math.min(H - 1, Math.round(y)));
@@ -436,7 +438,7 @@
   function bigHero(t) {
     hctx.clearRect(0, 0, hl.width, hl.height); forge(t); vat(t); if (!(HIMG.complete && HIMG.naturalWidth)) return;
     hctx.fillStyle = "rgba(4,3,8,.5)"; hctx.beginPath(); hctx.ellipse(BX, BY - 4, 118, 26, 0, 0, 7); hctx.fill();   // тень под ногами
-    var fr = Math.floor(t * 1.4) % 2;
+    var fr = HERO_IDLE[Math.floor(t / .5) % HERO_IDLE.length];
     hctx.imageSmoothingEnabled = false;
     hctx.drawImage(HIMG, fr * HCW, 0, HCW, HCH, BX - HAX * BIG, BY - HAY * BIG, HCW * BIG, HCH * BIG);
   }
@@ -472,7 +474,7 @@
     // герой поверх сцены: кадр из листа, затем умножаем на свет сцены там, где он стоит (+ немного своего света, как у фигуры в бою)
     hctx.clearRect(0, 0, hl.width, hl.height);
     if (HIMG.complete && HIMG.naturalWidth) {
-      var rw = moving ? HROW.walk_side : HROW.idle_side, fr = moving ? Math.floor(hero.step) % rw[1] : (Math.floor(t * 1.6) % rw[1]);
+      var rw = moving ? HROW.walk_side : HROW.idle_side, fr = moving ? Math.floor(hero.step) % rw[1] : HERO_IDLE[Math.floor(t / .5) % HERO_IDLE.length];
       hctx.imageSmoothingEnabled = false; hctx.save(); hctx.translate(hx * HK, hy * HK); hctx.scale(hero.face, 1);
       hctx.drawImage(HIMG, fr * HCW, rw[0] * HCH, HCW, HCH, -HAX, -HAY, HCW, HCH); hctx.restore();
       var lt = lightAt(hx, hy - 10, t).map(function (v) { return Math.round(Math.min(255, 255 * Math.min(1.25, v * 1.25 + .08))); });

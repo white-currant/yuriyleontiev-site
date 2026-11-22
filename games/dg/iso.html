@@ -27,6 +27,11 @@
   /* выход из подземелья (его правило 2026-11-17: найденное сохраняется, только если выйти вовремя или перебить всех) */
   #leave { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--u) * 10 + env(safe-area-inset-top)); height: calc(var(--u) * 20); padding: 0 calc(var(--u) * 10);
     font: inherit; font-size: calc(var(--u) * 11); font-weight: 800; color: #efe6d2; border: 0; cursor: pointer; }
+  #dodge { position: absolute; right: calc(var(--u) * 37); bottom: calc(var(--u) * 141);
+    width: calc(var(--u) * 66); aspect-ratio: 1; border: calc(var(--u) * 2.5) solid #b7a9c9;
+    border-radius: 50%; background: rgba(54,42,75,.8); color: #f1e7ff; font-family: inherit; font-size: calc(var(--u) * 13); font-weight: 700; line-height: 1; padding: 0; cursor: pointer; touch-action: none; }
+  #dodge[aria-disabled="true"] { opacity: .5; }
+  #dodge:active { background: #655083; }
   #over button + button { margin-left: calc(var(--u) * 8); }
   #over button[hidden] + button { margin-left: 0; }
   #over #stay { background: #3a3e4b; color: #efe6d2; box-shadow: 0 0 0 calc(var(--u) * 2) #14151b, inset 0 calc(var(--u) * -3) 0 #23252e, inset 0 calc(var(--u) * 2) 0 #5a5f70; }
@@ -46,6 +51,7 @@
   <div id="hud"><div id="hp" class="pan"><i></i><b>100</b><div id="armor" class="pan" hidden><canvas id="armoric" width="9" height="10"></canvas><span id="armorn">×1</span></div></div><div id="bones" class="pan"><canvas id="boneic" width="12" height="11"></canvas><span id="bonen">0</span></div></div>
   
   <button id="leave" class="pan" type="button">выйти</button>
+  <button id="dodge" type="button" aria-keyshortcuts="Shift" aria-disabled="true" hidden>Уворот</button>
   <div id="over"><div class="pan"><span id="overt"></span><small id="overs"></small><button id="again" type="button">Ещё раз</button><button id="home" type="button">В убежище</button><button id="stay" type="button" hidden>Остаться</button><button id="quit" type="button" hidden>Выйти</button></div></div>
 </div>
 <script>
@@ -72,7 +78,7 @@
   NAMES.slice().forEach(function (n) { if (/^w[uv]_/.test(n) && !/in$/.test(n)) NAMES.push(n + "_x", n + "_t", n + "_xt"); });   // _t — с цоколем под колонной ближнего конца (за ним нет пола)   // *_x — дальний конец одиночной стены с косым срезом плиты (его правка 2026-11-19)
   var wait = NAMES.length + 3;
   NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=25"; IMG[n] = im; });
-  var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png?v=2";
+  var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png?v=5";
   var STARBG = new Image(); STARBG.onload = function () { if (!--wait) start(); }; STARBG.src = "starfield.png?v=1";
   // странная комната — из его пяти листов (2026-11-19, исходники «Подземелье — прототип/исходники/странная_комната»): iso/sr.json — что есть по видам
   // (алтари, углы, плиты стен, пол, убранство); каждый поход комната собирается заново из этого набора
@@ -90,8 +96,10 @@
     if (srWait === true) then(); else srWait.push(then);
   }
   fetch("iso/sr.json?v=20").then(function (r) { return r.json(); }).then(function (m) { SR = m; if (!--wait) start(); }).catch(function () { if (!--wait) start(); });
-  var CW = 64, CH = 56, AX = 32, AY = 53;
-  var ROW = { idle_front: [0, 2], idle_back: [1, 2], idle_side: [2, 2], walk_front: [3, 4], walk_back: [4, 4], walk_side: [5, 4], hit_side: [7, 3], hurt_side: [8, 3], die: [9, 3] };
+  var CW = 64, CH = 56, AX = 32, AY = 53, HIT_CW = 96, HIT_AX = 40;
+  var ROW = { idle_front: 0, idle_back: 1, idle_side: 2, walk_front: 3, walk_back: 4, walk_side: 5,
+    hit_side: 7, hurt_side: 8, die: 9, dodge_front: 10, dodge_back: 11, dodge_side: 12 };
+  var IDLE_FRAMES = [1, 2, 3, 2];
 
   // ---------- слизень, кость ----------
   var SL = { k: "#10202c", a: "#2f8fc4", A: "#5cc0ee", h: "#c8f1ff", d: "#1d6a96", e: "#0b0a10" };
@@ -311,6 +319,8 @@
   function reset() {
     rooms = makeLevel(Date.now() & 0xffffff); cur = rooms[0];
     hero = { u: cur.ci + .5, v: cur.cj + .5, dir: "front", flip: 1, st: "idle", t: 0, hp: 100, inv: 0, hitDone: false, revive: REVIVE, revmax: REVIVE };
+    hero.dodgeReady = 0;
+    wantHit = wantDodge = false;
     fx = []; bones = 0; done = false; trans = null; lootGot = null; lootEx = null; leftEarly = false; banner = 0; var p0 = P(hero.u, hero.v); camX = p0[0]; camY = p0[1];
     document.getElementById("over").classList.remove("on"); hud(); drawMap();
   }
@@ -346,7 +356,7 @@
   // в кэш браузера (GitHub разрешает хранить 10 минут) под одним адресом — переход берёт его оттуда. Нажатие сразу показывает «Возвращаемся…»
   var HUB = "hub.html?v=" + (((location.search.match(/[?&]v=(\d+)/) || [])[1]) || Date.now()), hubP = null;
   function hubReady() { if (!hubP) hubP = fetch(HUB).then(function (r) { if (!r.ok) throw 0; return r.blob(); }).catch(function (e) { hubP = null; throw e; }); return hubP; }
-  function hubPrefetch() { hubReady().catch(function () {}); ["hub-bg.webp", "hero.png"].forEach(function (f) { var im = new Image(); im.src = f; }); }
+  function hubPrefetch() { hubReady().catch(function () {}); ["hub-bg.webp", "hero.png?v=5"].forEach(function (f) { var im = new Image(); im.src = f; }); }
   function home() {
     var b = document.getElementById("leave"), hb = document.getElementById("home"), ov = document.getElementById("over");
     if (b.disabled && hb.disabled) return; b.disabled = hb.disabled = true;
@@ -388,12 +398,24 @@
 
   // ---------- управление: джойстик по экрану, мир — по диагоналям ----------
   // джойстик слева внизу и кнопка удара справа внизу — видны всегда (его просьба 2026-11-17); палец ведёт ручку от центра основания
-  var JR = 24, JX = 44, JY = H - 52, BX = W - 42, BY = H - 54, BR = 22, joy = { on: false, id: -1, bx: JX, by: JY, dx: 0, dy: 0 }, keys = {}, wantHit = false, hitFlash = 0;
+  var JR = 24, JX = 44, JY = H - 52, BX = W - 42, BY = H - 54, BR = 22, joy = { on: false, id: -1, bx: JX, by: JY, dx: 0, dy: 0 }, keys = {}, wantHit = false, wantDodge = false, hitFlash = 0;
+  var dodgeButton = document.getElementById("dodge");
+  function canDodge() {
+    return hero && !done && !trans && !paused && !rev && !spell && hero.dodgeReady <= 0 &&
+      (hero.st === "idle" || hero.st === "walk");
+  }
+  function requestDodge() { if (canDodge()) wantDodge = true; }
+  dodgeButton.addEventListener("pointerdown", function (e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    requestDodge();
+  });
+  dodgeButton.addEventListener("click", function (e) { if (e.detail === 0) requestDodge(); });
   function pos(e) { var r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
   stage.addEventListener("pointerdown", function (e) {
     if (spell) return;                                                          // читается заклинание — ждём
     if (rev) { revTap(); return; }                                              // бустер: вскрыть, перевернуть, забрать — по тапу
-    if (e.target.closest("#over") || e.target.closest("#leave")) return;
+    if (e.target.closest("#over, #leave, #dodge")) return;
     var p = pos(e);
     // центр джойстика — под пальцем, но в пределах зоны слева внизу (его просьба, как в LoL); справа — удар
     if (p[0] < W * .55 && !joy.on) { joy.on = true; joy.id = e.pointerId; joy.bx = Math.max(JR + 6, Math.min(W * .45, p[0])); joy.by = Math.max(H * .55, Math.min(H - JR - 6, p[1])); joy.dx = joy.dy = 0; move(p); }
@@ -404,7 +426,17 @@
   stage.addEventListener("pointermove", function (e) { if (joy.on && e.pointerId === joy.id) move(pos(e)); });
   function up(e) { if (joy.on && e.pointerId === joy.id) { joy.on = false; joy.dx = joy.dy = 0; joy.bx = JX; joy.by = JY; } }   // отпустил — джойстик на обычное место
   stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
-  addEventListener("keydown", function (e) { keys[e.code] = true; if (e.code === "Space" && (rev || spell)) { revTap(); e.preventDefault(); return; } if (e.code === "Space") { wantHit = true; hitFlash = .15; e.preventDefault(); } });
+  addEventListener("keydown", function (e) {
+    keys[e.code] = true;
+    if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
+      if (!e.repeat) requestDodge();
+      e.preventDefault();
+      return;
+    }
+    if (e.code !== "Space" || e.target === dodgeButton) return;
+    if (rev || spell) revTap(); else { wantHit = true; hitFlash = .15; }
+    e.preventDefault();
+  });
   addEventListener("keyup", function (e) { keys[e.code] = false; });
 
   var camX = 0, camY = 0, camIX = 0, camIY = 0, camFX = 0, camFY = 0;   // камера: целая часть — в S(), дробная (шаг 1/Z) — сдвигом всего мира
@@ -424,6 +456,48 @@
 
   // ---------- шаг игры ----------
   var SPEED = 90, VY = .8;                                      // скорость в пикселях экрана: вбок 90, вверх-вниз 72 — по диагонали больше не ползёт (2026-11-19)
+  var HIT_FRAMES = [.045, .09, .16, .225];
+  var DODGE_ANIM_RATE = .8, DODGE_COOLDOWN = 1.1, DODGE_DISTANCE = 96;
+  var DODGE_POSES = [[0, .045], [1, .105], [2, .175], [3, .25],
+    [2, .32], [3, .395], [4, .46], [5, .535], [6, .61], [7, .685]];
+  var DODGE_LAST_POSE = DODGE_POSES[DODGE_POSES.length - 1];
+  var DODGE_TIME = DODGE_LAST_POSE[1] / DODGE_ANIM_RATE;
+  function faceHero(x, y) {
+    if (Math.abs(x) > Math.abs(y) * .9) { hero.dir = "side"; hero.flip = x > 0 ? 1 : -1; }
+    else hero.dir = y > 0 ? "front" : "back";
+  }
+  function startDodge(x, y, length) {
+    if (length > .15) { x /= length; y /= length; faceHero(x, y); }
+    else { x = hero.dir === "side" ? hero.flip : 0; y = hero.dir === "back" ? -1 : hero.dir === "front" ? 1 : 0; }
+    hero.dodgeU = DODGE_DISTANCE * (x / TW + y * VY / TH);
+    hero.dodgeV = DODGE_DISTANCE * (y * VY / TH - x / TW);
+    hero.dodgeReady = DODGE_COOLDOWN;
+    hero.st = "dodge"; hero.t = 0;
+  }
+  function dodgeProgress(t) {
+    var k = Math.max(0, Math.min(1, (t - .045) / .57));
+    return k * k * (3 - 2 * k);
+  }
+  function moveDodge(dt) {
+    var delta = dodgeProgress(hero.t + dt) - dodgeProgress(hero.t);
+    var du = hero.dodgeU * delta, dv = hero.dodgeV * delta;
+    var steps = Math.ceil(Math.max(Math.abs(du), Math.abs(dv)) / .06);
+    for (var n = 0; n < steps; n++) {
+      var u = hero.u + du / steps, v = hero.v + dv / steps;
+      if (blocked(u, v)) { hero.dodgeU = hero.dodgeV = 0; break; }
+      hero.u = u; hero.v = v;
+      if (u < -.25 || u > cur.w + .25 || v < -.25 || v > cur.h + .25) {
+        hero.dodgeU = hero.dodgeV = 0;
+        break;
+      }
+    }
+    hero.t += dt;
+    if (hero.t >= DODGE_TIME) { hero.st = "idle"; hero.t = 0; }
+  }
+  function canTakeDamage() {
+    return hero.st !== "dead" && hero.inv <= 0 &&
+      !(hero.st === "dodge" && hero.t >= .06 && hero.t < .28);
+  }
   function update(dt) {
     if (trans) { trans.t += dt; if (trans.t >= .16 && !trans.done) { trans.done = true; enter(trans); } if (trans.t >= .32) trans = null; return; }
     var mobs = cur.mobs, i;
@@ -432,9 +506,12 @@
       if (jl > 1) { jx /= jl; jy /= jl; jl = 1; }
       var vx = jx * SPEED, vy = jy * SPEED * VY, du = vx / TW + vy / TH, dv = vy / TH - vx / TW;      // скорость на экране → клеток в секунду (точная обратная к P)
       hero.inv = Math.max(0, hero.inv - dt);
-      if (hero.st === "hit") {
+      hero.dodgeReady = Math.max(0, hero.dodgeReady - dt);
+      if (wantDodge && canDodge()) startDodge(jx, jy, jl);
+      if (hero.st === "dodge") moveDodge(dt);
+      else if (hero.st === "hit") {
         hero.t += dt;
-        if (hero.t > .09 && !hero.hitDone) { hero.hitDone = true; var hs = S(hero.u, hero.v);
+        if (hero.t >= HIT_FRAMES[1] && !hero.hitDone) { hero.hitDone = true; var hs = S(hero.u, hero.v);
           mobs.forEach(function (m) { if (m.hp <= 0) return; var s2 = S(m.u, m.v), dx = (s2[0] - hs[0]) * hero.flip, dy = s2[1] - hs[1];
             if (dx > -10 && dx < 44 && Math.abs(dy) < 24) { m.hp--; m.hit = .18; var kd = Math.hypot(m.u - hero.u, m.v - hero.v) || 1; m.vu = (m.u - hero.u) / kd * 2; m.vv = (m.v - hero.v) / kd * 2;
               fx.push({ k: "spark", u: m.u, v: m.v, t: 0 });
@@ -453,13 +530,16 @@
         else if (jl > .15) {
           var nu = hero.u + du * dt, nv = hero.v + dv * dt;
           if (!blocked(nu, hero.v)) hero.u = nu; if (!blocked(hero.u, nv)) hero.v = nv;
-          hero.st = "walk"; hero.t += dt;
-          if (Math.abs(jx) > Math.abs(jy) * .9) { hero.dir = "side"; hero.flip = jx > 0 ? 1 : -1; } else hero.dir = jy > 0 ? "front" : "back";
+          if (hero.st !== "walk") hero.t = 0;
+          hero.st = "walk"; hero.t += dt * jl;
+          faceHero(jx, jy);
         } else { if (hero.st !== "idle") hero.t = 0; hero.st = "idle"; hero.t += dt; }
       }
-      wantHit = false;
-      // края: в проходе (средняя клетка края) можно выйти — это переход в соседнюю комнату
-      if (hero.u < -.25) go(-1, 0); else if (hero.u > cur.w + .25) go(1, 0); else if (hero.v < -.25) go(0, -1); else if (hero.v > cur.h + .25) go(0, 1);
+      wantHit = wantDodge = false;
+      // У двери сначала заканчивается подъём из кувырка, затем начинается переход.
+      if (hero.st !== "dodge") {
+        if (hero.u < -.25) go(-1, 0); else if (hero.u > cur.w + .25) go(1, 0); else if (hero.v < -.25) go(0, -1); else if (hero.v > cur.h + .25) go(0, 1);
+      }
     } else hero.t += dt;
 
     function hurt(dmg, fu, fv, inv) {                                              // герой получил урон от (fu, fv)
@@ -487,11 +567,11 @@
       mu += m.vu * dt; mv += m.vv * dt; m.vu *= Math.pow(.002, dt); m.vv *= Math.pow(.002, dt);
       if (!blocked(m.u + mu, m.v)) m.u += mu; if (!blocked(m.u, m.v + mv)) m.v += mv;
       m.u = Math.max(.2, Math.min(cur.w - .2, m.u)); m.v = Math.max(.2, Math.min(cur.h - .2, m.v));
-      if (hero.st !== "dead" && d < .3 && hero.inv <= 0) hurt(12, m.u, m.v, .9);
+      if (d < .3 && canTakeDamage()) hurt(12, m.u, m.v, .9);
     });
     // плевки: летят прямо, гаснут о стену, предмет или через 2,5 с; попадание — 8 урона (слабее касания), от плевка можно уйти
     cur.shots = shots.filter(function (b) { b.t += dt; b.u += b.du * dt; b.v += b.dv * dt;
-      if (hero.st !== "dead" && hero.inv <= 0 && Math.hypot(b.u - hero.u, b.v - hero.v) < .32) { hurt(8, b.u - b.du, b.v - b.dv, .6); fx.push({ k: "splat", u: b.u, v: b.v, t: 0 }); return false; }
+      if (canTakeDamage() && Math.hypot(b.u - hero.u, b.v - hero.v) < .32) { hurt(8, b.u - b.du, b.v - b.dv, .6); fx.push({ k: "splat", u: b.u, v: b.v, t: 0 }); return false; }
       if (b.t > 2.5 || blocked(b.u, b.v)) { fx.push({ k: "splat", u: b.u, v: b.v, t: 0 }); return false; }
       return true; });
     for (i = 0; i < mobs.length; i++) for (var j = i + 1; j < mobs.length; j++) {
@@ -508,7 +588,7 @@
     banner = Math.max(0, banner - dt);
     var hl = cur.heal;
     if (hl && !hl.used) { var onIt = hero.st !== "dead" && hero.hp < 100 && Math.hypot(hl.u - hero.u, hl.v - hero.v) < .6;
-      if (!onIt || hero.st === "hurt") hl.t = 0; else { hl.t += dt; if (hl.t >= 3) { hl.used = true; hl.t = 0; hero.hp = 100; hud(); fx.push({ k: "heal", u: hl.u, v: hl.v, t: 0 }); drawMap(); } } }
+      if (!onIt || hero.st === "hurt" || hero.st === "dodge") hl.t = 0; else { hl.t += dt; if (hl.t >= 3) { hl.used = true; hl.t = 0; hero.hp = 100; hud(); fx.push({ k: "heal", u: hl.u, v: hl.v, t: 0 }); drawMap(); } } }
     var left = rooms.some(function (r2) { return r2.mobs.some(function (m) { return m.hp > 0; }) || r2.drops.length || (r2.altar && !(r2.altar.got && doorGone && T >= doorGone)); });   // странная комната: карту взял, вышел, дверь догорела
     if (!done && hero.st !== "dead" && !left) finish("Подземелье зачищено", "Добыча: костей " + bones + (lootGot ? " и " + lootLow() : ""));
     // камера держит героя на месте (без догоняния: оно давало ползущий по пикселю мир при остановке)
@@ -941,11 +1021,17 @@
   function heroFrame() {
     var name, i;
     if (hero.st === "dead") { name = "die"; i = Math.min(2, Math.floor(hero.t / .22)); }
-    else if (hero.st === "hit") { name = "hit_side"; i = hero.t < .09 ? 0 : hero.t < .2 ? 1 : 2; }
+    else if (hero.st === "hit") { name = "hit_side"; i = HIT_FRAMES.findIndex(function (end) { return hero.t < end; }); if (i < 0) i = HIT_FRAMES.length; }
     else if (hero.st === "hurt") { name = "hurt_side"; i = Math.min(2, Math.floor(hero.t / .1)); }
-    else if (hero.st === "walk") { name = "walk_" + hero.dir; i = Math.floor(hero.t / .13) % 4; }
-    else { name = "idle_" + hero.dir; i = Math.floor(hero.t / .55) % 2; }
-    return [ROW[name][0], i];
+    else if (hero.st === "dodge") {
+      name = "dodge_" + hero.dir;
+      var poseTime = hero.t * DODGE_ANIM_RATE;
+      var pose = DODGE_POSES.find(function (frame) { return poseTime < frame[1]; });
+      i = (pose || DODGE_LAST_POSE)[0];
+    }
+    else if (hero.st === "walk") { name = "walk_" + hero.dir; i = Math.floor(hero.t / .115) % 6; }
+    else { name = "idle_" + hero.dir; i = IDLE_FRAMES[Math.floor(hero.t / .5) % IDLE_FRAMES.length]; }
+    return [ROW[name], i];
   }
   var GLOWS = { crys_blue: "rgba(90,160,255,A)", crys_teal: "rgba(80,230,210,A)", crys_violet: "rgba(170,110,255,A)", crys_green: "rgba(90,240,120,A)", crys_big: "rgba(90,160,255,A)", brazier: "rgba(90,170,255,A)", mush: "rgba(80,160,255,A)", mush2: "rgba(80,160,255,A)", t_blue: "rgba(90,160,255,A)", t_violet: "rgba(170,110,255,A)", t_lava: "rgba(255,130,40,A)" };
   // живой огонь (его просьба 2026-11-17): языки пламени по столбикам, высота колышется, сверху — искры
@@ -1056,12 +1142,13 @@
     } }); });
     // герой за линией задней стены (уходит в арку) — рисуется раньше стен, виден только в проёме
     list.push({ z: hero.u < 0 || hero.v < 0 ? -5 : hero.u + hero.v, f: function () {   // в проёме — за стенами, как было (его решение 2026-11-20: пусть входит в арку как раньше)
-      var s = S(hero.u, hero.v), fr = heroFrame(), blink = hero.inv > 0 && hero.st !== "dead" && Math.floor(t * 16) % 2;
+      var s = S(hero.u, hero.v), fr = heroFrame(), blink = hero.inv > 0 && hero.st !== "dead" && hero.st !== "dodge" && Math.floor(t * 16) % 2;
       var hx = Math.round(s[0] * Z) / Z, hy = Math.round(s[1] * Z) / Z;       // герой — точно в середине кадра, в сетке 1/Z, вместе с камерой
       ctx.fillStyle = "rgba(8,6,10,.5)"; ctx.fillRect(hx - 10, hy - 2, 20, 4); ctx.fillStyle = "rgba(8,6,10,.35)"; ctx.fillRect(hx - 7, hy - 3, 14, 6);
       if (blink) return;
       ctx.save(); ctx.translate(hx, hy); ctx.scale(hero.flip < 0 && (hero.dir === "side" || hero.st === "dead") ? -1 : 1, 1);
-      ctx.drawImage(HERO, fr[1] * CW, fr[0] * CH, CW, CH, -AX, -AY + 2, CW, CH); ctx.restore();
+      var strike = fr[0] === ROW.hit_side, width = strike ? HIT_CW : CW, anchor = strike ? HIT_AX : AX;
+      ctx.drawImage(HERO, fr[1] * width, fr[0] * CH, width, CH, -anchor, -AY + 2, width, CH); ctx.restore();
     } });
     list.sort(function (p, q) { return p.z - q.z; }).forEach(function (o) { o.f(); });
 
@@ -1124,6 +1211,9 @@
       ctx.fillStyle = "#a99ccc"; ctx.font = "600 8px -apple-system, sans-serif"; ctx.fillText(banS, W / 2, 122); ctx.globalAlpha = 1; ctx.textAlign = "start"; }
     if (spell) spellDraw();                                                         // заклинание на непонятном языке
     if (rev) boosterDraw();                                                         // находка из бустера — поверх всего
+    dodgeButton.hidden = !!(spell || rev || done || paused);
+    var dodgeDisabled = canDodge() ? "false" : "true";
+    if (dodgeButton.getAttribute("aria-disabled") !== dodgeDisabled) dodgeButton.setAttribute("aria-disabled", dodgeDisabled);
     if (spell || rev) { if (trans) { ctx.fillStyle = "rgba(6,5,9," + Math.min(1, 1 - Math.abs(trans.t - .16) / .16) + ")"; ctx.fillRect(0, 0, W, H); } return; }   // на время чтения и бустера кнопок нет (2026-11-20)
     // джойстик: основание и ручка
     ctx.globalAlpha = joy.on ? .34 : .22; ctx.fillStyle = "#efe6d2"; ctx.beginPath(); ctx.arc(joy.bx, joy.by, JR + 4, 0, 7); ctx.fill();
