@@ -731,6 +731,7 @@
   body[data-screen^="farm"] .plot.well .lbl { bottom: auto; top: 0; transform: translate(-50%, -105%); color: var(--cream); }
   body[data-screen^="farm"] .plot.well:not(.house) .lbl { left: auto; right: 6px; transform: translate(0, -105%); }   /* колодец у края кадра — подпись не вылезает */
   body[data-screen^="farm"] .plot.well.house .lbl { left: 8px; transform: translate(0, -105%); }
+  body[data-screen^="farm"] .plot.well.pen .lbl { left: 50%; right: auto; transform: translate(-50%, -105%); }
   body[data-screen^="farm"] .plot:active { background: rgba(255, 255, 255, .18); }
   body[data-screen^="farm"] .float { font-family: var(--pix); }
   body[data-screen^="farm"] .exit, body[data-screen^="farm"] .dust-pill { white-space: nowrap; }
@@ -4693,7 +4694,7 @@
       var penPlan = (F.state.build_list || {}).chicken_pen;
       var penBuilt = hasBuild(F.state, "chicken_pen");
       if (penBuilt ? F.state.chicken_pen : penPlan) {
-        var pb = el("button", "plot well kitchen");
+        var pb = el("button", "plot well kitchen pen");
         pb.type = "button";
         var penWidth = penBuilt ? PEN_ART.naturalWidth || 60 : 26;
         pb.style.left = (PEN[0] - penWidth / 2) / FW * 100 + "%";
@@ -4701,6 +4702,7 @@
         pb.style.width = penWidth / FW * 100 + "%";
         pb.style.height = (penBuilt ? 27 : 22) / FH * 100 + "%";
         pb.setAttribute("aria-label", penBuilt ? "Курятник" : "Купить загон для куриц");
+        if (!penBuilt) pb.appendChild(el("span", "lbl water", "курятник"));
         pb.onclick = function () { haptic("light"); if (penBuilt) chickenSheet(); else penSheet(); };
         box.appendChild(pb);
       }
