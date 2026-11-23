@@ -761,6 +761,7 @@
   .sheet.decor-sh { max-height: 58vh; }                                    /* «Вид фермы»: ферма с примеркой остаётся видна над окном */
   .dsec { margin-top: 18px; font-size: 18px; font-weight: 700; color: var(--cream, #f6efe3); }
   .tools { display: flex; gap: 6px; }
+  .toolbox .tools { flex-direction: column-reverse; }
   .tools .slot { width: 36px; height: 36px; aspect-ratio: 1; }
   body[data-screen^="farm"] .tools .slot { box-shadow: 0 0 0 2px var(--ink), inset 2px 2px 0 #33200f, inset -2px -2px 0 #6b4428; }
   body[data-screen^="farm"] .tools .slot.on { box-shadow: 0 0 0 2px var(--cream), 0 0 0 4px var(--ink), inset 2px 2px 0 #e2bd86; }
@@ -2832,8 +2833,9 @@
   var HENPAL = { w: "#fff6e6", R: "#e2492b", Y: "#ffb627", y: "#e08a1c" };
   // ---------- мельница и печь (2026-11-14): рисуются поверх сцены, т.к. зависят от того, построены ли и работают ли ----------
   var SHOP = [151, 177];                                                                // низ переднего угла магазина                                                                // магазин станции: правый нижний угол луга (его выбор 2026-11-15)
-  var MILL = [138, 62], OVEN = [40, 160], CHEST = [17, 95], CHEST_ON = true;
-  var HIVE = [72, 66];
+  var MILL = [138, 62], OVEN = [17, 145], CHEST = [17, 95], CHEST_ON = true;
+  var HIVE = [72, 66], PEN = [52, 169], PEN_SIGN_Y = PEN[1] + 4;
+  var PEN_ART = new Image(); PEN_ART.src = "art/chicken-pen.png";
   // лужи в ливень (его правка 2026-11-19: «слишком ровные и как объекты — должны быть частью декорации, как мох»): неровное пятно из
   // нескольких овалов, вокруг — потемневшая мокрая земля, вода темнее к краю, редкие блики неба. Картинка лужи считается один раз на размер.
   var PUD_CACHE = {};
@@ -2854,11 +2856,12 @@
     }
     PUD_CACHE[key] = cv; return cv;
   }
-  function drawPuddles(c, now) {
+  function drawPuddles(c, now, penClearing) {
     var g = puddleGrow(now);
-    PUDDLES.forEach(function (pd, k) { var w = Math.max(3, Math.round(pd[2] * g)), sp = puddleSprite(k, w); c.drawImage(sp, Math.round(pd[0] - sp.width / 2), Math.round(pd[1] - sp.height / 2)); });
+    PUDDLES.forEach(function (pd, k) { if (penClearing && pd === PEN_PUDDLE) return; var w = Math.max(3, Math.round(pd[2] * g)), sp = puddleSprite(k, w); c.drawImage(sp, Math.round(pd[0] - sp.width / 2), Math.round(pd[1] - sp.height / 2)); });
   }
-  var PUDDLES = [[20, 116, 11], [97, 80, 10], [60, 176, 13], [118, 162, 11], [90, 147, 9], [12, 181, 10],
+  var PEN_PUDDLE = [60, 176, 13];
+  var PUDDLES = [[20, 116, 11], [97, 80, 10], PEN_PUDDLE, [118, 162, 11], [90, 147, 9], [12, 181, 10],
                  [150, 76, 9], [122, 52, 7], [70, 77, 8], [178, 94, 6]];   // верхняя часть карты (его просьба 2026-11-19): между мельницей и колодцем, у мельницы, у улья, под колодцем   // две правые убраны — налезали на дерево у магазина   // лужи в ливень: x, y, полуширина (картинка 184×190)                                                                  // улей — на поляне между домиком и амбаром (его выбор 2026-11-18)   // сундук включён со спрайтом художника (2026-11-14)
   function jobOf(kit, kind) { var j = null; ((kit && kit.jobs) || []).forEach(function (x) { if (x.kind === kind) j = x; }); return j; }
   // ячейки мельницы и печи (2026-11-16): первая — «oven», вторая и третья — «oven:1», «oven:2»; уровень = число ячеек
@@ -2887,7 +2890,8 @@
     if (own) { var cx = 0, cy = 0; q.forEach(function (p) { cx += p[0] / 4; cy += p[1] / 4; }); drawSign(c, Math.round(cx), Math.round(cy) + 3, own, price); }
   }
   function lotPrice(kit, kind) { return ((kit && kit.build_list) || {})[kind] ? kit.build_list[kind].price : { barn: 50, mill: 200, oven: 300, shop: 500, hive: 500 }[kind]; }
-  var LOTS = { barn: [[82, 51], [100, 60], [116, 52], [98, 43]], mill: [[125, 62], [138, 67], [151, 62], [138, 57]], oven: [[26, 156], [40, 161], [54, 156], [40, 151]],
+  var LOTS = { barn: [[82, 51], [100, 60], [116, 52], [98, 43]], mill: [[125, 62], [138, 67], [151, 62], [138, 57]],
+               oven: [[OVEN[0] - 14, OVEN[1] - 4], [OVEN[0], OVEN[1] + 1], [OVEN[0] + 14, OVEN[1] - 4], [OVEN[0], OVEN[1] - 9]],
                shop: [[127, 167], [151, 179], [175, 167], [151, 155]], hive: [[64, 64], [72, 68], [80, 64], [72, 60]] };
   // магазин: прилавок под полосатым навесом, на прилавке — хлеб, банки, пирог; когда есть заказ, который можно сдать, — искорка
   function drawShop(c, t, kit, own, mossy) {                                             // магазин в изометрии: каменная площадка, вход с козырьком и ступенями, прилавки с маркизами, ящики с товаром
@@ -3563,13 +3567,35 @@
     window.__peekP = p; var st = F.state, cv = $("scenecv");
     drawFarm(cv, 47, st.plots, farmNow(), t, false, st.strains, st.dry_limit, true, st); return cv;
   };
+  var PEN_HENS = [[-12, -2], [-2, -9], [9, -3]];
+  function drawHens(c, t, kit, own, plaza, penned) {
+    var plan = kit && kit.build_list && kit.build_list.chicken_pen;
+    if (!penned && own && plan) drawSign(c, PEN[0], PEN_SIGN_Y, own, plan.price);
+    for (var i = 0; i < (penned ? PEN_HENS.length : 2); i++) {
+      var hs = t / 1000 + i * 3.3, byPlaza = i === 0 && plaza !== "none";
+      var x = penned ? PEN[0] + PEN_HENS[i][0] : byPlaza ? 120 : i ? 110 : 62;
+      var y = penned ? PEN[1] + PEN_HENS[i][1] : byPlaza ? FH - 8 : FH - (i ? 16 : 14);
+      var hx = Math.round(x + Math.sin(hs * .35 + i) * (penned ? 2 : i ? 5 : 7));
+      var hy = y + Math.round(Math.sin(hs * .5 + i * 2) * (penned ? 1 : 2));
+      var peck = Math.sin(hs * 1.7 + i) > .75 ? 1 : 0, rows = HEN[(Math.floor(t / 260) + i) % 2];
+      for (var j = 0; j < rows.length; j++) for (var q = 0; q < 6; q++) {
+        var ch = rows[j][q];
+        if (ch !== ".") px(c, hx + q, hy + j + (j < 2 ? peck : 0), 1, 1, HENPAL[ch]);
+      }
+      px(c, hx, hy + 5, 5, 1, "rgba(40,60,20,.3)");
+    }
+    if (penned && PEN_ART.complete && PEN_ART.naturalWidth) {
+      c.drawImage(PEN_ART, PEN[0] - (PEN_ART.width >> 1), PEN[1] + 14 - PEN_ART.height);
+    }
+  }
   function drawFarm(cv, seed, plots, now, t, rain, ss, dryLim, own, kit) {
     if (cv.width !== FW) { cv.width = FW; cv.height = FH; }
     var c = cv.getContext("2d"), i, L = staticLayer(seed, roofKey(kit), yardKey(kit)), YK = L.yk;
+    var penned = hasBuild(kit, "chicken_pen"), penClearing = penned || (own && kit && kit.build_list && kit.build_list.chicken_pen);
     c.drawImage(L.back, 0, 0); drawStars(c, t);
     if (hasBuild(kit, "barn")) c.drawImage(L.shed, 0, 0); else drawLot(c, LOTS.barn, own, lotPrice(kit, "barn"));
     c.drawImage(L.back2, 0, 0);
-    if ((weatherNow() || {}).id === "shower") drawPuddles(c, now);                // лужи — на земле двора и луга, под заборами и постройками
+    if ((weatherNow() || {}).id === "shower") drawPuddles(c, now, penClearing);                // лужи — на земле двора и луга, под заборами и постройками
     if (own) drawPeek(c);                                                          // ночью из-за правого угла дома иногда выглядывает силуэт
     drawMill(c, t, kit, own, now);
     drawHive(c, t, kit, own, now);
@@ -3604,12 +3630,7 @@
       disc(c, l[0], l[1], 5, "rgba(159,245,222," + (.1 + .12 * pulse).toFixed(2) + ")");
       px(c, l[0] - 1, l[1] - 1, 3, 3, C.lamp); px(c, l[0], l[1] - 2, 1, 1, "#ffffff"); px(c, l[0] - 1, l[1] + 2, 3, 1, C.k);
     });
-    for (i = 0; i < 2; i++) {                                                      // лунные куры гуляют по лугу (третья пряталась под лейкой и лопатой — убрана) — мимо печи, тропинки и магазина (его правка 2026-11-15: ходили по магазину)
-      var hs = t / 1000 + i * 3.3, hx = Math.round((i === 0 && YK.plaza !== "none" ? 120 : [62, 110, 22][i]) + Math.sin(hs * .35 + i) * [7, 5, 6][i]), hy = (i === 0 && YK.plaza !== "none" ? FH - 8 : [FH - 14, FH - 16, FH - 8][i]) + Math.round(Math.sin(hs * .5 + i * 2) * 2);
-      var peck = Math.sin(hs * 1.7 + i) > .75 ? 1 : 0, fr = (Math.floor(t / 260) + i) % 2, rowsH = HEN[fr];
-      for (var j = 0; j < rowsH.length; j++) for (var q = 0; q < 6; q++) { var ch = rowsH[j][q]; if (ch !== ".") px(c, hx + q, hy + j + (j < 2 ? peck : 0), 1, 1, HENPAL[ch]); }
-      px(c, hx, hy + 5, 5, 1, "rgba(40,60,20,.3)");
-    }
+    drawHens(c, t, kit, own, YK.plaza, penned);
     if (own && kit) drawWanderer(c, t, kit);                                        // странник — после кур: они ходят за ним, а не по нему (его правка 2026-11-16)
     for (i = 0; i < 3; i++) {                                                      // бабочки
       var s = t / 1000 + i * 2.1, bx = Math.round(30 + i * 48 + Math.sin(s * .6 + i) * 22), by = Math.round(56 + i * 40 + Math.sin(s * 1.3 + i * 2) * 9);
@@ -3632,6 +3653,7 @@
         disc(c, Math.round(cx0), cy0, 9, "rgba(70,78,96,.55)"); disc(c, Math.round(cx0 + 9), cy0 + 2, 7, "rgba(80,88,106,.5)"); disc(c, Math.round(cx0 - 8), cy0 + 3, 6, "rgba(62,70,88,.5)"); }
       // круги от капель по лужам (сами лужи — часть земли: drawPuddles)
       PUDDLES.forEach(function (pd, k) {
+        if (penClearing && pd === PEN_PUDDLE) return;
         var w = Math.max(2, Math.round(pd[2] * puddleGrow(now)));
         var rp = (t / 900 + k * .29) % 1, rr = Math.round(1 + rp * Math.min(w - 2, 3));
         if (rp < .8) { var ra = (.26 * (1 - rp / .8)).toFixed(2); px(c, pd[0] - rr, pd[1], 1, 1, "rgba(200,214,232," + ra + ")"); px(c, pd[0] + rr, pd[1], 1, 1, "rgba(200,214,232," + ra + ")");
@@ -3802,6 +3824,8 @@
     "p:gemdust": ["...s......v...", ".v.....s....s.", "....kkkkkk....", "...kmVVVVmk...", "....kVVVVk....", "...kvvsvvvVk..", "..kvvvvvsvVVk.", "..kvsvvvvvVVk.", "..kvvvvvvVVVk.", "...kkkkkkkkk.."],
     "p:coal":    ["......F.......", ".....kfk......", "...kkAzkk.....", "..kAzzAaAkk...", ".kAzAaAfAzAk..", ".kaAaFaAaAaAk.", "kaAfaAaAzaAaAk", "kaaAaaAfaAaaak", ".kkaaaaaaaakk.", "...kkkkkkkk..."],
     "p:flour":   ["......kk......", ".....kmmk.....", "....kWWWWk....", "...kWWWWWwk...", "..kWWWWWWwwk..", "..kWWyyyWwwk..", ".kWWWyWyWWwxk.", ".kWWWyyyWWwxk.", ".kWWWWWWWwwxk.", ".kwWWWWWWwxxk.", "..kxwwwwwxxk..", "...kkkkkkkk..."],
+    "p:egg":     ["......kk......", ".....kWWk.....", "....kWWWwk....", "...kWWWWwwk...", "...kWWWWwwk...", "..kWWWWWwwxk..", "..kWWWWwwwxk..", "..kwWWWwwxxk..", "...kwwwwxxk...", "....kkkkkk...."],
+    "p:omelet":  ["..............", ".....kkkk.....", "...kkWWWWk....", "..kWsWWWWWk...", "..kWWWWyWWwk..", "..kWyWWWWwwk..", ".kcwwwwwwxxck.", "kcccccccccccck", ".kCCcWWWWcCCk.", "..kkCCCCCCkk..", "....kkkkkk...."],
     "p:bread":   ["..............", "....kkkkkk....", "..kkhhyhhbkk..", ".khhyhhbhhbbk.", "khyhbhhyhbbbBk", "kbhhbbhhbbbbBk", "kbbbbbbbbbbBBk", ".kBbbbbbbbBBk.", "..kkkkkkkkkk.."],
     "p:soup":    ["...s....s.....", "....s....s....", "...s....s.....", ".kkkkkkkkkkkk.", "kegGgeggGgegGk", "kcccccccccccCk", ".kcuuuuuuuuCk.", "..kcccccccCk..", "...kkkkkkkk..."],
     "p:bun":     ["..............", ".....kkkk.....", "...kkhyyhkk...", "..khyRphhbbk..", ".khhRrhhRpbbk.", ".kbhhhhhRrbBk.", ".kbbhhbbbbbBk.", "..kBbbbbbbBk..", "...kkkkkkkk..."],
@@ -4666,6 +4690,20 @@
         kb.appendChild(el("span", "lbl water" + (done ? " ready" : ""), txt));
         kb.onclick = function () { haptic("light"); kitchenSheet(q[0]); }; box.appendChild(kb);
       });
+      var penPlan = (F.state.build_list || {}).chicken_pen;
+      var penBuilt = hasBuild(F.state, "chicken_pen");
+      if (penBuilt ? F.state.chicken_pen : penPlan) {
+        var pb = el("button", "plot well kitchen");
+        pb.type = "button";
+        var penWidth = penBuilt ? PEN_ART.naturalWidth || 60 : 26;
+        pb.style.left = (PEN[0] - penWidth / 2) / FW * 100 + "%";
+        pb.style.top = (penBuilt ? PEN[1] - 13 : PEN_SIGN_Y - 17) / FH * 100 + "%";
+        pb.style.width = penWidth / FW * 100 + "%";
+        pb.style.height = (penBuilt ? 27 : 22) / FH * 100 + "%";
+        pb.setAttribute("aria-label", penBuilt ? "Курятник" : "Купить загон для куриц");
+        pb.onclick = function () { haptic("light"); if (penBuilt) chickenSheet(); else penSheet(); };
+        box.appendChild(pb);
+      }
     }
   }
   function fillCan() {
@@ -5605,17 +5643,19 @@
             UPGRADES_ON.oven && ["Ячейки печи", "Печь можно прокачать — нажми на неё, внизу ячеек кнопка «Ещё ячейка». Каждая прокачка — ещё одна ячейка, всего до трёх: в них печётся одновременно. Вторая — ✦ 600, третья — ✦ 1500. Печь на ферме при этом перестраивается."],
             ["Улей", "Стоит ✦ 500, ставится на поляне между домиком и амбаром. Пчёлы собирают мёд с каждого созревшего растения: под грядкой идёт оранжевый таймер «мёд» — половина срока роста, от 10 минут до 2 часов. Таймер идёт и без тебя. Растение простояло до конца — в улье баночка мёда; соберёшь раньше — мёда не будет. В окне улья видно, что сейчас собирают, со шкалами, и что уже готово; готовое — кнопкой «Забрать в амбар»."],
             ["Мёд", "Берёт расцветку растения, а сорт — по его цене: второй ✦ 3, первый ✦ 8, высший ✦ 20, мифический — втрое дороже. Продаётся в амбаре и в лавке, идёт в печь на медовые блюда (подойдёт мёд любого сорта, берётся самый дешёвый). В магазине бывают заказы «Медовое» — у тех, у кого есть улей."],
+            ["Курятник", "Из трёх семян получается одно яйцо за 17 минут. Готовые яйца забери в амбар. Для омлета нужно два яйца."],
             ["Отменить", "Пока блюдо или мука не готовы, их можно отменить — всё сырьё вернётся в амбар. Готовое не отменить, только забрать."],
             ["Готовое", "Мука и блюда ложатся в амбар. Их можно превратить в пыль — блюдо стоит дороже, чем урожай, из которого оно приготовлено, — продать другим игрокам в лавке или сдать по заказу в магазин. За выпечку дают очки."],
           ]);
-          var rs = (F.state && F.state.recipes) || {}, NEEDW = { moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:honey": "мёд", "p:gem": "лунный самоцвет", "p:gem-crop": "бирюзовый самоцвет", "p:gem-seed": "травяной самоцвет", "p:gem-dew": "золотой самоцвет", "p:gem-cross": "розовый самоцвет" };
+          var rs = (F.state && F.state.recipes) || {};
           var rl = el("div", "recipes");
           Object.keys(rs).forEach(function (k) {
             if (k === "brew") return;                              // странная похлёбка — не для справочника
             if (k.indexOf("gemdust") === 0) return;                // помол самоцветов — на странице «Самоцветы», не среди рецептов кухни
             var r = rs[k], row = el("div", "rrow"), cv = el("canvas", "pix"); itemIcon(cv, "p:" + k); row.appendChild(cv);
             var tx = el("div"); tx.appendChild(el("b", "", r.name + (r.kind === "mill" ? " · мельница" : "")));
-            tx.appendChild(el("div", "rneed", Object.keys(r.needs).map(function (n) { return (NEEDW[n] || n) + " ×" + r.needs[n]; }).join(" + ") + " · ⏱ " + fmtLeft(r.min * 60) + " · ✦ " + r.dust));
+            var sat = k === "omelet" ? satOfItem("p:" + k) : 0;
+            tx.appendChild(el("div", "rneed", Object.keys(r.needs).map(function (n) { return (NEED[n] || n) + " ×" + r.needs[n]; }).join(" + ") + " · ⏱ " + fmtLeft(r.min * 60) + " · ✦ " + r.dust + (sat ? " · сытость " + sat : "")));
             row.appendChild(tx); rl.appendChild(row);
           });
           page.appendChild(rl);
@@ -5695,6 +5735,20 @@
     farmCall("/api/farm/seed-dust", { strain: id, n: n, from: from }).catch(function () {});
   }
   function chestOf(id) { var r = null; (F.state.chest || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
+  function storageSeedGrid(box, title, items, selected, countOf, onSelect) {
+    var h = el("div", "mono", title); h.style.marginTop = "16px"; box.appendChild(h);
+    var g = el("div", "invgrid");
+    items.forEach(function (it) {
+      var st = F.state.strains[it.strain], n = countOf(it);
+      var b = el("button", "slot" + (selected === it.strain ? " on" : "")); b.type = "button";
+      b.setAttribute("aria-label", st.name + " · " + n);
+      var cv = el("canvas", "pix"); cropIcon(cv, st); b.appendChild(cv); b.appendChild(el("span", "n", n));
+      b.onclick = function () { haptic("light"); onSelect(it.strain); };
+      g.appendChild(b);
+    });
+    for (var k = items.length; k < Math.max(5, Math.ceil(items.length / 5) * 5); k++) g.appendChild(el("div", "slot empty"));
+    box.appendChild(g);
+  }
   function chestSheet() {
     var s = F.state; if (!s) return;
     sheet(function (sh, close) {
@@ -5706,17 +5760,10 @@
         box.innerHTML = "";
         var cur = F.state, sel = F.chestSel, inChest = (cur.chest || []).filter(function (it) { return it.count > 0 && cur.strains[it.strain]; }), inBag = seedItems();
         var grid = function (title, items, from) {
-          var h = el("div", "mono", title); h.style.marginTop = "16px"; box.appendChild(h);
-          var g = el("div", "invgrid");
-          items.forEach(function (it) {
-            var n = from === "bag" ? freeOf(it) : it.count, key = from + ":" + it.strain;
-            var b = el("button", "slot" + (sel === key ? " on" : "")); b.type = "button";
-            var cv = el("canvas", "pix"); cropIcon(cv, cur.strains[it.strain]); b.appendChild(cv); b.appendChild(el("span", "n", n));
-            b.onclick = function () { haptic("light"); F.chestSel = sel === key ? null : key; draw(); };
-            g.appendChild(b);
-          });
-          for (var k = items.length; k < Math.max(5, Math.ceil(items.length / 5) * 5); k++) g.appendChild(el("div", "slot empty"));
-          box.appendChild(g);
+          var prefix = from + ":";
+          storageSeedGrid(box, title, items, sel && sel.indexOf(prefix) === 0 ? sel.slice(prefix.length) : null,
+            from === "bag" ? freeOf : function (it) { return it.count; },
+            function (id) { var key = prefix + id; F.chestSel = sel === key ? null : key; draw(); });
         };
         grid(inChest.length ? "В сундуке" : "В сундуке пусто", inChest, "chest");
         grid("В инвентаре", inBag, "bag");
@@ -6013,7 +6060,7 @@
     });
   }
   // мельница и печь: построить → выбрать рецепт → ждать → забрать в амбар
-  var NEED = { "p:eye": "странный глаз", moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:honey": "мёд", "p:gem": "лунный самоцвет", "p:gem-crop": "бирюзовый самоцвет", "p:gem-seed": "травяной самоцвет", "p:gem-dew": "золотой самоцвет", "p:gem-cross": "розовый самоцвет" };
+  var NEED = { "p:egg": "яйца", "p:eye": "странный глаз", moss: "мох", berry: "ягоды", crystal: "хрусталь", grain: "колосья", flower: "звездоцвет", mushroom: "грибы", pumpkin: "тыква", cactus: "кактус", "p:flour": "мука", "p:honey": "мёд", "p:gem": "лунный самоцвет", "p:gem-crop": "бирюзовый самоцвет", "p:gem-seed": "травяной самоцвет", "p:gem-dew": "золотой самоцвет", "p:gem-cross": "розовый самоцвет" };
   function fitsNeed(id, need, recipe, sort) {
     var s = F.state;
     var hon = s.recipes && s.recipes[recipe] && s.recipes[recipe].needs["p:honey"];
@@ -6155,7 +6202,7 @@
   // печь и мельница (его схема 2026-11-15, ячейки и отмена — 2026-11-16): вверху ячейки готовки (одна, после прокачки — до трёх),
   // ниже категории — в каждой маленькие ячейки того, что можно сделать из своего сырья; выбрал → «Испечь» → готовится в свободной ячейке.
   // Пока не готово — можно отменить: сырьё вернётся в амбар.
-  var OVEN_CATS = [["Хлеб", ["bread"]], ["Булочки", ["bun"]], ["Похлёбка", ["soup", "stew", "brew"]], ["Пироги", ["pie", "pumpkin"]], ["Чай", ["tea"]], ["Джем", ["jam"]], ["Медовое", ["honeycake", "honeytea", "honeypie", "honeycandy", "honeypumpkin"]]];
+  var OVEN_CATS = [["Хлеб", ["bread"]], ["Булочки", ["bun"]], ["Похлёбка", ["soup", "stew", "brew"]], ["Пироги", ["pie", "pumpkin"]], ["Чай", ["tea"]], ["Джем", ["jam"]], ["Омлет", ["omelet"]], ["Медовое", ["honeycake", "honeytea", "honeypie", "honeycandy", "honeypumpkin"]]];
   var MILL_CATS = [["Мука", ["flour"]], ["Самоцветы", ["gemdust", "gemdust-crop", "gemdust-seed", "gemdust-dew", "gemdust-cross"]]];   // самоцветы странника → самоцветная пыль (2026-11-16)
   function kitchenBody(sh, close, b, kind) {
     var s = F.state, mill = kind === "mill", top = el("div"), body = el("div");
@@ -6284,6 +6331,100 @@
       var tn = farmNow(), lbl = jobsOf(s, kind).map(function (j) { return j.ready <= tn ? "ready" : fmtLeft(j.ready - tn); }).join("|");
       if (lbl !== lastLbl) { lastLbl = lbl; drawTop(); }
     }, 1000);
+  }
+  function chickenSheet() {
+    sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", "Курятник"));
+      var box = el("div"), foot = el("div", "sheetfoot"), actions = el("div");
+      var selected = null, busy = false, clock = null, fill = null, nextRefresh = 0;
+      var tick = function () {
+        var pen = F.state.chicken_pen;
+        if (!clock || !pen || !pen.ready) return;
+        var left = pen.ready - farmNow();
+        clock.textContent = left > 0 ? "Яйцо через " + fmtLeft(left) : "Яйцо готово";
+        var percent = Math.round(100 * Math.max(0, Math.min(1, 1 - left / (pen.ready - pen.started))));
+        fill.style.width = percent + "%";
+        fill.parentNode.setAttribute("aria-valuenow", percent);
+        if (left <= 0 && !busy && !F.pending && Date.now() >= nextRefresh) {
+          nextRefresh = Date.now() + 3000;
+          loadFarm().then(function () { if (sh.isConnected) draw(); }).catch(function () {});
+        }
+      };
+      var send = function (path, data) {
+        if (busy) return;
+        busy = true; draw();
+        farmCall(path, data).then(function (r) {
+          if (!r.error) haptic("success");
+        }).catch(function () {}).finally(function () { busy = false; if (sh.isConnected) draw(); });
+      };
+      var draw = function () {
+        var pen = F.state.chicken_pen;
+        if (!pen) { close(); return; }
+        box.innerHTML = actions.innerHTML = "";
+        clock = null;
+        if (pen.eggs) {
+          var nest = el("div", "ovtop multi"), egg = el("div", "slot ovslot"), cv = el("canvas", "pix");
+          itemIcon(cv, "p:egg"); egg.appendChild(cv); egg.appendChild(el("span", "n", pen.eggs));
+          var take = btn(pen.has_barn ? "Забрать яйца в амбар" : "Нужен амбар", "", function () {
+            send("/api/farm/chicken-collect", {});
+          });
+          take.disabled = busy || !pen.has_barn;
+          nest.appendChild(egg); nest.appendChild(take); box.appendChild(nest);
+        }
+        if (pen.ready) {
+          var progress = el("div", "ovinfo"), bar = el("div", "ovbar");
+          clock = el("small");
+          fill = el("i");
+          bar.setAttribute("role", "progressbar");
+          bar.setAttribute("aria-label", "Готовность следующего яйца");
+          bar.appendChild(fill); progress.appendChild(clock); progress.appendChild(bar);
+          box.appendChild(progress); tick();
+        }
+        var seeds = seedItems(), waiting = pen.feed, countInPen = function (it) { return it.count; };
+        var picked = selected && (selected.fromPen ? waiting : seeds).find(function (it) { return it.strain === selected.id; });
+        if (!picked) selected = null;
+        var grid = function (title, items, fromPen, countOf) {
+          storageSeedGrid(box, title, items, selected && selected.fromPen === fromPen ? selected.id : null, countOf, function (id) {
+            if (busy) return;
+            selected = selected && selected.id === id && selected.fromPen === fromPen ? null : { id: id, fromPen: fromPen };
+            draw();
+          });
+        };
+        grid("Кормушка", waiting, true, countInPen);
+        grid("В инвентаре", seeds, false, freeOf);
+        if (!selected) {
+          actions.appendChild(el("div", "sub", pen.per_egg + " семени расходуются на одно яйцо."));
+          return;
+        }
+        var id = selected.id, fromPen = selected.fromPen, have = fromPen ? picked.count : freeOf(picked);
+        actions.appendChild(el("div", "sub", itemName(id)));
+        qtyBox(actions, { key: "chicken:" + (fromPen ? "pen:" : "bag:") + id, max: function () { return Math.min(have, 100000); },
+          acts: [{ t: function (n) { return (fromPen ? "Забрать " : "В курятник ") + n; }, max: function () { return busy ? 0 : have; },
+            run: function (n) { send("/api/farm/chicken-feed", { strain: id, n: fromPen ? -n : n }); } }] });
+      };
+      var closeRow = el("div", "salebtns"); closeRow.appendChild(btn("Готово", "", close));
+      foot.appendChild(actions); foot.appendChild(closeRow); sh.appendChild(box); sh.appendChild(foot);
+      draw();
+      var timer = setInterval(function () { if (!sh.isConnected) clearInterval(timer); else tick(); }, 1000);
+    });
+  }
+  function penSheet() {
+    var plan = (F.state.build_list || {}).chicken_pen;
+    if (!plan || hasBuild(F.state, "chicken_pen")) return;
+    sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", plan.name));
+      sh.appendChild(el("div", "sub", "В загоне будут гулять три лунные курицы."));
+      var buy = btn("Купить за ✦ " + plan.price, "", function () {
+        buy.disabled = true;
+        farmCall("/api/farm/build", { kind: "chicken_pen" }).then(function (r) {
+          if (r.error) { buy.disabled = F.state.dust < plan.price; return; }
+          haptic("success"); toast("Загон построен!"); close();
+        }).catch(function () { buy.disabled = F.state.dust < plan.price; });
+      });
+      buy.disabled = F.state.dust < plan.price;
+      sh.appendChild(buy);
+      sh.appendChild(btn("Не сейчас", "ghost", close));
+    });
   }
   function kitchenSheet(kind) {
     var s = F.state; if (!s) return;

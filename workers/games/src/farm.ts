@@ -775,12 +775,14 @@ async function farmState1(u: any, t: number) {
   const FER: Record<number, { n: number; c: number }> = {};    // удобрение на текущих посадках
   for (const [i, n, pl, c] of await q("SELECT idx, n, planted, credit FROM f_fert WHERE user = ?", [u.id])) if (by.get(Number(i)) && Number(by.get(Number(i))[2]) === Number(pl)) FER[Number(i)] = { n: Number(n), c: Number(c) };
   const kit = await kitchenOf(u.id);                           // один раз на запрос: раньше постройки, работы и уровни читались дважды, а работы — трижды
+  const chicken_pen = kit.builds.includes("chicken_pen") ? { ...await chickenPenState(u.id, t), has_barn: kit.builds.includes("barn") } : null;
   return {
+    chicken_pen,
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked), EVS[i], HON[i], FER[i])), events_seen: await seenEvents(u.id),
     stars: (await q("SELECT id, x, y, dust FROM f_stars WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
     clumps: (await q("SELECT id, x, y, dust FROM f_clumps WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
-    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain)]),
+    strains: await strains([...plots.map((p) => p[1]), ...inv.map((i) => i.strain), ...sales.map((x) => x[1]), ...bs.filter((x) => !x.startsWith("p:")), ...bs.map(sortOf).filter(Boolean), ...chest.map((x) => x.strain), ...(chicken_pen?.feed.map((x) => x.strain) || [])]),
     ...kit, ...(await decorView(u.id)), recipes: RECIPES, satmap: satMap(), products: (await productsFor([...bs, ...kit.jobs.map((j: any) => "p:" + j.recipe)])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await metWanderer(u.id, await wandererView(u.id)), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
     slimes: !dgOpen() && (await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = 'promo:slimes'", [u.id])).length > 0,   // только до открытия подземелья (его решение: после 00:00 не запускать)   // нашествие слизней (промо подземелья, 2026-11-20)
@@ -1145,10 +1147,13 @@ export const BUILDS: Record<string, { name: string; price: number; max: number; 
   oven: { name: "Печь",     price: 300, max: 5,  up: [600, 1500] },
   shop: { name: "Магазин",  price: 500, max: 0 },     // заказы жителей станции на блюда (2026-11-15)
   hive: { name: "Улей",     price: 500, max: 0 },     // пчёлы собирают мёд с созревших растений (его идея 2026-11-18)
+  chicken_pen: { name: "Загон для куриц", price: 500, max: 0 },
 };
+const CHICKEN_FEED_PER_EGG = 3, CHICKEN_EGG_SECONDS = 17 * 60;
 export const RECIPES: Record<string, { kind: string; name: string; needs: Record<string, number>; min: number; dust: number; points: number }> = {
   flour:  { kind: "mill", name: "Мука",               needs: { grain: 1 },                       min: 3,  dust: 7,   points: 0 },
   bread:  { kind: "oven", name: "Лунный хлеб",        needs: { "p:flour": 2 },                   min: 10, dust: 18,  points: 1 },
+  omelet: { kind: "oven", name: "Омлет",              needs: { "p:egg": 2 },                     min: 10, dust: 12,  points: 1 },
   soup:   { kind: "oven", name: "Суп из мха",         needs: { moss: 2, berry: 1 },              min: 10, dust: 36,  points: 1 },
   bun:    { kind: "oven", name: "Ягодная булочка",    needs: { "p:flour": 1, berry: 2 },         min: 20, dust: 55,  points: 2 },
   pie:    { kind: "oven", name: "Звёздный пирог",     needs: { "p:flour": 2, berry: 1, crystal: 1 }, min: 60, dust: 140, points: 4 },
@@ -1172,6 +1177,7 @@ export const RECIPES: Record<string, { kind: string; name: string; needs: Record
   "gemdust-cross": { kind: "mill", name: "Розовая самоцветная пыль",   needs: { "p:gem-cross": 1 }, min: 5, dust: 40, points: 0 },
 };
 const PRODUCTS: Record<string, { name: string; dust: number }> = Object.fromEntries(Object.entries(RECIPES).map(([k, r]) => ["p:" + k, { name: r.name, dust: r.dust }]));
+PRODUCTS["p:egg"] = { name: "Яйцо", dust: 5 };
 PRODUCTS["p:coal"] = { name: "Звёздный уголь", dust: 120 };
 PRODUCTS["p:eye"] = { name: "Странный глаз", dust: 60 };          // урожай странного растения (2026-11-18): в амбаре отдельно от его семени
 PRODUCTS["p:gem"] = { name: "Лунный самоцвет", dust: 30 };
@@ -1313,6 +1319,105 @@ export function productInfo(id: string, ss: Record<string, Strain>) {
   const dust = Math.round(base * (g.myth ? 3 : 1));                     // еда с мифическим — ×3
   return { name: r.name, dust, sort: g.id, sort_name: g.name, color: g.color, ...(g.myth ? { myth: true } : {}) };
 }
+type ChickenFeed = { strain: string; count: number };
+type ChickenPen = { feed: ChickenFeed[]; ready: number; eggs: number };
+const CHICKEN_PEN_READ = "SELECT feed, ready, eggs, rev FROM f_chicken_pen WHERE user = ?";
+
+function consumeChickenFeed(pen: ChickenPen, n: number) {
+  pen.feed = pen.feed.filter((item) => {
+    const take = Math.min(n, item.count);
+    item.count -= take;
+    n -= take;
+    return item.count > 0;
+  });
+}
+
+function advanceChickenPen(pen: ChickenPen, t: number) {
+  const per = CHICKEN_FEED_PER_EGG, waiting = pen.feed.reduce((sum, item) => sum + item.count, 0);
+  if (pen.ready && pen.ready <= t) {
+    // Первый цикл уже получил корм при запуске. Дальнейшие используют ожидающие семена.
+    const elapsed = 1 + Math.floor((t - pen.ready) / CHICKEN_EGG_SECONDS);
+    const fromFeed = Math.min(elapsed - 1, Math.floor(waiting / per));
+    pen.eggs += 1 + fromFeed;
+    consumeChickenFeed(pen, fromFeed * per);
+    if (waiting - fromFeed * per >= per) {
+      consumeChickenFeed(pen, per);
+      pen.ready += elapsed * CHICKEN_EGG_SECONDS;
+    } else pen.ready = 0;
+  } else if (!pen.ready && waiting >= per) {
+    consumeChickenFeed(pen, per);
+    pen.ready = t + CHICKEN_EGG_SECONDS;
+  }
+  return pen;
+}
+
+function readChickenPen(row: any[] | undefined, t: number): ChickenPen {
+  return advanceChickenPen({ feed: JSON.parse(row?.[0] || "[]"), ready: Number(row?.[1] || 0), eggs: Number(row?.[2] || 0) }, t);
+}
+async function chickenPenState(uid: number, t: number) {
+  const [row] = await q(CHICKEN_PEN_READ, [uid]);
+  const pen = readChickenPen(row, t);
+  return { ...pen, started: pen.ready ? pen.ready - CHICKEN_EGG_SECONDS : 0, per_egg: CHICKEN_FEED_PER_EGG };
+}
+
+async function changeChickenPen(u: any, change: (pen: ChickenPen, t: number) =>
+  { error: string } | { transfer: any; debit?: { strain: string; n: number } }) {
+  await q(`INSERT OR IGNORE INTO f_chicken_pen (user)
+           SELECT user FROM f_builds WHERE user = ? AND kind = 'chicken_pen'`, [u.id]);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const [row] = await q(CHICKEN_PEN_READ, [u.id]);
+    if (!row) return { error: "Сначала построй курятник" };
+    const t = now(), pen = readChickenPen(row, t), action = change(pen, t);
+    if ("error" in action) return action;
+    const debit = action.debit;
+    const [saved] = await DB.batch([
+      DB.prepare(`UPDATE f_chicken_pen SET feed = ?, ready = ?, eggs = ?, rev = rev + 1
+                  WHERE user = ? AND rev = ?
+                    AND (? = 0 OR EXISTS (SELECT 1 FROM f_inv WHERE user = ? AND strain = ? AND count - listed >= ?))
+                  RETURNING 1`)
+        .bind(JSON.stringify(pen.feed), pen.ready, pen.eggs, u.id, Number(row[3]), debit?.n || 0, u.id, debit?.strain || "", debit?.n || 0),
+      action.transfer,
+    ]);
+    if ((saved.results || []).length) return { farm: await farmState(u) };
+    const [current] = await q(CHICKEN_PEN_READ, [u.id]);
+    if (current && Number(current[3]) === Number(row[3])) return { error: "Столько свободных семян нет" };
+  }
+  return { error: "Курятник уже обновился. Попробуй ещё раз" };
+}
+
+export async function feedChickens(u: any, strain: string, n: number) {
+  if (!strain || !Number.isSafeInteger(n) || !n || Math.abs(n) > 100000)
+    return { error: "Выбери семена и количество" };
+  return changeChickenPen(u, (pen, t) => {
+    const item = pen.feed.find((it) => it.strain === strain);
+    if (n > 0) {
+      if (item) item.count += n;
+      else pen.feed.push({ strain, count: n });
+      advanceChickenPen(pen, t);
+      return { debit: { strain, n }, transfer: DB.prepare("UPDATE f_inv SET count = count - ? WHERE user = ? AND strain = ? AND changes() = 1").bind(n, u.id, strain) };
+    }
+    if (!item || item.count < -n) return { error: "Столько семян в кормушке уже нет" };
+    item.count += n;
+    pen.feed = pen.feed.filter((it) => it.count > 0);
+    return { transfer: DB.prepare(`INSERT INTO f_inv (user, strain, count, listed)
+                  SELECT ?, ?, ?, 0 WHERE changes() = 1
+                  ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, strain, -n) };
+  });
+}
+
+export async function collectEggs(u: any) {
+  if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length)
+    return { error: "Сначала построй амбар, чтобы забрать яйца" };
+  return changeChickenPen(u, (pen) => {
+    if (!pen.eggs) return { error: "Яиц пока нет" };
+    const n = pen.eggs;
+    pen.eggs = 0;
+    return { transfer: DB.prepare(`INSERT INTO f_barn (user, strain, count)
+                  SELECT ?, 'p:egg', ? WHERE changes() = 1
+                  ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, n) };
+  });
+}
+
 function productIds(ids: string[]) { return ids.filter((x) => String(x).startsWith("p:")); }
 async function productsFor(ids: string[]) {
   const ss = await strains(productIds(ids).map(sortOf).filter(Boolean)), out: Record<string, any> = { ...PRODUCTS };
@@ -1365,10 +1470,17 @@ export async function build(u: any, kind: string) {
   await ensureFarm(u);
   if (kind === "shop" && !(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind IN ('mill', 'oven')", [u.id])).length)
     return { error: "Сначала построй мельницу или печь: магазин заказывает блюда" };
-  if ((await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, kind])).length) return { error: "Уже построено" };
-  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [b.price, u.id, b.price])).length)
+  // В одной транзакции покупку получает первый запрос, и только он списывает пыль.
+  const [placed] = await DB.batch([
+    DB.prepare(`INSERT OR IGNORE INTO f_builds (user, kind, at)
+                SELECT user, ?, ? FROM f_farms WHERE user = ? AND dust >= ? RETURNING 1`)
+      .bind(kind, now(), u.id, b.price),
+    DB.prepare("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND changes() = 1").bind(b.price, u.id),
+  ]);
+  if (!(placed.results || []).length) {
+    if ((await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, kind])).length) return { error: "Уже построено" };
     return { error: "Не хватает звёздной пыли" };
-  await q("INSERT OR IGNORE INTO f_builds (user, kind, at) VALUES (?, ?, ?)", [u.id, kind, now()]);
+  }
   return { farm: await farmState(u) };
 }
 // загрузить n порций рецепта: ингредиенты списываются из амбара сразу (самые дешёвые подходящие)
@@ -2025,7 +2137,7 @@ export async function forgetFarm(uid: number) {
   await q("DELETE FROM f_feed WHERE actor = ? OR target = ?", [uid, uid]);              // из ленты новостей — тоже
   // всё, что добавилось после (его решение 2026-11-20: удалил данные — теряешь всё наигранное): украшения, улей, подземелье…
   for (const t of ["f_chest", "f_stars", "f_cratercrop", "f_prices", "f_mono", "f_monomark", "f_clumps", "f_notify", "f_orders", "f_decor", "f_style",
-                   "f_yard", "f_shell", "f_honey", "f_hive", "f_wet", "f_fert", "d_hero", "d_pack", "d_bite", "d_myth", "d_brew", "d_secret", "d_armor", "d_altar"])
+                   "f_yard", "f_shell", "f_honey", "f_hive", "f_chicken_pen", "f_wet", "f_fert", "d_hero", "d_pack", "d_bite", "d_myth", "d_brew", "d_secret", "d_armor", "d_altar"])
     await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
   // карты отвязываются: становятся ничьими (user = 0), в журнал — запись «владелец удалил данные». Сами карты и журнал не стираются
   for (const [id] of await q("SELECT id FROM d_cards WHERE user = ?", [uid])) {
@@ -2169,7 +2281,7 @@ PRODUCTS["p:ration"] = { name: "Сухпайки", dust: 5 };
 // сытость — свой параметр, не очки за готовку (его решение 2026-11-20): вдвое больше прежней, вход в подземелья прежний (1/2/4) —
 // одним блюдом спускаются вдвое чаще; удобрение — вдвое больше костей (80) и вдвое быстрее (10 мин), так что пыли и удобрений на ту же еду
 // выходит столько же. Странная похлёбка — 4 (хватает ровно на большое) и съедается вся. Сухпайки — 4 пайка по 2 = 8
-export const DG_SAT: Record<string, number> = { bread: 2, soup: 2, bun: 4, pie: 8, tea: 4, stew: 6, pumpkin: 6, jam: 6, brew: 4,
+export const DG_SAT: Record<string, number> = { bread: 2, omelet: 8, soup: 2, bun: 4, pie: 8, tea: 4, stew: 6, pumpkin: 6, jam: 6, brew: 4,
   honeycake: 4, honeytea: 4, honeypie: 6, honeycandy: 8, honeypumpkin: 6 };
 export const RATION_SAT = 8;
 function recSat(k: string) { const r = RECIPES[k]; return r && r.kind === "oven" && r.points > 0 ? (DG_SAT[k] ?? r.points * 2) : 0; }

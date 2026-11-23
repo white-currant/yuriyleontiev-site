@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS f_inv (user INTEGER NOT NULL, strain TEXT NOT NULL, c
 CREATE TABLE IF NOT EXISTS f_barn (user INTEGER NOT NULL, strain TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, strain));
 -- кухня: купленные строения (mill, oven) и задание в каждом (одно на строение)
 CREATE TABLE IF NOT EXISTS f_builds (user INTEGER NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (user, kind));
+CREATE TABLE IF NOT EXISTS f_chicken_pen (user INTEGER PRIMARY KEY, feed TEXT NOT NULL DEFAULT '[]', ready INTEGER NOT NULL DEFAULT 0, eggs INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS f_jobs (user INTEGER NOT NULL, kind TEXT NOT NULL, recipe TEXT NOT NULL, n INTEGER NOT NULL,
   started INTEGER NOT NULL, ready INTEGER NOT NULL, PRIMARY KEY (user, kind));
 -- прокачка мельницы и печи (2026-11-16): уровень = число ячеек (нет строки — одна); что списано в ячейку — для отмены
