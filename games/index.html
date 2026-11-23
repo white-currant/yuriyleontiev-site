@@ -3792,7 +3792,10 @@
   }
   function farmCall(path, body) {
     F.pending++; F.mutAt = Date.now();
-    return call(path, body).then(function (r) {
+    var send = function () { return call(path, body); };
+    // Пока сбор подтверждается, следующие действия уже видны в игре, но на сервер идут после него.
+    var request = F.eggCollection ? F.eggCollection.then(send, send) : send();
+    return request.then(function (r) {
       F.pending--;
       if (r.error) { toast(r.error); if (!F.pending) loadFarm(); return r; }
       if (r.farm && !F.pending) setFarm(r.farm);
@@ -6357,7 +6360,7 @@
     sheet(function (sh, close) {
       sh.appendChild(el("h3", "", "Курятник"));
       var box = el("div"), foot = el("div", "sheetfoot"), actions = el("div");
-      var selected = null, busy = false, clock = null, fill = null, nextRefresh = 0;
+      var selected = null, busy = false, clock = null, fill = null, nextRefresh = 0, drawnState;
       var tick = function () {
         var pen = F.state.chicken_pen;
         if (!clock || !pen || !pen.ready) return;
@@ -6378,18 +6381,39 @@
           if (!r.error) haptic("success");
         }).catch(function () {}).finally(function () { busy = false; if (sh.isConnected) draw(); });
       };
+      var collect = function () {
+        var state = F.state, pen = state.chicken_pen;
+        if (busy || F.eggCollection || !pen || !pen.has_barn || !pen.eggs) return;
+        var n = pen.eggs;
+        pen.eggs = 0;
+        barnAdd("p:egg", n);
+        haptic("success"); toast("В амбаре +" + n + " " + plural(n, "яйцо", "яйца", "яиц"));
+        var restore = function () {
+          if (F.state !== state) return;
+          pen.eggs += n;
+          var eggs = barnOf("p:egg");
+          if (eggs) eggs.count = Math.max(0, eggs.count - n);
+          renderFarm();
+        };
+        F.eggCollection = farmCall("/api/farm/chicken-collect", {}).then(function (r) {
+          if (r.error) restore();
+        }, restore).finally(function () {
+          F.eggCollection = null;
+          if (sh.isConnected) draw();
+        });
+        renderFarm(); draw();
+      };
       var draw = function () {
-        var pen = F.state.chicken_pen;
+        drawnState = F.state;
+        var pen = drawnState.chicken_pen;
         if (!pen) { close(); return; }
         box.innerHTML = actions.innerHTML = "";
         clock = null;
         if (pen.eggs) {
           var nest = el("div", "ovtop multi"), egg = el("div", "slot ovslot"), cv = el("canvas", "pix");
           itemIcon(cv, "p:egg"); egg.appendChild(cv); egg.appendChild(el("span", "n", pen.eggs));
-          var take = btn(pen.has_barn ? "Забрать яйца в амбар" : "Нужен амбар", "", function () {
-            send("/api/farm/chicken-collect", {});
-          });
-          take.disabled = busy || !pen.has_barn;
+          var take = btn(pen.has_barn ? "Забрать яйца в амбар" : "Нужен амбар", "", collect);
+          take.disabled = busy || !!F.eggCollection || !pen.has_barn;
           nest.appendChild(egg); nest.appendChild(take); box.appendChild(nest);
         }
         if (pen.ready) {
@@ -6423,7 +6447,11 @@
       var closeRow = el("div", "salebtns"); closeRow.appendChild(btn("Готово", "", close));
       foot.appendChild(actions); foot.appendChild(closeRow); sh.appendChild(box); sh.appendChild(foot);
       draw();
-      var timer = setInterval(function () { if (!sh.isConnected) clearInterval(timer); else tick(); }, 1000);
+      var timer = setInterval(function () {
+        if (!sh.isConnected) clearInterval(timer);
+        else if (drawnState !== F.state) draw();
+        else tick();
+      }, 1000);
     });
   }
   function penSheet() {
