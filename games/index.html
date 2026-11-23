@@ -7216,7 +7216,7 @@
       if (v.error) return toast(v.error);
       F.visiting = { pub: pub, seed: parseInt(pub.slice(0, 6), 16), rain_until: v.rain_until, plots: v.plots, now: v.now, fetched: Date.now(), odd_win: v.odd_win, odd_for: v.odd_for, odd_near: v.odd_near,
                      strains: v.strains, dry_limit: v.dry_limit, weather: v.weather, showers: v.showers,
-                     builds: v.builds || [], jobs: v.jobs || [], levels: v.levels || {}, mono: v.mono, marks: v.marks || [], boost: v.boost || [], roof: v.roof };            // постройки соседа — иначе в гостях видны пустые участки
+                     builds: v.builds || [], jobs: v.jobs || [], levels: v.levels || {}, mono: v.mono, marks: v.marks || [], boost: v.boost || [], roof: v.roof, yard: v.yard };   // постройки и оформление соседа — иначе анимация показывает стандартный двор
       show("farm-visit"); $("vtitle").textContent = v.name;
       drawFarm($("visitcv"), F.visiting.seed, v.plots, v.now, Date.now(), v.rain_until > v.now, v.strains, v.dry_limit, false, v); farmAnim();
       renderPlots($("visitplots"), v.plots, v.now, false, v.strains, v.dry_limit);
