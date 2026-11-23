@@ -1560,6 +1560,7 @@ const ORDER_FOR = [DAY / 2, DAY, 2 * DAY], ORDER_X = [1.5, 1.5, 2], ORDER_TIER =
 export const ORDER_CATS: Record<string, { name: string; r: string[] }> = {
   bread: { name: "Хлеб", r: ["bread"] }, bun: { name: "Булочки", r: ["bun"] }, soup: { name: "Похлёбка", r: ["soup", "stew"] },
   pie: { name: "Пироги", r: ["pie", "pumpkin"] }, tea: { name: "Чай", r: ["tea"] }, jam: { name: "Джем", r: ["jam"] }, flour: { name: "Мука", r: ["flour"] },
+  omelet: { name: "Омлет", r: ["omelet"] },
   honey: { name: "Медовое", r: ["honeycake", "honeytea", "honeypie", "honeycandy", "honeypumpkin"] },
 };
 function anyOf(r: string) { return r.startsWith("~") ? (ORDER_CATS[r.slice(1)] || { r: [] }).r : []; }
@@ -1584,12 +1585,13 @@ function genOrder(slot: number, builds: string[], old?: string, ok?: Cook, other
 // Заказ — только на блюда из растений, которые у игрока открыты (его правка 2026-11-16: джем без кактуса — нельзя; но и не
 // «что уже готово лежит» — магазин должен оставаться трудным). Открыто — всё, что когда-либо было в мешке (строки f_inv не
 // удаляются, как в справочнике), плюс то, что растёт на грядке или лежит сырьём в амбаре.
+const ORDER_INGREDIENT_BUILD: Record<string, string> = { "p:honey": "hive", "p:egg": "chicken_pen" };
 async function canCook(uid: number) {
   const inv = await q("SELECT strain FROM f_inv WHERE user = ? UNION SELECT crop FROM f_plots WHERE user = ? UNION SELECT strain FROM f_barn WHERE user = ? AND strain NOT LIKE 'p:%'", [uid, uid, uid]);
   // strains() отдаёт и все сорта станции — форму берём только у своих
   const ids = inv.map((r) => String(r[0])), ss = await strains(ids), mine = ids.map((i) => ss[i]).filter(Boolean);
   const shapes = new Set(mine.map((g) => g.shape));
-  const has = (need: string) => need === "p:honey" || shapes.has(need === "p:flour" ? "grain" : need);   // мёд — если есть улей (проверка в genOrder1)
+  const has = (need: string) => !!ORDER_INGREDIENT_BUILD[need] || shapes.has(need === "p:flour" ? "grain" : need);
   // какие сорта блюда игроку открыты: у выпечки — по сорту муки из его колосьев, у супа/похлёбки/чая/джема — по главному сырью
   const grades = (k: string) => {
     const main = RAW_MAIN[k], out = new Set<number>();
@@ -1611,7 +1613,8 @@ const GRADE_REQ = ["высшего сорта", "не ниже первого с
 const HONEY_ORDER_P = 0.65;   // медовое блюдо — в сложном и особом заказе лишь иногда (его решение 2026-11-18: «не в каждом особом»)
 function genOrder1(slot: number, builds: string[], cook?: Cook, avoid: Set<string> = new Set()) {
   const ok = cook?.ok;
-  const can = Object.keys(RECIPES).filter((k) => !k.startsWith("gemdust") && k !== "brew" && builds.includes(RECIPES[k].kind) && (!RECIPES[k].needs["p:honey"] || builds.includes("hive")) && !(k === "flour" && builds.includes("oven")) && (!ok || ok(k)));   // мука — только пока нет печи
+  const can = Object.keys(RECIPES).filter((k) => !k.startsWith("gemdust") && k !== "brew" && builds.includes(RECIPES[k].kind) && !(k === "flour" && builds.includes("oven")) && (!ok || ok(k))
+    && Object.keys(RECIPES[k].needs).every((need) => !ORDER_INGREDIENT_BUILD[need] || builds.includes(ORDER_INGREDIENT_BUILD[need])));   // мука — только пока нет печи
   if (!can.length) return null;
   if (slot === 0) {
     let cats = Object.keys(ORDER_CATS).filter((c) => ORDER_CATS[c].r.some((k) => can.includes(k)));   // хоть одно блюдо категории игроку по силам

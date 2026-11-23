@@ -731,7 +731,11 @@
   body[data-screen^="farm"] .plot.well .lbl { bottom: auto; top: 0; transform: translate(-50%, -105%); color: var(--cream); }
   body[data-screen^="farm"] .plot.well:not(.house) .lbl { left: auto; right: 6px; transform: translate(0, -105%); }   /* колодец у края кадра — подпись не вылезает */
   body[data-screen^="farm"] .plot.well.house .lbl { left: 8px; transform: translate(0, -105%); }
-  body[data-screen^="farm"] .plot.well.pen .lbl { left: 50%; right: auto; transform: translate(-50%, -105%); }
+  body[data-screen^="farm"] .plot.well.oven .lbl { top: -42%; }
+  body[data-screen^="farm"] .plot.well.oven .lbl.check { top: -14%; }
+  body[data-screen^="farm"] .plot.well.pen .lbl,
+  body[data-screen^="farm"] .plot.well .lbl.check { left: 50%; right: auto; transform: translate(-50%, -105%); }
+  body[data-screen^="farm"] .scene .lbl.check canvas { display: block; width: 20px; height: 16px; border: 0; }
   body[data-screen^="farm"] .plot:active { background: rgba(255, 255, 255, .18); }
   body[data-screen^="farm"] .float { font-family: var(--pix); }
   body[data-screen^="farm"] .exit, body[data-screen^="farm"] .dust-pill { white-space: nowrap; }
@@ -4576,6 +4580,20 @@
     var dur = Math.max(600, Math.min(7200, Math.round(inf.s.minutes * 30))), from = now - Math.max(0, inf.g - inf.need);
     pl.honey = { item: "p:honey@" + honeyKeyOf(inf.s), from: from, dur: dur, until: honeyEndOf(from, dur), local: true };
   }
+  var BUILDING_CHECK = [".......kk.", "......kLLk", ".....kLLk.", ".kk.kLLk..", "kLLkLLk...", ".kLLLk....", "..kLk.....", "...k......"];
+  function buildingLabel(button, text, ready) {
+    var label = el("span", "lbl water" + (ready ? " check" : ""), ready ? "" : text);
+    if (ready) {
+      button.setAttribute("aria-label", text);
+      button.setAttribute("aria-description", ready);
+      var cv = el("canvas", "pix");
+      cv.width = 10; cv.height = BUILDING_CHECK.length;
+      cv.setAttribute("aria-hidden", "true");
+      spr(cv.getContext("2d"), 0, cv.height - 1, BUILDING_CHECK);
+      label.appendChild(cv);
+    }
+    button.appendChild(label);
+  }
   function renderPlots(box, plots, now, own, ss, dryLim) {
     box.innerHTML = ""; var honRows = [];
     if (own) plots.forEach(function (pl) { if (pl) honeyGuess(pl, now, ss, dryLim); });
@@ -4672,23 +4690,20 @@
       var shopUp = hasBuild(F.state, "shop") ? 42 : 30;                                                     // подпись — над навесом, у пустого участка — над ним
       sb.style.left = (SHOP[0] - 24) / FW * 100 + "%"; sb.style.top = (SHOP[1] - shopUp) / FH * 100 + "%"; sb.style.width = 48 / FW * 100 + "%"; sb.style.height = (shopUp + 4) / FH * 100 + "%";
       var so = F.state.orders, sready = so && so.list ? so.list.filter(function (q) { return q.items.length && orderReady(q); }).length : 0;
-      sb.appendChild(el("span", "lbl water" + (sready ? " ready" : ""), !hasBuild(F.state, "shop") ? "магазин" : sready ? "заказ готов!" : "заказы"));
+      buildingLabel(sb, hasBuild(F.state, "shop") ? "заказы" : "магазин", sready && "Можно сдать заказ");
       sb.onclick = function () { haptic("light"); if (hasBuild(F.state, "shop")) ordersSheet(); else kitchenSheet("shop"); }; box.appendChild(sb);
       var hv = document.createElement("button"); hv.type = "button"; hv.className = "plot well kitchen hive";          // улей: что собирают пчёлы, мёд — в амбар
       hv.style.left = (HIVE[0] - 9) / FW * 100 + "%"; hv.style.top = (HIVE[1] - 22) / FH * 100 + "%"; hv.style.width = 17 / FW * 100 + "%"; hv.style.height = 24 / FH * 100 + "%";
       var nhv = hiveCount();
-      hv.appendChild(el("span", "lbl water" + (nhv ? " ready" : ""), hasBuild(F.state, "hive") && nhv ? "мёд · " + nhv : "улей"));
+      buildingLabel(hv, "улей", hasBuild(F.state, "hive") && nhv && "Мёд готов к сбору");
       hv.onclick = function () { haptic("light"); hiveSheet(); }; box.appendChild(hv);
       [["mill", MILL, 30, 42, "мельница", "мука готова!"], ["oven", OVEN, 40, 28, "печь", "готово!"]].forEach(function (q) {     // мельница и печь
-        var kb = document.createElement("button"); kb.type = "button"; kb.className = "plot well kitchen";
+        var kb = el("button", "plot well kitchen " + q[0]); kb.type = "button";
         kb.style.left = (q[1][0] - q[2] / 2) / FW * 100 + "%"; kb.style.top = (q[1][1] - q[3] + 4) / FH * 100 + "%"; kb.style.width = q[2] / FW * 100 + "%"; kb.style.height = q[3] / FH * 100 + "%";
-        var st = F.state, tn = farmNow(), js = jobsOf(st, q[0]), done = js.some(function (j) { return j.ready <= tn; }), txt;
+        var tn = farmNow(), js = hasBuild(F.state, q[0]) ? jobsOf(F.state, q[0]) : [];
         var soon = js.reduce(function (a, j) { return Math.min(a, j.ready); }, Infinity);   // несколько ячеек: что раньше всех будет готово
-        if (!hasBuild(st, q[0])) txt = q[4];
-        else if (done) txt = q[5];
-        else if (js.length) txt = fmtShort(soon - tn);
-        else txt = q[4];
-        kb.appendChild(el("span", "lbl water" + (done ? " ready" : ""), txt));
+        var done = soon <= tn;
+        buildingLabel(kb, js.length && !done ? fmtShort(soon - tn) : q[4], done && q[5]);
         kb.onclick = function () { haptic("light"); kitchenSheet(q[0]); }; box.appendChild(kb);
       });
       var penPlan = (F.state.build_list || {}).chicken_pen;
@@ -4702,7 +4717,11 @@
         pb.style.width = penWidth / FW * 100 + "%";
         pb.style.height = (penBuilt ? 27 : 22) / FH * 100 + "%";
         pb.setAttribute("aria-label", penBuilt ? "Курятник" : "Купить загон для куриц");
-        if (!penBuilt) pb.appendChild(el("span", "lbl water", "курятник"));
+        if (!penBuilt) buildingLabel(pb, "курятник");
+        else {
+          var pen = F.state.chicken_pen;
+          if (pen.eggs || (pen.ready && pen.ready <= now)) buildingLabel(pb, "Курятник", "Яйца готовы к сбору");
+        }
         pb.onclick = function () { haptic("light"); if (penBuilt) chickenSheet(); else penSheet(); };
         box.appendChild(pb);
       }
@@ -5645,7 +5664,7 @@
             UPGRADES_ON.oven && ["Ячейки печи", "Печь можно прокачать — нажми на неё, внизу ячеек кнопка «Ещё ячейка». Каждая прокачка — ещё одна ячейка, всего до трёх: в них печётся одновременно. Вторая — ✦ 600, третья — ✦ 1500. Печь на ферме при этом перестраивается."],
             ["Улей", "Стоит ✦ 500, ставится на поляне между домиком и амбаром. Пчёлы собирают мёд с каждого созревшего растения: под грядкой идёт оранжевый таймер «мёд» — половина срока роста, от 10 минут до 2 часов. Таймер идёт и без тебя. Растение простояло до конца — в улье баночка мёда; соберёшь раньше — мёда не будет. В окне улья видно, что сейчас собирают, со шкалами, и что уже готово; готовое — кнопкой «Забрать в амбар»."],
             ["Мёд", "Берёт расцветку растения, а сорт — по его цене: второй ✦ 3, первый ✦ 8, высший ✦ 20, мифический — втрое дороже. Продаётся в амбаре и в лавке, идёт в печь на медовые блюда (подойдёт мёд любого сорта, берётся самый дешёвый). В магазине бывают заказы «Медовое» — у тех, у кого есть улей."],
-            ["Курятник", "Из трёх семян получается одно яйцо за 17 минут. Готовые яйца забери в амбар. Для омлета нужно два яйца."],
+            ["Курятник", "Из трёх семян получается одно яйцо за 17 минут. Готовые яйца забери в амбар. Для омлета нужно два яйца. Если у тебя есть курятник и печь, магазин может заказать омлет."],
             ["Отменить", "Пока блюдо или мука не готовы, их можно отменить — всё сырьё вернётся в амбар. Готовое не отменить, только забрать."],
             ["Готовое", "Мука и блюда ложатся в амбар. Их можно превратить в пыль — блюдо стоит дороже, чем урожай, из которого оно приготовлено, — продать другим игрокам в лавке или сдать по заказу в магазин. За выпечку дают очки."],
           ]);
@@ -6088,7 +6107,7 @@
     return took;
   }
   // ---------- магазин: доска заказов на блюда ----------
-  var ORDER_CATS = { bread: ["bread"], bun: ["bun"], soup: ["soup", "stew"], pie: ["pie", "pumpkin"], tea: ["tea"], jam: ["jam"], flour: ["flour"], honey: ["honeycake", "honeytea", "honeypie", "honeycandy", "honeypumpkin"] };   // как на сервере
+  var ORDER_CATS = { bread: ["bread"], bun: ["bun"], soup: ["soup", "stew"], pie: ["pie", "pumpkin"], tea: ["tea"], jam: ["jam"], flour: ["flour"], omelet: ["omelet"], honey: ["honeycake", "honeytea", "honeypie", "honeycandy", "honeypumpkin"] };   // как на сервере
   function dishGrade(id) { var i = id.indexOf("@"), k = i < 0 ? "" : id.slice(i + 1); return /^[gr]:/.test(k) ? Math.max(0, Math.min(2, parseInt(k.split(":")[2], 10) || 0)) : 2; }   // как на сервере
   function fitsOrder(recipe, id, g) {                           // «~pie» — категория «Пироги»: любой пирог любого сорта (простой заказ); g — сорт не ниже (особый)
     var r = recKey(id); return (recipe.charAt(0) === "~" ? (ORDER_CATS[recipe.slice(1)] || []).indexOf(r) >= 0 : r === recipe) && (g == null || dishGrade(id) <= g);
