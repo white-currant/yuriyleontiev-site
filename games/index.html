@@ -6390,12 +6390,9 @@
             draw();
           });
         };
-        grid("Кормушка", waiting, true, countInPen);
+        grid("Кормушка · " + pen.per_egg + " семени на 1 яйцо", waiting, true, countInPen);
         grid("В инвентаре", seeds, false, freeOf);
-        if (!selected) {
-          actions.appendChild(el("div", "sub", pen.per_egg + " семени расходуются на одно яйцо."));
-          return;
-        }
+        if (!selected) return;
         var id = selected.id, fromPen = selected.fromPen, have = fromPen ? picked.count : freeOf(picked);
         actions.appendChild(el("div", "sub", itemName(id)));
         qtyBox(actions, { key: "chicken:" + (fromPen ? "pen:" : "bag:") + id, max: function () { return Math.min(have, 100000); },
