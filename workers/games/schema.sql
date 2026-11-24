@@ -133,8 +133,9 @@ CREATE TABLE IF NOT EXISTS d_card_log (seq INTEGER PRIMARY KEY AUTOINCREMENT, ca
 CREATE INDEX IF NOT EXISTS d_card_log_c ON d_card_log (card);
 -- фольга карты (его решение 2026-11-20): строка есть — карта фольговая
 CREATE TABLE IF NOT EXISTS d_card_fx (card INTEGER PRIMARY KEY, finish TEXT NOT NULL);
--- сундуки похода: сервер один раз бросает награду для каждого слота; карта/страница выдаётся при успешном возвращении
-CREATE TABLE IF NOT EXISTS d_chest (user INTEGER NOT NULL, run TEXT NOT NULL, slot INTEGER NOT NULL, loot TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL, PRIMARY KEY (user, run, slot));
+-- сундуки похода: содержимое бросается при начале похода, opened отмечает открытие — поэтому дроп показывается без ожидания сети;
+-- открытые карты и страницы выдаются при любом завершении похода, в том числе после гибели
+CREATE TABLE IF NOT EXISTS d_chest (user INTEGER NOT NULL, run TEXT NOT NULL, slot INTEGER NOT NULL, loot TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL, opened INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (user, run, slot));
 -- найденные соответствия постоянного шифра; одна буква у игрока встречается только один раз
 CREATE TABLE IF NOT EXISTS d_cipher (user INTEGER NOT NULL, letter TEXT NOT NULL, found INTEGER NOT NULL, PRIMARY KEY (user, letter));
 -- переход старых карт на шкалу C / UC / R / SR / M / SEC; номера и журнал экземпляров не меняются

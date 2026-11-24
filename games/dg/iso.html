@@ -342,8 +342,9 @@
       picked.forEach(function (ri, slot) { var dr = chestRooms[ri].room, dc = chestRooms[ri].spots;
         var cp = CHESTDEMO ? (dc.filter(function (q) { return q[2]; })[0] || dc[0]) : dc[Math.floor(r() * dc.length)], claimed = CHEST_CLAIMED.indexOf(slot) >= 0;
         var chestLoot = ""; if (CHESTDEMO || !RUN) { var chestRoll = Math.random(), pagesLeft = remainingCipherPages().length > 0; chestLoot = CHESTLOOT || (pagesLeft ? (chestRoll < .55 ? "bones" : chestRoll < .80 ? "booster" : "page") : (chestRoll < .6875 ? "bones" : "booster")); }
-        dr.chest = { slot: slot, i: cp[0], j: cp[1], u: cp[0] + .5, v: cp[1] + .5, flip: !!cp[2], opening: 0, opened: claimed, rewarded: claimed, loot: chestLoot };
-        if (CHESTDEMO) dr.mobs = dr.mobs.filter(function (m) { return Math.hypot(m.u - dr.chest.u, m.v - dr.chest.v) > 4.2; });
+        dr.chest = { slot: slot, i: cp[0], j: cp[1], u: cp[0] + .5, v: cp[1] + .5, flip: !!cp[2], opening: 0, opened: claimed, rewarded: claimed, loot: chestLoot, preview: CHEST_LOOT[slot] || null };
+        var clearChest = CHESTDEMO ? 4.2 : 1.15;                            // слизень, созданный раньше сундука, не остаётся под ним или вплотную за корпусом
+        dr.mobs = dr.mobs.filter(function (m) { return Math.hypot(m.u - dr.chest.u, m.v - dr.chest.v) > clearChest; });
       });
     }
     return list;
@@ -410,9 +411,17 @@
   }
   // поход на сервере (2026-11-19): вход оплачен едой в убежище, итог — один запрос при выходе. Погиб — кости 0; вышел сам или зачистил — кости твои.
   // Без сервера (страница открыта сама по себе) — как раньше, пробный бой.
-  var RUN = (location.search.match(/run=([0-9a-f]+)/) || [])[1] || "", dgCall = (function () { try { return parent !== window && parent.dgCall; } catch (e) { return null; } })(), sent = null, CHEST_CLAIMED = [];
-  try { if (parent !== window && parent.__dgD && parent.__dgD.run === RUN) CHEST_CLAIMED = (parent.__dgD.chests || []).slice(); } catch (e) {}
-  function report(got) { if (!RUN || !dgCall || !hero) return Promise.resolve(); if (!sent) sent = dgCall("/api/dg/finish", { run: RUN, bones: got, dead: hero.st === "dead", left: leftEarly, revived: hero.revmax > 0 && !hero.revive }).then(function (r) { try { if (parent.__dgD) parent.__dgD.run = null; } catch (e) {} return r; }).catch(function (e) { sent = null; throw e; }); return sent; }   // поход закрыт — в памяти убежища тоже   // не дошло — в убежище не уходим (кости пропали бы), следующее нажатие отправит снова
+  var RUN = (location.search.match(/run=([0-9a-f]+)/) || [])[1] || "", dgCall = (function () { try { return parent !== window && parent.dgCall; } catch (e) { return null; } })(), sent = null, CHEST_CLAIMED = [], CHEST_LOOT = {}, CHEST_SAVE = {}, PAGE_FOUND = 0;
+  function setChestLoot(list) { CHEST_LOOT = {}; (list || []).forEach(function (x) { CHEST_LOOT[Number(x.slot)] = x; }); }
+  try { if (parent !== window && parent.__dgD && parent.__dgD.run === RUN) { CHEST_CLAIMED = (parent.__dgD.chests || []).slice(); setChestLoot(parent.__dgD.chest_loot); PAGE_FOUND = (parent.__dgD.pages || []).length; } } catch (e) {}
+  function rememberChest(slot) { if (CHEST_CLAIMED.indexOf(slot) < 0) CHEST_CLAIMED.push(slot); }
+  function keptChestLoot() { return CHEST_CLAIMED.some(function (slot) { var x = CHEST_LOOT[slot]; return x && (x.loot === "booster" || x.loot === "page"); }); }
+  function syncChest(slot) { if (!RUN || !dgCall) return Promise.resolve(CHEST_LOOT[slot]); if (CHEST_SAVE[slot]) return CHEST_SAVE[slot];
+    CHEST_SAVE[slot] = dgCall("/api/dg/chest", { run: RUN, slot: slot }).then(function (got) { if (!got || got.error) throw new Error(got && got.error || "Нет связи"); rememberChest(slot); return got; })
+      .catch(function (e) { delete CHEST_SAVE[slot]; throw e; }); return CHEST_SAVE[slot]; }
+  function report(got) { if (!RUN || !dgCall || !hero) return Promise.resolve(); if (!sent) sent = Promise.all(CHEST_CLAIMED.map(syncChest)).then(function () {
+      return dgCall("/api/dg/finish", { run: RUN, bones: got, dead: hero.st === "dead", left: leftEarly, revived: hero.revmax > 0 && !hero.revive });
+    }).then(function (r) { try { if (parent.__dgD) parent.__dgD.run = null; } catch (e) {} return r; }).catch(function (e) { sent = null; throw e; }); return sent; }   // сначала сохранить открытия сундуков, затем закрыть поход
   // возврат в убежище (его жалоба 2026-11-19: «на кнопке долго висит без ответа»). GitHub отвечает то за 2, то за 15 секунд, а раньше
   // страница убежища качалась дважды (проверка, потом переход) и только после итога похода. Теперь убежище качается заранее, пока идёт бой,
   // в кэш браузера (GitHub разрешает хранить 10 минут) под одним адресом — переход берёт его оттуда. Нажатие сразу показывает «Возвращаемся…»
@@ -516,8 +525,11 @@
     else reveal(got.card && got.card.kind || "common", [s[0] - camFX, s[1] - camFY - 21], null, CHESTPACK);
   }
   function grantChest(c) { if (c.rewarded) return; c.rewarded = true;
-    if (RUN && dgCall) { dgCall("/api/dg/chest", { run: RUN, slot: c.slot }).then(function (got) { if (!got || got.error) throw new Error(got && got.error || "Нет связи"); CHEST_CLAIMED.push(c.slot); showChestReward(c, got); })
-      .catch(function (e) { c.rewarded = false; c.opened = false; say("Сундук не открылся", e.message || "попробуй ещё раз"); }); return; }
+    if (RUN && dgCall) { rememberChest(c.slot); var instant = c.preview || CHEST_LOOT[c.slot];
+      if (instant) { if (instant.loot === "page" && instant.page) { instant = JSON.parse(JSON.stringify(instant)); instant.page.found = ++PAGE_FOUND; } showChestReward(c, instant);
+        syncChest(c.slot).catch(function (e) { say("Награда ждёт связи", e.message || "сохраним при выходе"); }); }
+      else syncChest(c.slot).then(function (got) { if (got.loot === "page" && got.page) got.page.found = ++PAGE_FOUND; showChestReward(c, got); })
+        .catch(function (e) { c.rewarded = false; c.opened = false; say("Сундук не открылся", e.message || "попробуй ещё раз"); }); return; }
     if (c.loot === "page") { var page = takeCipherPage(); if (page) return showChestReward(c, { loot: "page", page: page }); c.loot = "bones"; }
     showChestReward(c, c.loot === "booster" ? { loot: "booster", card: { kind: "rare" } } : { loot: "bones", count: 10 + Math.floor(Math.random() * 6) }); }
   function openChest() { var c = cur && cur.chest; if (!canOpenChest()) return false; c.opening = .001; hitFlash = .15; return true; }
@@ -670,7 +682,7 @@
       hero.hp -= dmg; hero.inv = inv; hero.st = "hurt"; hero.t = 0; hero.dir = "side"; hero.flip = S(fu, fv)[0] > S(hero.u, hero.v)[0] ? 1 : -1;
       var nu3 = hero.u + hx / hd * .18, nv3 = hero.v + hy / hd * .18; if (!blocked(nu3, nv3)) { hero.u = nu3; hero.v = nv3; } hud();
       if (hero.hp <= 0 && hero.revive > 0) { reviveHero(); return; }               // мифическое блюдо: одно возрождение с полным здоровьем (его решение 2026-11-20)
-      if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", (lootGot ? "Карта и всё найденное потеряно" : "Всё найденное потеряно") + (RUN ? ", здоровье в убежище −20" : "")); }
+      if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", (keptChestLoot() ? "Кости и находка алтаря потеряны. Карты и страницы из сундуков сохранены" : (lootGot ? "Карта и всё найденное потеряно" : "Всё найденное потеряно")) + (RUN ? ", здоровье в убежище −20" : "")); }
     }
     detonateSlimes(hurt);
     var shots = cur.shots || (cur.shots = []);
@@ -1433,7 +1445,7 @@
       document.getElementById("again").hidden = true; document.getElementById("home").hidden = true; ov.classList.add("on");
       dgCall("/api/dg/start", { size: SIZEK }).then(function (r) {
         if (r.error) { document.getElementById("overt").textContent = r.error; document.getElementById("home").hidden = false; return; }
-        RUN = r.run; SECRET = !!r.secret; REVIVE = Number(r.revive) || 0;
+        RUN = r.run; SECRET = !!r.secret; REVIVE = Number(r.revive) || 0; setChestLoot(r.chest_loot); CHEST_CLAIMED = []; CHEST_SAVE = {};
         try { history.replaceState(null, "", "iso.html?size=" + r.size + "&run=" + r.run + (r.secret ? "&secret=1" : "") + (REVIVE ? "&rv=" + REVIVE : "") + "&v=" + Date.now()); } catch (e) {}
         (SECRET ? srLoad : function (f) { f(); })(function () { document.getElementById("home").hidden = false; reset(); if (SRJ) srJump(); requestAnimationFrame(loop); });
       }).catch(function () { document.getElementById("overt").textContent = "Нет связи с сервером — еда не потрачена"; document.getElementById("home").hidden = false; });
