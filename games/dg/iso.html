@@ -309,18 +309,38 @@
         c1.mobs = c1.mobs.filter(function (m) { return Math.hypot(m.u - c1.heal.u, m.v - c1.heal.v) > 1.2; }); }); }
     // Сундуки: малое / среднее / большое — 1 / 2 / 4, не в стартовой и не в тайной комнате, только у стен.
     // У левой стены тот же лист кадров отражается программно — корпус и опора остаются выровненными.
+    // Клетка сундука не должна быть частью единственного пути к двери: сначала мысленно закрываем её и проверяем все выходы BFS.
+    function chestPathSafe(dr, bx, by) {
+      var goals = [];
+      if (dr.mu) goals.push([0, dr.door.mu]); if (dr.pu) goals.push([dr.w - 1, dr.door.pu]);
+      if (dr.mv) goals.push([dr.door.mv, 0]); if (dr.pv) goals.push([dr.door.pv, dr.h - 1]);
+      if (goals.some(function (g) { return Math.abs(g[0] - bx) <= 1 && Math.abs(g[1] - by) <= 1; })) return false;   // вход и клетка перед ним свободны
+      goals.push([dr.ci, dr.cj]);
+      function free(x, y) { return x >= 0 && y >= 0 && x < dr.w && y < dr.h && dr.open[y][x] && !(x === bx && y === by)
+        && !dr.props.some(function (p) { return p.i === x && p.j === y; }); }
+      if (goals.some(function (g) { return !free(g[0], g[1]); })) return false;
+      var q = [goals[goals.length - 1]], seen = {}; seen[q[0][0] + ":" + q[0][1]] = true;
+      for (var at = 0; at < q.length; at++) [[1,0],[-1,0],[0,1],[0,-1]].forEach(function (d) {
+        var x = q[at][0] + d[0], y = q[at][1] + d[1], k = x + ":" + y; if (free(x, y) && !seen[k]) { seen[k] = true; q.push([x, y]); } });
+      return goals.every(function (g) { return !!seen[g[0] + ":" + g[1]]; });
+    }
+    function chestSpots(dr) { var dc = [];
+      for (var cy = 0; cy < dr.h; cy++) for (var cx = 0; cx < dr.w; cx++) {
+        if (!dr.open[cy][cx] || dr.props.some(function (p) { return p.i === cx && p.j === cy; })) continue;
+        var leftWall = cx === 0 || !dr.open[cy][cx - 1], wall = leftWall || cy === 0 || cx === dr.w - 1 || cy === dr.h - 1 || !dr.open[cy][cx + 1] || !dr.open[cy + 1] || !dr.open[cy + 1][cx];
+        var door = (cx === 0 && cy === dr.door.mu) || (cy === 0 && cx === dr.door.mv) || (cx === dr.w - 1 && cy === dr.door.pu) || (cy === dr.h - 1 && cx === dr.door.pv);
+        if (wall && !door && Math.hypot(cx - dr.ci, cy - dr.cj) > 1.5 && chestPathSafe(dr, cx, cy)) dc.push([cx, cy, leftWall]);
+      }
+      dc.sort(function (a, b) { return (a[0] + a[1]) - (b[0] + b[1]); }); return dc;
+    }
     var chestN = CHESTDEMO ? 1 : ({ s: 1, m: 2, l: 4 }[SIZEK] || 0);
-    if (chestN) { var chestRooms = CHESTDEMO ? [list[0]] : list.filter(function (r2) { return !r2.secret && r2.depth > 0; }).sort(function (a, b) { return a.depth - b.depth || a.seed - b.seed; }), picked = [];
+    if (chestN) { var chestRooms = (CHESTDEMO ? [list[0]] : list.filter(function (r2) { return !r2.secret && r2.depth > 0; }))
+        .map(function (r2) { return { room: r2, spots: chestSpots(r2) }; }).filter(function (x) { return x.spots.length; })
+        .sort(function (a, b) { return a.room.depth - b.room.depth || a.room.seed - b.room.seed; }), picked = [];
       for (var cs = 0; cs < chestN && chestRooms.length; cs++) { var qi = Math.min(chestRooms.length - 1, Math.max(0, Math.round((cs + 1) * (chestRooms.length + 1) / (chestN + 1)) - 1));
         while (picked.indexOf(qi) >= 0 && qi + 1 < chestRooms.length) qi++; while (picked.indexOf(qi) >= 0 && qi > 0) qi--; if (picked.indexOf(qi) < 0) picked.push(qi); }
-      picked.forEach(function (ri, slot) { var dr = chestRooms[ri], dc = [];
-        for (var cy = 0; cy < dr.h; cy++) for (var cx = 0; cx < dr.w; cx++) {
-          if (!dr.open[cy][cx] || dr.props.some(function (p) { return p.i === cx && p.j === cy; })) continue;
-          var leftWall = cx === 0 || !dr.open[cy][cx - 1], wall = leftWall || cy === 0 || cx === dr.w - 1 || cy === dr.h - 1 || !dr.open[cy][cx + 1] || !dr.open[cy + 1] || !dr.open[cy + 1][cx];
-          var door = (cx === 0 && cy === dr.door.mu) || (cy === 0 && cx === dr.door.mv) || (cx === dr.w - 1 && cy === dr.door.pu) || (cy === dr.h - 1 && cx === dr.door.pv);
-          if (wall && !door && Math.hypot(cx - dr.ci, cy - dr.cj) > 1.5) dc.push([cx, cy, leftWall]);
-        }
-        if (!dc.length) return; dc.sort(function (a, b) { return (a[0] + a[1]) - (b[0] + b[1]); }); var cp = CHESTDEMO ? (dc.filter(function (q) { return q[2]; })[0] || dc[0]) : dc[Math.floor(r() * dc.length)], claimed = CHEST_CLAIMED.indexOf(slot) >= 0;
+      picked.forEach(function (ri, slot) { var dr = chestRooms[ri].room, dc = chestRooms[ri].spots;
+        var cp = CHESTDEMO ? (dc.filter(function (q) { return q[2]; })[0] || dc[0]) : dc[Math.floor(r() * dc.length)], claimed = CHEST_CLAIMED.indexOf(slot) >= 0;
         var chestLoot = ""; if (CHESTDEMO || !RUN) { var chestRoll = Math.random(), pagesLeft = remainingCipherPages().length > 0; chestLoot = CHESTLOOT || (pagesLeft ? (chestRoll < .55 ? "bones" : chestRoll < .80 ? "booster" : "page") : (chestRoll < .6875 ? "bones" : "booster")); }
         dr.chest = { slot: slot, i: cp[0], j: cp[1], u: cp[0] + .5, v: cp[1] + .5, flip: !!cp[2], opening: 0, opened: claimed, rewarded: claimed, loot: chestLoot };
         if (CHESTDEMO) dr.mobs = dr.mobs.filter(function (m) { return Math.hypot(m.u - dr.chest.u, m.v - dr.chest.v) > 4.2; });
