@@ -30,8 +30,8 @@ export const CROPS: Record<string, Strain> = {
   // сняты с продажи в тот же день (ни у кого не было) — оставлены скрытыми, чтобы старые ссылки не ломались
   millet:  { hidden: true, id: "millet",  name: "Огненные колосья",  shape: "grain",   color: "ember",   minutes: 45,  dust: 9,  vinyl: 0.06, thirst: 20, points: 2, bonus: "seedy", gen: 0, cost: 5,  base: true },
   rye:     { hidden: true, id: "rye",     name: "Туманные колосья",  shape: "grain",   color: "nebula",  minutes: 120, dust: 26, vinyl: 0.12, thirst: 60, points: 4, bonus: "hardy", gen: 0, cost: 10, base: true },
-  // ночная аномалия (его идея 2026-11-18): странное семя изредка ночью лежит в общей лавке среди семян игроков, продавец — неразборчивые
-  // символы; кто заметит и успеет — тот купит. Растёт двое суток (полив раз в сутки; луч солнца и лунная пыль его не торопят), урожай — глаза (ингредиент чёрной «Странной похлёбки»), семя — одно (двойное убрано его решением 2026-11-18, чтобы не расходилось по игрокам).
+  // ночная аномалия (его идея 2026-11-18): странное семя изредка ночью лежит в общей лавке среди семян игроков, продавец — Атот,
+  // чьё имя написано тем же шифром, что пророчество над алтарём; кто заметит и успеет — тот купит. Растёт двое суток (полив раз в сутки; луч солнца и лунная пыль его не торопят), урожай — глаза (ингредиент чёрной «Странной похлёбки»), семя — одно (двойное убрано его решением 2026-11-18, чтобы не расходилось по игрокам).
   // Не вид (в справочник не идёт). Скрещивается редко (вчетверо реже), гибриды — «Странные …», тоже не виды. Продаётся и распыляется.
   anomaly: { hidden: true, odd: true, id: "anomaly", name: "Странное семя", shape: "anomaly", color: "anomaly", minutes: 2880, dust: 60, vinyl: 0, thirst: 1440, points: 0, bonus: null, gen: 0, cost: 30, base: true },
 };
@@ -880,7 +880,7 @@ export async function plant(u: any, idx: number, crop: string) {
 // ---------- ночная аномалия в общей лавке (его решение 2026-11-18) ----------
 // Ночь по Минску, 00–04. Ночь-кандидат — по хешу даты (примерно одна из шести), но не раньше чем через 7 ночей после прошлой:
 // выходит не чаще раза в неделю, обычно раз в 9–16 дней, когда именно — не угадать. В такую ночь семя лежит среди семян
-// игроков всю ночь, с 00 до 04 (его правка 2026-11-18, было 40–60 минут); продавец — неразборчивые символы. Забирает первый, кто успел (f_evlog, user 0).
+// игроков всю ночь, с 00 до 04 (его правка 2026-11-18, было 40–60 минут); продавец — Атот тем же шифром. Забирает первый, кто успел (f_evlog, user 0).
 export const ANOM_PUB = "~";
 const ANOM_EPOCH = Date.UTC(2026, 10, 18) / 1000, ANOM_GAP = 7, ANOM_P = 6;
 const fnv = (str: string) => { let h = 2166136261; for (const ch of str) { h ^= ch.codePointAt(0)!; h = Math.imul(h, 16777619); } return h >>> 0; };
@@ -904,16 +904,14 @@ function anomDay(d: number, start: number | null): boolean {    // d — ном�
   }
   return ANOM_DAYS.get(d)!;
 }
-const GLYPHS = [..."ϞϟϠϡϢϣϤϥҖҗӜӝѮѯѰѱѦѧѪѫҨҩ҂ξζϑϕϖʬʭǂǁʘɮ∴≋⁂‡¤"], MARKS = ["\u0334", "\u0337", "\u0353", "\u0336", "\u031b", ""];
+const ANOM_SELLER = "Ϟ͓ѫ̷ѱѫ̷";                              // «Атот» тем же постоянным шифром, что пророчество над алтарём
 export let ANOM_FORCE = 0;                                      // стенд: 1 — продаётся прямо сейчас
 export function anomalyMarket(t = now(), start: number | null = null) {
   const loc = t + TZ, d = Math.floor((loc - ANOM_EPOCH) / DAY), sec = loc - ANOM_EPOCH - d * DAY;
   if (!ANOM_FORCE && (sec >= 4 * 3600 || !anomDay(d, start))) return null;
   const h = fnv("anomw:" + d), from = ANOM_EPOCH - TZ + d * DAY, until = from + 4 * 3600;
   if (!ANOM_FORCE && (t < from || t >= until)) return null;
-  let name = "", x = fnv("anomn:" + d);
-  for (let i = 0, n = 6 + x % 3; i < n; i++) { x = Math.imul(x ^ (x >>> 13), 2654435761) >>> 0; name += GLYPHS[x % GLYPHS.length] + MARKS[(x >>> 7) % MARKS.length]; }
-  return { key: "anomclaim:" + d, price: 25 + (h >>> 16) % 26, seller: name, until };
+  return { key: "anomclaim:" + d, price: 25 + (h >>> 16) % 26, seller: ANOM_SELLER, until };
 }
 // иногда за ночь лежит больше одного семени (номер ночи → сколько). Ночь 0 (18.11.2026): он купил первое и попросил выложить ещё одно
 const ANOM_LOTS: Record<number, number> = { 0: 2 };
