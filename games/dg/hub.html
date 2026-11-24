@@ -15,6 +15,15 @@
   /* убежище — его фон (2026-11-17), мой нарисованный выключен; герой стоит крупно в центре */
   #stage { background: #07060a url(hub-bg.webp) center / 100% 100% no-repeat; }
   #scene { opacity: 0; }
+  #cipherbook { position: absolute; z-index: 2; right: calc(var(--u) * 2); top: 60.5%; width: calc(var(--u) * 36); height: calc(var(--u) * 42.5); display: none; padding: 0; border: 0; background: none; cursor: pointer; filter: drop-shadow(0 calc(var(--u) * 1.2) calc(var(--u) * 1.2) rgba(0,0,0,.65)); }
+  #cipherbook.on { display: block; }
+  #cipherbook .bookbase, #cipherbook .bookpages { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #cipherbook .bookbase { object-fit: fill; image-rendering: pixelated; }
+  /* Кадры страниц — 256×304, основание — 200×236. Показываем их в одном масштабе с основанием
+     и компенсируем прозрачные поля кадра, иначе поверх книги появляется второй разворот. */
+  #cipherbook .bookpages { inset: auto; left: calc(var(--u) * -4.7); top: calc(var(--u) * -9.4); width: calc(var(--u) * 46.1); height: calc(var(--u) * 54.7); background: url(book-pages.png?v=1) 0 0 / 800% 100% no-repeat; animation: bookturn 8s steps(1, end) infinite; pointer-events: none; }
+  #cipherbook:active { transform: translateY(var(--u)); filter: brightness(1.12) drop-shadow(0 calc(var(--u) * .8) var(--u) rgba(0,0,0,.65)); }
+  @keyframes bookturn { 0%,45% { background-position:0 0 } 50% { background-position:14.2857% 0 } 55% { background-position:28.5714% 0 } 60% { background-position:42.8571% 0 } 65% { background-position:57.1429% 0 } 70% { background-position:71.4286% 0 } 75% { background-position:85.7143% 0 } 80%,100% { background-position:100% 0 } }
   canvas.ic { image-rendering: pixelated; display: block; flex: none; }
   /* панели интерфейса: тёмный сланец, рамка со срезанными углами */
   .pan { background: var(--slate); box-shadow: 0 0 0 var(--u) var(--edge2), inset 0 var(--u) 0 var(--edge), inset 0 calc(var(--u) * -1) 0 #16171d, inset var(--u) 0 0 #3a3e4b, inset calc(var(--u) * -1) 0 0 #16171d;
@@ -55,8 +64,9 @@
   #pick button[hidden] { display: none; }                                   /* «Продолжить поход» без похода не показывать: display: grid выше перебивал hidden (2026-11-19) */
   #pick .need { display: none; }                                            /* пояснение под «Куда спускаемся?» убрано (его правка 2026-11-19) */
   /* окна убежища (2026-11-19): рюкзак, рынок, котёл — снизу, над кнопками */
-  #sheet { position: absolute; left: 0; right: 0; top: 0; bottom: calc(var(--u) * 32 + env(safe-area-inset-bottom)); display: none; align-items: flex-end; justify-content: center; background: rgba(6, 5, 9, .6); }
+  #sheet { position: absolute; z-index: 6; left: 0; right: 0; top: 0; bottom: calc(var(--u) * 32 + env(safe-area-inset-bottom)); display: none; align-items: flex-end; justify-content: center; background: rgba(6, 5, 9, .6); }
   #sheet.on { display: flex; }
+  #sheet.cipher-open { bottom: 0; align-items: center; background: rgba(3, 2, 7, .82); }
   /* крестик закрытия во всех окнах убежища (его просьба 2026-11-19, «как в меню на ферме») — квадратная кнопка в цветах убежища */
   .shx { position: absolute; top: calc(var(--u) * 3); right: calc(var(--u) * 3); z-index: 3; width: calc(var(--u) * 10); height: calc(var(--u) * 10); padding: 0; border: 0; display: grid; place-items: center;
     background: #3a3e4b; color: var(--cream); font: inherit; font-size: calc(var(--u) * 5); font-weight: 800; line-height: 1; cursor: pointer;
@@ -161,12 +171,24 @@
   .prog i { display: block; height: 100%; background: linear-gradient(#8fe3a8 0 50%, #3f9e7c 50%); }
   .tag { position: absolute; transform: translate(-50%, -100%); font-size: calc(var(--u) * 3.6); font-weight: 800; letter-spacing: .03em; text-transform: lowercase; color: #f4ead0; text-shadow: 0 0 calc(var(--u) * 1.5) #000, 0 calc(var(--u) * .6) 0 #000; pointer-events: none; white-space: nowrap; }
   .tag.brewt { color: #7dffa2; text-transform: none; text-shadow: 0 0 calc(var(--u) * 2) rgba(60, 230, 110, .9), 0 0 calc(var(--u) * 1.5) #000, 0 calc(var(--u) * .6) 0 #000; font-variant-numeric: tabular-nums; }   /* таймер куба — зелёный, как жижа */
+  #sheet.cipher-open #sheetbox { width: calc(100% - var(--u) * 18); max-height: none; margin: 0; padding: 0; overflow: visible; }
+  #sheetbox.cipher { background: transparent; box-shadow: none; clip-path: none; overflow: visible; }
+  .cipher-spread { position: relative; width: 100%; aspect-ratio: 3 / 2; margin-top: calc(var(--u) * 2); }
+  .cipher-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .cipher-entry { position: absolute; top: 36%; width: 31%; color: #431c24; text-align: center; font: 300 calc(var(--u) * 8.5)/1.15 "Inter Tight", "Helvetica Neue", Arial, sans-serif; }
+  .cipher-entry.left { left: 17%; } .cipher-entry.right { right: 17%; }
+  .cipher-entry.empty { opacity: .18; }
+  .cipher-nav { position: absolute; top: 40%; width: calc(var(--u) * 18); height: calc(var(--u) * 22); border: 0; background: none; color: #e9d7b7; font: 900 calc(var(--u) * 16)/1 serif; text-shadow: 0 calc(var(--u) * 1) 0 #000, 0 0 calc(var(--u) * 2) #000; cursor: pointer; }
+  .cipher-nav.prev { left: calc(var(--u) * -10); } .cipher-nav.next { right: calc(var(--u) * -10); }
+  .cipher-nav:disabled { opacity: .18; cursor: default; }
+  .cipher-progress { text-align: center; margin-top: calc(var(--u) * 1); font-size: calc(var(--u) * 4.6); font-weight: 800; color: #cfc4e0; }
 </style>
 </head>
 <body>
 <div id="stage">
   <canvas id="scene" width="144" height="256"></canvas>
   <canvas id="herol" width="941" height="1672"></canvas>
+  <button id="cipherbook" type="button" aria-label="Книга найденных страниц"><img class="bookbase" src="book-lectern.png?v=1" alt=""><span class="bookpages"></span></button>
   <div class="tag" style="left:27%;top:27%">перегонный куб</div>
   <div class="tag brewt" id="brewt" style="left:27%;top:23.6%" hidden></div>
   <div class="tag" style="left:77%;top:32%">кузница</div>
@@ -583,7 +605,7 @@
     if (lf <= 0 && !brewWait) { brewWait = true; load().then(null, function () {}).then(function () { setTimeout(function () { brewWait = false; }, 5000); }); }   // сварилось — перечитать с сервера (не чаще раза в 5 с)
     t.textContent = (br.n > 1 ? "×" + br.n + " · " : "") + Math.floor(lf / 60) + ":" + String(Math.floor(lf % 60)).padStart(2, "0"); t.hidden = false; }
   setInterval(brewTag, 1000);
-  function hud() { brewTag(); $("nbone").textContent = D ? D.bones : 0; $("nfert").textContent = D ? D.fert : 0;
+  function hud() { brewTag(); $("nbone").textContent = D ? D.bones : 0; $("nfert").textContent = D ? D.fert : 0; bookVis();
     if (D) { $("hpfill").style.width = Math.round(D.hp / D.hp_max * 100) + "%"; $("hptext").textContent = D.hp + " / " + D.hp_max; } }
   // здоровье в убежище (его решение 2026-11-19): гибель отнимает 20, лечат чаи из амбара, при нуле спуск закрыт
   function hpView() {
@@ -624,11 +646,25 @@
       .catch(function (e) { pend--; tell(e.message); if (pend > 0) { pendErr = true; return; } pendErr = false; load(); }); }
   var sheet = $("sheet"), box = $("sheetbox");
   function show(fn) { pick.classList.remove("on"); open = fn; sheet.classList.add("on"); fn(); }   // окно одно: выбор спуска закрывается
-  function hide() { open = null; sheet.classList.remove("on"); clearInterval(tick); }
+  function hide() { open = null; sheet.classList.remove("on", "cipher-open"); clearInterval(tick); }
   sheet.addEventListener("click", function (e) { if (e.target === sheet) hide(); });
   function shx(fn) { var x = el("button", "shx", "✕"); x.type = "button"; x.setAttribute("aria-label", "Закрыть"); x.onclick = function (e) { e.stopPropagation(); fn(); }; return x; }
-  function head(t) { box.innerHTML = ""; box.classList.toggle("cube", open === brewView); box.appendChild(shx(hide)); box.appendChild(el("div", "sh-h", t)); }
+  function head(t) { box.innerHTML = ""; box.classList.toggle("cube", open === brewView); box.classList.toggle("cipher", open === cipherView); sheet.classList.toggle("cipher-open", open === cipherView); box.appendChild(shx(hide)); box.appendChild(el("div", "sh-h", t)); }
   function noServer() { box.appendChild(el("div", "sh-t", "Открой подземелье из фермы — тогда здесь будут твой амбар, рюкзак и котёл.")); }
+
+  // Книга появляется после первой найденной страницы. В рабочей игре источник — D1; локальный прототип читает прежний localStorage.
+  var CIPHER_ALPHA = Array.from("абвгдеёжзийклмнопрстуфхцчшщъыьэюя"), CIPHER_GLYPHS = Array.from("ϞϟϠϡϢϣϤϥҖҗӜӝѮѯѰѱѦѧѪѫҨҩ҂ξζϑϕϖʬʭǂǁʘɮ∴≋⁂‡¤"), CIPHER_MARKS = ["\u0334", "\u0337", "\u0353", "\u0336", "\u031b", ""], CIPHER_MAP = {}, cipherAt = 0;
+  CIPHER_ALPHA.forEach(function (ch, i) { CIPHER_MAP[ch] = CIPHER_GLYPHS[i] + CIPHER_MARKS[(i * 5 + 2) % CIPHER_MARKS.length]; });
+  function cipherPages() { if (D && Array.isArray(D.pages)) return D.pages.slice().sort(function (a, b) { return a.found - b.found; });
+    try { var a = JSON.parse(localStorage.getItem("sg-dg-cipher-pages-v1") || "[]"); return Array.isArray(a) ? a.filter(function (ch, i) { return CIPHER_ALPHA.indexOf(ch) >= 0 && a.indexOf(ch) === i; }).map(function (letter, i) { return { letter: letter, found: i + 1 }; }) : []; } catch (e) { return []; } }
+  function bookVis() { $("cipherbook").classList.toggle("on", cipherPages().length > 0); }
+  function cipherView() { head("Фолиант"); var pages = cipherPages(), max = Math.max(0, Math.ceil(pages.length / 2) - 1); cipherAt = Math.max(0, Math.min(max, cipherAt));
+    var spread = el("div", "cipher-spread"), art = el("img", "cipher-art"), pair = pages.slice(cipherAt * 2, cipherAt * 2 + 2); art.src = "cipher-book.png?v=1"; art.alt = ""; spread.appendChild(art);
+    [0, 1].forEach(function (i) { var p = pair[i], e = el("div", "cipher-entry " + (i ? "right" : "left") + (p ? "" : " empty"), p ? (CIPHER_MAP[p.letter] || p.letter) + " = " + p.letter.toUpperCase() : "· · ·"); spread.appendChild(e); });
+    var prev = el("button", "cipher-nav prev", "‹"), next = el("button", "cipher-nav next", "›"); prev.type = next.type = "button"; prev.disabled = cipherAt <= 0; next.disabled = cipherAt >= max;
+    prev.onclick = function (e) { e.stopPropagation(); if (cipherAt > 0) { cipherAt--; cipherView(); } }; next.onclick = function (e) { e.stopPropagation(); if (cipherAt < max) { cipherAt++; cipherView(); } };
+    spread.appendChild(prev); spread.appendChild(next); box.appendChild(spread); box.appendChild(el("div", "cipher-progress", "Найдено " + pages.length + " из " + CIPHER_ALPHA.length)); }
+  $("cipherbook").addEventListener("click", function (e) { e.stopPropagation(); if (open === cipherView) return hide(); show(cipherView); });
 
   // рюкзак: сверху ячейки с едой на спуск и сытость, ниже — еда из амбара
   function packView() {
@@ -833,7 +869,7 @@
   document.querySelectorAll(".act").forEach(function (bn) { bn.addEventListener("click", function (e) { e.stopPropagation();
     if (bn.classList.contains("go")) { if (D && D.run) { hide(); pickView(); pick.classList.add("on"); return; } if (D && D.hp <= 0) return show(hpView), tell("Герою нужно подлечиться"); if (D && !D.sat && !D.free) return show(packView), tell("Положи еду в рюкзак"); hide(); pickView(); pick.classList.add("on"); return; }
     var fn = bn.dataset.sheet === "pack" ? packView : marketView; if (open === fn) return hide(); if (fn === marketView) mRefresh(); show(fn); }); });   // второе нажатие закрывает
-  if (D) hud(); load(); mRefresh();                                             // из памяти — сразу, свежее с сервера — следом; рынок — заранее
+  if (D) hud(); bookVis(); load(); mRefresh();                                  // из памяти — сразу, свежее с сервера — следом; рынок — заранее
   document.getElementById("gear").addEventListener("click", function (e) { e.stopPropagation(); tell("Настройки — будут позже"); });
   cv.addEventListener("pointerdown", function (e) {
     var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;   // доли экрана — места на его фоне

@@ -6989,10 +6989,12 @@
 
   // карты коллекции: рубашка (его рисунок) в цвете редкости, посередине «?» — рисунки и достоинства пока скрыты
   var CARDBACK = new Image(); CARDBACK.src = "dg/iso/cardback.png";
-  // категории (его решение 2026-11-20): базовая, редкая, эпическая, легендарная; фольга — отдельный признак любой карты
-  var CARDK = { common: ["Базовая тайная карта", "rgba(170,175,190,.7)", "#d6dae4", "#c4c9d6"], rare: ["Редкая тайная карта", "rgba(70,130,230,.75)", "#b8d0ec", "#8fb4ff"],
-                epic: ["Эпическая тайная карта", "rgba(160,90,230,.75)", "#d9b8ff", "#c79bff"], legend: ["Легендарная тайная карта", "rgba(230,170,60,.75)", "#ffcf5a", "#ffcf5a"] };
-  var CARDRANK = { legend: 4, epic: 3, rare: 2, common: 1 };
+  // шкала коллекционных карт по MTG и One Piece: C / UC / R / SR / M / SEC; фольга — отдельная отделка
+  var CARDK = { common: ["Обычная тайная карта · C", "rgba(150,155,165,.72)", "#d6dae4", "#c4c9d6"], uncommon: ["Необычная тайная карта · UC", "rgba(70,170,100,.72)", "#9ee0ad", "#79cf91"],
+                rare: ["Редкая тайная карта · R", "rgba(70,130,230,.75)", "#b8d0ec", "#8fb4ff"], super: ["Сверхредкая тайная карта · SR", "rgba(155,80,225,.75)", "#d9b8ff", "#c79bff"],
+                mythic: ["Мифическая тайная карта · M", "rgba(230,170,60,.75)", "#ffcf5a", "#ffcf5a"], secret: ["Секретная тайная карта · SEC", "rgba(235,55,135,.78)", "#ff9ac8", "#ff75b5"] };
+  CARDK.epic = CARDK.super; CARDK.legend = CARDK.mythic;                    // старые данные до серверной миграции
+  var CARDRANK = { secret: 6, mythic: 5, legend: 5, super: 4, epic: 4, rare: 3, uncommon: 2, common: 1 };
   function cardWrap(cv, foil) { if (!foil) return cv; var w = el("span", "foilwrap"); w.appendChild(cv); return w; }   // фольга — переливающийся блик поверх
   function showCardFound(c, then) {
     var K = CARDK[c.kind] || CARDK.common;

@@ -115,7 +115,9 @@ export function setup(deps: any) { ({ q, DB, now, today, nameOf, prefetch, preCl
 // Находки лежат в общей таблице предметов g_items (game = farm, kind = vinyl) — их показывает и профиль гильдии.
 const TIER_ODDS: [string, number][] = [["common", 62], ["rare", 25], ["epic", 10], ["legendary", 3]];
 const FINISH_ODDS: [string, number][] = [["plain", 85], ["foil", 12], ["star", 3]];
-const CARD_ODDS: [string, number][] = [["common", 70], ["rare", 22], ["epic", 6], ["legend", 2]];   // карты с фермы (2026-11-20)
+// коллекционные карты: C / UC / R / SR / M / SEC. Фольга остаётся независимой отделкой.
+const CARD_ODDS: [string, number][] = [["common", 45], ["uncommon", 28], ["rare", 18], ["super", 6], ["mythic", 2.5], ["secret", .5]];
+const CHEST_CARD_ODDS: [string, number][] = [["common", 41], ["uncommon", 28], ["rare", 22], ["super", 6], ["mythic", 2.5], ["secret", .5]];
 const DUP_DUST: Record<string, number> = { common: 5, rare: 10, epic: 25, legendary: 60 };
 let catalog: { id: string; date: string }[] = [], catalogAt = 0;
 async function catalogList() {
@@ -2138,7 +2140,7 @@ export async function forgetFarm(uid: number) {
   await q("DELETE FROM f_feed WHERE actor = ? OR target = ?", [uid, uid]);              // из ленты новостей — тоже
   // всё, что добавилось после (его решение 2026-11-20: удалил данные — теряешь всё наигранное): украшения, улей, подземелье…
   for (const t of ["f_chest", "f_stars", "f_cratercrop", "f_prices", "f_mono", "f_monomark", "f_clumps", "f_notify", "f_orders", "f_decor", "f_style",
-                   "f_yard", "f_shell", "f_honey", "f_hive", "f_chicken_pen", "f_wet", "f_fert", "d_hero", "d_pack", "d_bite", "d_myth", "d_brew", "d_secret", "d_armor", "d_altar"])
+                   "f_yard", "f_shell", "f_honey", "f_hive", "f_chicken_pen", "f_wet", "f_fert", "d_hero", "d_pack", "d_bite", "d_myth", "d_brew", "d_secret", "d_armor", "d_altar", "d_chest", "d_cipher"])
     await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
   // карты отвязываются: становятся ничьими (user = 0), в журнал — запись «владелец удалил данные». Сами карты и журнал не стираются
   for (const [id] of await q("SELECT id FROM d_cards WHERE user = ?", [uid])) {
@@ -2272,6 +2274,8 @@ export async function noticeSeen(u: any, id: string) {
 PRODUCTS["p:fert"] = { name: "Удобрение", dust: 30 };   // было 20; поднял по его решению 2026-11-20 — чтобы походы окупались (на рынке ×1,5 = 45)
 export const DG_NEED: Record<string, number> = { s: 1, m: 2, l: 4 };
 const DG_MAXB: Record<string, number> = { s: 150, m: 400, l: 700 };    // больше костей с уровня не набрать (замер 150 уровней: не больше 88 / 258 / 400)
+const DG_CHESTS: Record<string, number> = { s: 1, m: 2, l: 4 };
+const CIPHER_ALPHA = Array.from("абвгдеёжзийклмнопрстуфхцчшщъыьэюя");
 export const FERT_BONES = 70, FERT_SEC = 10 * 60,   // было 40 костей и 20 минут; 70 (а не 80) — рыцарям чуть выгоднее (его решение 2026-11-20)
     // котёл — 20 минут на удобрение (его решение 2026-11-19, было 30)
   DG_SLOTS = 6, BREW_MAX = 20;
@@ -2336,10 +2340,12 @@ export async function dgState(u: any, got = 0) {
   const hasBarn = (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length > 0;
   const [fs] = await q("SELECT listed FROM f_stall WHERE user = ? AND item = 'p:fert'", [u.id]), own = (await ownPrices(u.id))["p:fert"];
   const satmap = satMap();
-  const cards = (await q("SELECT id, kind FROM d_cards WHERE user = ? ORDER BY id", [u.id])).map(([id, kind]) => ({ id: Number(id), kind: String(kind) }));
+  const cards = (await q("SELECT id, kind FROM d_cards WHERE user = ? ORDER BY id", [u.id])).map(([id, kind]) => ({ id: Number(id), kind: cardKind(String(kind)) }));
+  const pages = (await q("SELECT letter, found FROM d_cipher WHERE user = ? ORDER BY found", [u.id])).map(([letter, found]) => ({ letter: String(letter), found: Number(found) }));
+  const chests = h.run ? (await q("SELECT slot FROM d_chest WHERE user = ? AND run = ? ORDER BY slot", [u.id, h.run])).map(([slot]) => Number(slot)) : [];
   const secret = !!h.run && (await q("SELECT 1 FROM d_secret WHERE user = ? AND run = ?", [u.id, h.run])).length > 0;   // начатый поход — можно продолжить (страница не загрузилась, связь пропала)
   const [ar] = h.run ? await q("SELECT armor FROM d_armor WHERE user = ? AND run = ?", [u.id, h.run]) : [];
-  return { free: DG_FREE, revive: ar ? Number(ar[0]) : 0, secret, cards, hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
+  return { free: DG_FREE, revive: ar ? Number(ar[0]) : 0, secret, cards, pages, chests, hp: h.hp, hp_max: HP_MAX, hp_death: HP_DEATH, bones: h.bones, run: h.run, size: h.size, dust: Number(d?.[0] || 0), barn: hasBarn, fert: (barn.find((b) => b.item === "p:fert") || { count: 0 }).count,
            fert_stall: Number(fs?.[0] || 0), fert_price: sellerPrice(stallPrice(PRODUCTS["p:fert"].dust), own), fert_base: stallPrice(PRODUCTS["p:fert"].dust), fert_dust: PRODUCTS["p:fert"].dust, price_range: [PRICE_LO, PRICE_HI], satmap,
            pack, slots: DG_SLOTS, food, sat: pack.reduce((a, p) => a + p.sat, 0), need: DG_NEED, products: pr.products,
            brew: { n: br.n, started: br.started, per: FERT_SEC, bones: FERT_BONES, max: BREW_MAX }, got: got + br.got, now: now() };
@@ -2403,6 +2409,7 @@ export async function dgStart(u: any, size: string) {                      // в
     DB.prepare("UPDATE d_hero SET run = ?, size = ?, started = ? WHERE user = ?").bind(run, size, now(), u.id),
     DB.prepare("DELETE FROM d_secret WHERE user = ?").bind(u.id),
     DB.prepare("DELETE FROM d_altar WHERE user = ?").bind(u.id),            // находка брошенного похода пропала
+    DB.prepare("DELETE FROM d_chest WHERE user = ?").bind(u.id),            // находки брошенного похода пропали
     DB.prepare("INSERT INTO d_armor (user, run, armor) VALUES (?, ?, ?) ON CONFLICT(user) DO UPDATE SET run = excluded.run, armor = excluded.armor").bind(u.id, run, revive),
     ...(secret ? [DB.prepare("INSERT INTO d_secret (user, run) VALUES (?, ?)").bind(u.id, run)] : []),
   ]);
@@ -2413,7 +2420,7 @@ export async function dgStart(u: any, size: string) {                      // в
 // редкие и легендарные (его правка 2026-11-19); ещё звёздный уголь или странное семя. Находка держится до конца похода:
 // погиб — пропала, вышел или зачистил — твоя (у алтаря её не делят пополам)
 // его правка 2026-11-20: в бустере всегда карта (редкая или легендарная), а уголь или странное семя — с шансом добавкой к ней
-export const ALTAR_CARD: [string, number][] = [["rare", .73], ["legend", .27]], ALTAR_EXTRA: [string, number][] = [["coal", .30], ["seed", .15]];
+export const ALTAR_CARD: [string, number][] = [["rare", 73], ["super", 20], ["mythic", 6], ["secret", 1]], ALTAR_EXTRA: [string, number][] = [["coal", .30], ["seed", .15]];
 function altarRoll(t: [string, number][]) { let r = Math.random(); for (const [k, p] of t) { if (r < p) return k; r -= p; } return null; }
 export async function dgAltar(u: any, run: string) {
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
@@ -2423,15 +2430,46 @@ export async function dgAltar(u: any, run: string) {
   const [had] = await q("SELECT loot FROM d_altar WHERE user = ? AND run = ?", [u.id, run]);
   const split = (v: string) => { const [card, extra] = v.split("+"); return { loot: card, extra: extra || null }; };
   if (had) return split(String(had[0]));                                     // уже ударил (повтор запроса) — та же находка
-  const card = altarRoll(ALTAR_CARD) || "rare", extra = altarRoll(ALTAR_EXTRA), loot = card + (extra ? "+" + extra : "");
+  const card = roll(ALTAR_CARD), extra = altarRoll(ALTAR_EXTRA), loot = card + (extra ? "+" + extra : "");
   await q("INSERT INTO d_altar (user, run, loot) VALUES (?, ?, ?) ON CONFLICT(user) DO UPDATE SET run = excluded.run, loot = excluded.loot", [u.id, run, loot]);
   return split(loot);
 }
+
+// Сундук бросает награду на сервере и запоминает её по номеру внутри похода. Повторный запрос не даёт новую награду.
+// Карта и страница становятся собственностью только при успешном возвращении; кости входят в итоговый счёт похода.
+function chestReply(row: any[], found: number) {
+  const loot = String(row[0]), detail = String(row[1] || "");
+  if (loot === "bones") return { loot, count: Number(detail) || 10 };
+  if (loot === "booster") return { loot, card: { kind: cardKind(detail || "common") } };
+  return { loot: "page", page: { letter: detail, found, total: CIPHER_ALPHA.length } };
+}
+export async function dgChest(u: any, run: string, slot: number) {
+  if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
+  const h = await dgHero(u.id), s = Math.round(slot);
+  if (!run || h.run !== run) return { error: "Поход уже закончен" };
+  if (s < 0 || s >= (DG_CHESTS[h.size] || 0)) return { error: "Такого сундука в этом походе нет" };
+  const pageCount = async () => Number((await q("SELECT COUNT(*) FROM d_cipher WHERE user = ?", [u.id]))[0]?.[0] || 0)
+    + Number((await q("SELECT COUNT(*) FROM d_chest WHERE user = ? AND run = ? AND loot = 'page'", [u.id, run]))[0]?.[0] || 0);
+  const [old] = await q("SELECT loot, detail FROM d_chest WHERE user = ? AND run = ? AND slot = ?", [u.id, run, s]);
+  if (old) return chestReply(old, await pageCount());
+
+  const found = (await q("SELECT letter FROM d_cipher WHERE user = ?", [u.id])).map(([x]) => String(x));
+  const pending = (await q("SELECT detail FROM d_chest WHERE user = ? AND run = ? AND loot = 'page'", [u.id, run])).map(([x]) => String(x));
+  const left = CIPHER_ALPHA.filter((x) => !found.includes(x) && !pending.includes(x));
+  const loot = left.length ? roll([["bones", 55], ["booster", 25], ["page", 20]]) : roll([["bones", 68.75], ["booster", 31.25]]);
+  const detail = loot === "bones" ? String(10 + Math.floor(Math.random() * 6))
+    : loot === "booster" ? roll(CHEST_CARD_ODDS)
+    : left[Math.floor(Math.random() * left.length)];
+  await q("INSERT OR IGNORE INTO d_chest (user, run, slot, loot, detail, at) VALUES (?, ?, ?, ?, ?, ?)", [u.id, run, s, loot, detail, now()]);
+  const [saved] = await q("SELECT loot, detail FROM d_chest WHERE user = ? AND run = ? AND slot = ?", [u.id, run, s]);
+  return chestReply(saved, await pageCount());
+}
+
 async function altarGive(uid: number, loot: string) {                     // находка алтаря — на ферму; что выдано на самом деле
   const hasBarn = async () => (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [uid])).length > 0;
   const coal = async () => { if (await hasBarn()) await q("INSERT INTO f_barn (user, strain, count) VALUES (?, 'p:coal', 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [uid]);
     else await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [COAL_DUST, uid]); return "coal"; };
-  if (loot === "rare" || loot === "legend" || loot === "card") { const k = loot === "rare" ? "rare" : "legend";   // «card» — старое имя легендарной
+  if (["common", "uncommon", "rare", "super", "mythic", "secret", "epic", "legend", "card"].includes(loot)) { const k = loot === "card" ? "mythic" : cardKind(loot);
     await giveCard(uid, k, "странная комната подземелья"); return k; }
   if (loot === "seed") {                                                   // правило «не больше двух странных у игрока»: третье вытесняет одно из мешка;
     if ((await oddHeld(uid)) >= ODD_PER_USER && !(await oddEvict(uid))) return coal();   // оба растут — вместо семени уголь
@@ -2456,9 +2494,11 @@ export async function cardLedgerSync() {                                        
   for (const [id, user, at] of await q("SELECT c.id, c.user, c.at FROM d_cards c WHERE NOT EXISTS (SELECT 1 FROM d_card_log l WHERE l.card = c.id) ORDER BY c.id"))
     await cardLog(Number(id), "found", null, Number(user), "странная комната подземелья", Number(at));
 }
-// выдать карту: запись, фольга с шансом, первая запись журнала. Категории (его решение 2026-11-20): common (базовая), rare, epic, legend
+// выдать карту: запись, фольга с шансом, первая запись журнала. Старые epic/legend читаются как SR/M.
 export const CARD_FOIL = 0.10;
+function cardKind(kind: string) { return kind === "epic" ? "super" : kind === "legend" ? "mythic" : kind; }
 export async function giveCard(uid: number, kind: string, info: string) {
+  kind = cardKind(kind);
   const [[cid]] = await q("INSERT INTO d_cards (user, kind, at) VALUES (?, ?, ?) RETURNING id", [uid, kind, now()]);
   const foil = Math.random() < CARD_FOIL; if (foil) await q("INSERT INTO d_card_fx (card, finish) VALUES (?, 'foil')", [Number(cid)]);
   await cardLog(Number(cid), "found", null, uid, info + (foil ? " · фольга" : ""));
@@ -2466,7 +2506,7 @@ export async function giveCard(uid: number, kind: string, info: string) {
 }
 export async function cardsOf(uid: number) {
   return (await q("SELECT c.id, c.kind, c.at, f.finish FROM d_cards c LEFT JOIN d_card_fx f ON f.card = c.id WHERE c.user = ? ORDER BY c.at DESC", [uid]))
-    .map(([id, kind, at, fin]) => ({ id: Number(id), serial: String(id).padStart(6, "0"), kind: String(kind), at: Number(at), foil: fin === "foil" }));
+    .map(([id, kind, at, fin]) => ({ id: Number(id), serial: String(id).padStart(6, "0"), kind: cardKind(String(kind)), at: Number(at), foil: fin === "foil" }));
 }
 export async function cardHistory(u: any, id: number) {
   const [c] = await q("SELECT c.user, c.kind, c.at, f.finish FROM d_cards c LEFT JOIN d_card_fx f ON f.card = c.id WHERE c.id = ?", [id]); if (!c) return { error: "Такой карты нет" };
@@ -2479,7 +2519,7 @@ export async function cardHistory(u: any, id: number) {
   }
   const events = all.filter((r) => Number(r[1]) === id).map(([seq, , ev, from, to, at, info, , h]) => ({ seq: Number(seq), ev: String(ev), at: Number(at), info: String(info),
     mine_from: from != null && String(from) === String(u.id), mine_to: to != null && String(to) === String(u.id), hash: String(h).slice(0, 12) }));
-  return { id, serial: String(id).padStart(6, "0"), kind: String(c[1]), at: Number(c[2]), foil: c[3] === "foil", ok, chain: all.length, events };
+  return { id, serial: String(id).padStart(6, "0"), kind: cardKind(String(c[1])), at: Number(c[2]), foil: c[3] === "foil", ok, chain: all.length, events };
 }
 export async function dgFinish(u: any, run: string, bones: number, dead = false, left = false, revived = false) {      // итог похода: погиб — кости 0; закрыл игру посреди похода — итог не пришёл, всё пропало
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };
@@ -2496,7 +2536,15 @@ export async function dgFinish(u: any, run: string, bones: number, dead = false,
   const [al] = await q("DELETE FROM d_altar WHERE user = ? AND run = ? RETURNING loot", [u.id, run]);
   let loot: string | null = null;                                            // «карта+добавка» — выдаётся всё
   if (al && !dead) { const got = []; for (const k of String(al[0]).split("+")) got.push(await altarGive(u.id, k)); loot = got.join("+"); }
-  return { ok: true, bones: b, total: h.bones + b, hp: dead ? Math.max(0, h.hp - HP_DEATH) : h.hp, loot, points: pts };
+  const chestRows = await q("DELETE FROM d_chest WHERE user = ? AND run = ? RETURNING loot, detail, slot", [u.id, run]);
+  const chest: any[] = [];
+  if (!dead) for (const [ck, detail, slot] of chestRows.sort((a, z) => Number(a[2]) - Number(z[2]))) {
+    const kind = String(ck), value = String(detail || "");
+    if (kind === "booster") chest.push({ slot: Number(slot), loot: kind, card: await giveCard(u.id, value, "сундук подземелья") });
+    else if (kind === "page") { const [[n]] = await q("SELECT COUNT(*) FROM d_cipher WHERE user = ?", [u.id]);
+      await q("INSERT OR IGNORE INTO d_cipher (user, letter, found) VALUES (?, ?, ?)", [u.id, value, Number(n) + 1]); chest.push({ slot: Number(slot), loot: kind, letter: value }); }
+  }
+  return { ok: true, bones: b, total: h.bones + b, hp: dead ? Math.max(0, h.hp - HP_DEATH) : h.hp, loot, chest, points: pts };
 }
 export async function dgDrink(u: any, item: string) {                      // выпить чай из амбара — здоровье героя
   if (!(await dgOwner(u))) return { error: "Подземелье пока закрыто" };

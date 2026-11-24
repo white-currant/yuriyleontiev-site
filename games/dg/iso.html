@@ -32,6 +32,7 @@
     border-radius: 50%; background: rgba(54,42,75,.8); color: #f1e7ff; font-family: inherit; font-size: calc(var(--u) * 12); font-weight: 700; line-height: 1; padding: 0; cursor: pointer; touch-action: none; }
   #dodge[aria-disabled="true"] { opacity: .5; }
   #dodge:active { background: #655083; }
+  #stage.page-open #leave, #stage.page-open #dodge { opacity: .18; filter: saturate(.25); pointer-events: none; }
   #over button + button { margin-left: calc(var(--u) * 8); }
   #over button[hidden] + button { margin-left: 0; }
   #over #stay { background: #3a3e4b; color: #efe6d2; box-shadow: 0 0 0 calc(var(--u) * 2) #14151b, inset 0 calc(var(--u) * -3) 0 #23252e, inset 0 calc(var(--u) * 2) 0 #5a5f70; }
@@ -59,6 +60,13 @@
   // Изометрическое подземелье (его выбор 2026-11-17: «изометрия красивее»). Тайлы — из его листа (iso/*.png, нарезка исходники/нарезать_изометрию.py).
   // Мир считается в клетках пола (u, v); на экран клетка ложится ромбом 48×24. Комната 9×9, камера ведёт героя по горизонтали.
   var W = 216, H = 384, UW = 360, stage = document.getElementById("stage"), cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+  var CHESTDEMO = /[?&]chest=1/.test(location.search), CHESTLOOT = ((location.search.match(/[?&]testloot=(bones|booster|page)/) || [])[1]) || "";
+  var CHEST_PAGE_KEY = "sg-dg-cipher-pages-v1", CHEST_ALPHA = Array.from("абвгдеёжзийклмнопрстуфхцчшщъыьэюя"), chestPageMemory = [];
+  if (/[?&]testresetpages=1/.test(location.search)) try { localStorage.removeItem(CHEST_PAGE_KEY); } catch (e) {}
+  function foundCipherPages() { try { var a = JSON.parse(localStorage.getItem(CHEST_PAGE_KEY) || "[]"); return Array.isArray(a) ? a.filter(function (ch, i) { return CHEST_ALPHA.indexOf(ch) >= 0 && a.indexOf(ch) === i; }) : []; } catch (e) { return chestPageMemory.slice(); } }
+  function saveCipherPages(a) { chestPageMemory = a.slice(); try { localStorage.setItem(CHEST_PAGE_KEY, JSON.stringify(a)); } catch (e) {} }
+  function remainingCipherPages() { var got = foundCipherPages(); return CHEST_ALPHA.filter(function (ch) { return got.indexOf(ch) < 0; }); }
+  function takeCipherPage() { var left = remainingCipherPages(); if (!left.length) return null; var ch = left[Math.floor(Math.random() * left.length)], got = foundCipherPages(); got.push(ch); saveCipherPages(got); return { letter: ch, found: got.length, total: CHEST_ALPHA.length }; }
   // внутреннее разрешение вчетверо больше (его правка 2026-11-19: камера шла рывками по целому пикселю) — мир сдвигается на четверть пикселя,
   // а все рисунки по-прежнему стоят в своей пиксельной сетке
   var Z = 4; cv.width = W * Z; cv.height = H * Z; ctx.imageSmoothingEnabled = false;
@@ -74,12 +82,14 @@
   // ---------- картинки из его листа ----------
   var IMG = {}, NAMES = ["floor0", "floor1", "floor2", "floor3", "floor4", "floor5", "floor6", "floor7", "floor8", "floor9", "floor10", "t_blue", "t_violet", "t_lava", "wu_plain1", "wu_plain2", "wu_plain3", "wu_pil1", "wu_pil2", "wu_pil3", "wu_end", "wu_gate", "wu_door", "wu_arch", "wu_archin", "wu_torch1", "wu_torch2", "wu_torch3",
     "wv_plain1", "wv_plain2", "wv_plain3", "wv_pil1", "wv_pil2", "wv_pil3", "wv_end", "wv_gate", "wv_door", "wv_arch", "wv_archin", "wv_torch1", "wv_torch2", "wv_torch3", "w_corner", "brazier_f0", "brazier_f1", "brazier_f2", "brazier_f3", "brazier_f4", "brazier_f5", "brazier_f6", "brazier_f7", "brazier_f8",
-    "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag", "booster", "cardback", "bookicon", "sdoor_u", "sdoor_v"];   // бустер и рубашка — его рисунки (2026-11-19)
+    "crys_blue", "crys_teal", "crys_violet", "crys_green", "crys_big", "crate", "crates", "barrel", "mush", "mush2", "bones", "skull", "rocks", "rock_big", "brazier", "circle", "lantern", "stalag", "booster", "cardback", "bookicon", "chest", "sdoor_u", "sdoor_v"];   // бустер и рубашка — его рисунки (2026-11-19)
   NAMES.slice().forEach(function (n) { if (/^w[uv]_/.test(n) && !/in$/.test(n)) NAMES.push(n + "_x", n + "_t", n + "_xt"); });   // _t — с цоколем под колонной ближнего конца (за ним нет пола)   // *_x — дальний конец одиночной стены с косым срезом плиты (его правка 2026-11-19)
-  var wait = NAMES.length + 3;
-  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=25"; IMG[n] = im; });
+  var wait = NAMES.length + 5;
+  NAMES.forEach(function (n) { var im = new Image(); im.onload = function () { if (!--wait) start(); }; im.src = "iso/" + n + ".png?v=" + (n === "chest" ? 26 : 25); IMG[n] = im; });
   var HERO = new Image(); HERO.onload = function () { if (!--wait) start(); }; HERO.src = "hero.png?v=908b9a1fb19f";
   var STARBG = new Image(); STARBG.onload = function () { if (!--wait) start(); }; STARBG.src = "starfield.png?v=1";
+  var CHESTPACK = new Image(); CHESTPACK.onload = function () { if (!--wait) start(); }; CHESTPACK.src = "iso/chest-booster.png?v=1";
+  var CHESTPAGE = new Image(); CHESTPAGE.onload = function () { if (!--wait) start(); }; CHESTPAGE.src = "iso/cipher-page.png?v=2";
   // странная комната — из его пяти листов (2026-11-19, исходники «Подземелье — прототип/исходники/странная_комната»): iso/sr.json — что есть по видам
   // (алтари, углы, плиты стен, пол, убранство); каждый поход комната собирается заново из этого набора
   var SR = null;
@@ -297,6 +307,25 @@
         if (!c1) return; c1.heal = { u: c1.ci + .5, v: c1.cj + .5, t: 0, used: false };
         c1.decor = c1.decor.filter(function (d) { return Math.hypot(d.u - c1.heal.u, d.v - c1.heal.v) > 1.3; }); c1.decor.push({ u: c1.heal.u, v: c1.heal.v, k: "circle", flat: true });
         c1.mobs = c1.mobs.filter(function (m) { return Math.hypot(m.u - c1.heal.u, m.v - c1.heal.v) > 1.2; }); }); }
+    // Сундуки: малое / среднее / большое — 1 / 2 / 4, не в стартовой и не в тайной комнате, только у стен.
+    // У левой стены тот же лист кадров отражается программно — корпус и опора остаются выровненными.
+    var chestN = CHESTDEMO ? 1 : ({ s: 1, m: 2, l: 4 }[SIZEK] || 0);
+    if (chestN) { var chestRooms = CHESTDEMO ? [list[0]] : list.filter(function (r2) { return !r2.secret && r2.depth > 0; }).sort(function (a, b) { return a.depth - b.depth || a.seed - b.seed; }), picked = [];
+      for (var cs = 0; cs < chestN && chestRooms.length; cs++) { var qi = Math.min(chestRooms.length - 1, Math.max(0, Math.round((cs + 1) * (chestRooms.length + 1) / (chestN + 1)) - 1));
+        while (picked.indexOf(qi) >= 0 && qi + 1 < chestRooms.length) qi++; while (picked.indexOf(qi) >= 0 && qi > 0) qi--; if (picked.indexOf(qi) < 0) picked.push(qi); }
+      picked.forEach(function (ri, slot) { var dr = chestRooms[ri], dc = [];
+        for (var cy = 0; cy < dr.h; cy++) for (var cx = 0; cx < dr.w; cx++) {
+          if (!dr.open[cy][cx] || dr.props.some(function (p) { return p.i === cx && p.j === cy; })) continue;
+          var leftWall = cx === 0 || !dr.open[cy][cx - 1], wall = leftWall || cy === 0 || cx === dr.w - 1 || cy === dr.h - 1 || !dr.open[cy][cx + 1] || !dr.open[cy + 1] || !dr.open[cy + 1][cx];
+          var door = (cx === 0 && cy === dr.door.mu) || (cy === 0 && cx === dr.door.mv) || (cx === dr.w - 1 && cy === dr.door.pu) || (cy === dr.h - 1 && cx === dr.door.pv);
+          if (wall && !door && Math.hypot(cx - dr.ci, cy - dr.cj) > 1.5) dc.push([cx, cy, leftWall]);
+        }
+        if (!dc.length) return; dc.sort(function (a, b) { return (a[0] + a[1]) - (b[0] + b[1]); }); var cp = CHESTDEMO ? (dc.filter(function (q) { return q[2]; })[0] || dc[0]) : dc[Math.floor(r() * dc.length)], claimed = CHEST_CLAIMED.indexOf(slot) >= 0;
+        var chestLoot = ""; if (CHESTDEMO || !RUN) { var chestRoll = Math.random(), pagesLeft = remainingCipherPages().length > 0; chestLoot = CHESTLOOT || (pagesLeft ? (chestRoll < .55 ? "bones" : chestRoll < .80 ? "booster" : "page") : (chestRoll < .6875 ? "bones" : "booster")); }
+        dr.chest = { slot: slot, i: cp[0], j: cp[1], u: cp[0] + .5, v: cp[1] + .5, flip: !!cp[2], opening: 0, opened: claimed, rewarded: claimed, loot: chestLoot };
+        if (CHESTDEMO) dr.mobs = dr.mobs.filter(function (m) { return Math.hypot(m.u - dr.chest.u, m.v - dr.chest.v) > 4.2; });
+      });
+    }
     return list;
   }
   function floorAt(i, j) { var rm = cur;                                       // есть ли пол в клетке (с выходами за край комнаты)
@@ -307,7 +336,7 @@
     var rm = cur;
     if (i < 0) return !!rm.mu && j === rm.door.mu; if (i >= rm.w) return !!rm.pu && j === rm.door.pu;
     if (j < 0) return !!rm.mv && i === rm.door.mv; if (j >= rm.h) return !!rm.pv && i === rm.door.pv;
-    return !!rm.open[j][i] && !rm.props.some(function (p) { return p.i === i && p.j === j; });
+    return !!rm.open[j][i] && !rm.props.some(function (p) { return p.i === i && p.j === j; }) && !(rm.chest && rm.chest.i === i && rm.chest.j === j);
   }
   // интервал между плевками (его правка 2026-11-20): случайный, и глубже — чаще: в ближних залах 3–5 с, в дальних 2–3,5 с
   function spitGap() { var k = Math.min(1, Math.max(0, ((cur && cur.depth) || 2) - 2) / 4); return (3 - k) + Math.random() * (2 - .5 * k); }
@@ -324,7 +353,11 @@
     if (cur && cur.secret && cur.decor.some(function (d) { return d.solid && Math.abs(u - d.u) < .38 && Math.abs(v - d.v) < .38; })) return true; return !cellOpen(Math.floor(u - r), Math.floor(v - r)) || !cellOpen(Math.floor(u + r), Math.floor(v - r)) || !cellOpen(Math.floor(u - r), Math.floor(v + r)) || !cellOpen(Math.floor(u + r), Math.floor(v + r)); }
   function reset() {
     rooms = makeLevel(Date.now() & 0xffffff); cur = rooms[0];
+    stage.dataset.chests = String(rooms.filter(function (r) { return !!r.chest; }).length); stage.dataset.mirroredChests = String(rooms.filter(function (r) { return r.chest && r.chest.flip; }).length);
     hero = { u: cur.ci + .5, v: cur.cj + .5, dir: "front", flip: 1, st: "idle", t: 0, hp: 100, inv: 0, hitDone: false, revive: REVIVE, revmax: REVIVE };
+    if (CHESTDEMO && cur.chest) { var near = [[1,0],[-1,0],[0,1],[0,-1]].map(function (q) { return [cur.chest.i + q[0], cur.chest.j + q[1]]; }).find(function (q) {
+        return q[0] >= 0 && q[1] >= 0 && q[0] < cur.w && q[1] < cur.h && cur.open[q[1]][q[0]] && !cur.props.some(function (p) { return p.i === q[0] && p.j === q[1]; }); });
+      if (near) { hero.u = near[0] + .5; hero.v = near[1] + .5; } }
     hero.dodgeReady = 0;
     wantHit = wantDodge = false;
     combatTime = 0; primedSlimes = [];
@@ -357,7 +390,8 @@
   }
   // поход на сервере (2026-11-19): вход оплачен едой в убежище, итог — один запрос при выходе. Погиб — кости 0; вышел сам или зачистил — кости твои.
   // Без сервера (страница открыта сама по себе) — как раньше, пробный бой.
-  var RUN = (location.search.match(/run=([0-9a-f]+)/) || [])[1] || "", dgCall = (function () { try { return parent !== window && parent.dgCall; } catch (e) { return null; } })(), sent = null;
+  var RUN = (location.search.match(/run=([0-9a-f]+)/) || [])[1] || "", dgCall = (function () { try { return parent !== window && parent.dgCall; } catch (e) { return null; } })(), sent = null, CHEST_CLAIMED = [];
+  try { if (parent !== window && parent.__dgD && parent.__dgD.run === RUN) CHEST_CLAIMED = (parent.__dgD.chests || []).slice(); } catch (e) {}
   function report(got) { if (!RUN || !dgCall || !hero) return Promise.resolve(); if (!sent) sent = dgCall("/api/dg/finish", { run: RUN, bones: got, dead: hero.st === "dead", left: leftEarly, revived: hero.revmax > 0 && !hero.revive }).then(function (r) { try { if (parent.__dgD) parent.__dgD.run = null; } catch (e) {} return r; }).catch(function (e) { sent = null; throw e; }); return sent; }   // поход закрыт — в памяти убежища тоже   // не дошло — в убежище не уходим (кости пропали бы), следующее нажатие отправит снова
   // возврат в убежище (его жалоба 2026-11-19: «на кнопке долго висит без ответа»). GitHub отвечает то за 2, то за 15 секунд, а раньше
   // страница убежища качалась дважды (проверка, потом переход) и только после итога похода. Теперь убежище качается заранее, пока идёт бой,
@@ -407,6 +441,7 @@
   // ---------- управление: джойстик по экрану, мир — по диагоналям ----------
   // джойстик слева внизу и кнопка удара справа внизу — видны всегда (его просьба 2026-11-17); палец ведёт ручку от центра основания
   var JR = 24, JX = 44, JY = H - 52, BX = W - 42, BY = H - 54, BR = 22, joy = { on: false, id: -1, bx: JX, by: JY, dx: 0, dy: 0 }, keys = {}, wantHit = false, wantDodge = false, hitFlash = 0;
+  var chestBones = null, chestPage = null;
   var dodgeButton = document.getElementById("dodge");
   function canDodge() {
     return hero && !done && !trans && !paused && !rev && !spell && hero.dodgeReady <= 0 &&
@@ -421,6 +456,7 @@
   dodgeButton.addEventListener("click", function (e) { if (e.detail === 0) requestDodge(); });
   function pos(e) { var r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
   stage.addEventListener("pointerdown", function (e) {
+    if (chestPage) { var pp = pos(e); if (pp[0] > 8 && pp[0] < W - 8 && pp[1] > 108 && pp[1] < 304) chestPage = null; e.preventDefault(); return; }
     if (spell) return;                                                          // читается заклинание — ждём
     if (rev) { revTap(); return; }                                              // бустер: вскрыть, перевернуть, забрать — по тапу
     if (e.target.closest("#over, #leave, #dodge")) return;
@@ -451,6 +487,20 @@
   function camSet() { var x = Math.round(camX * Z) / Z, y = Math.round(camY * Z) / Z; camIX = Math.floor(x); camIY = Math.floor(y); camFX = x - camIX; camFY = y - camIY; }
   function S(u, v) { var p = P(u, v); return [p[0] - camIX + W / 2, p[1] - camIY + Math.round(H * .56)]; }   // мир → экран; герой чуть ниже середины
   function nearest(maxPx) { var best = null, bd = maxPx, hs = S(hero.u, hero.v); cur.mobs.forEach(function (m) { if (m.hp <= 0) return; var s2 = S(m.u, m.v), d = Math.hypot(s2[0] - hs[0], s2[1] - hs[1]); if (d < bd) { bd = d; best = m; } }); var al = cur.altar; if (al && !al.struck) { var sa = S(al.u, al.v), da = Math.hypot(sa[0] - hs[0], sa[1] - hs[1]); if (da < bd) best = al; } return best; }
+  function canOpenChest() { var c = cur && cur.chest; if (!c || c.opened || c.opening || hero.st === "dead") return false;
+    if (Math.hypot(hero.u - c.u, hero.v - c.v) > 1.45) return false;
+    return !cur.mobs.some(function (m) { return m.hp > 0 && (Math.hypot(m.u - hero.u, m.v - hero.v) < 2.2 || Math.hypot(m.u - c.u, m.v - c.v) < 2.2); }); }
+  function showChestReward(c, got) { var s = S(c.u, c.v);
+    if (got.loot === "bones") chestBones = { t: 0, count: Number(got.count) || 10, u: c.u, v: c.v, got: false };
+    else if (got.loot === "page" && got.page) { got.page.t = 0; got.page.glyph = SPELL_MAP[got.page.letter] || got.page.letter; chestPage = got.page; }
+    else reveal(got.card && got.card.kind || "common", [s[0] - camFX, s[1] - camFY - 21], null, CHESTPACK);
+  }
+  function grantChest(c) { if (c.rewarded) return; c.rewarded = true;
+    if (RUN && dgCall) { dgCall("/api/dg/chest", { run: RUN, slot: c.slot }).then(function (got) { if (!got || got.error) throw new Error(got && got.error || "Нет связи"); CHEST_CLAIMED.push(c.slot); showChestReward(c, got); })
+      .catch(function (e) { c.rewarded = false; c.opened = false; say("Сундук не открылся", e.message || "попробуй ещё раз"); }); return; }
+    if (c.loot === "page") { var page = takeCipherPage(); if (page) return showChestReward(c, { loot: "page", page: page }); c.loot = "bones"; }
+    showChestReward(c, c.loot === "booster" ? { loot: "booster", card: { kind: "rare" } } : { loot: "bones", count: 10 + Math.floor(Math.random() * 6) }); }
+  function openChest() { var c = cur && cur.chest; if (!canOpenChest()) return false; c.opening = .001; hitFlash = .15; return true; }
 
   function go(du, dv) { var nx = room(cur.gx + du, cur.gy + dv); if (!nx || trans) return; trans = { t: 0, to: nx, du: du, dv: dv }; }
   function enter(tr) {
@@ -539,6 +589,9 @@
   }
   function update(dt) {
     combatTime += dt;
+    if (cur.chest && cur.chest.opening) { cur.chest.opening += dt; if (cur.chest.opening >= .62) { cur.chest.opening = 0; cur.chest.opened = true; grantChest(cur.chest); } }
+    if (chestBones) { chestBones.t += dt; if (chestBones.t >= 1 && !chestBones.got) { chestBones.got = true; bones += chestBones.count; hud(); } if (chestBones.t > 1.35) chestBones = null; }
+    if (chestPage) chestPage.t += dt;
     if (trans) { trans.t += dt; if (trans.t >= .16 && !trans.done) { trans.done = true; enter(trans); } if (trans.t >= .32) trans = null; detonateSlimes(); return; }
     var mobs = cur.mobs, i;
     if (hero.st !== "dead") {
@@ -574,6 +627,7 @@
         if (hero.t > .3) { hero.st = "idle"; hero.t = 0; }
       } else if (hero.st === "hurt") { hero.t += dt; if (hero.t > .28) { hero.st = "idle"; hero.t = 0; } }
       else {
+        if (wantHit && canOpenChest()) { openChest(); wantHit = false; }
         if (wantHit && atAltar()) { strikeAltar(cur.altar); wantHit = false; }          // у алтаря кнопка — книга: читаем, а не бьём (2026-11-20)
         if (wantHit) { var tg = nearest(80); if (tg) hero.flip = S(tg.u, tg.v)[0] >= S(hero.u, hero.v)[0] ? 1 : -1; hero.dir = "side"; hero.st = "hit"; hero.t = 0; hero.hitDone = false; }
         else if (jl > .15) {
@@ -700,13 +754,17 @@
   // (art/odd-tentacle-sway.png, 8 кадров покачивания, глаза моргают каждый в своём ритме); в стенах моргают такие же глаза разного размера.
   // Удар у алтаря — одна находка: легендарная карта, звёздный уголь или странное семя (бросок на сервере). Погиб — находка пропала
   // карты — редкие и легендарные (его правка 2026-11-19); рисунки и достоинства пока скрыты
-  var LOOT = { rare: { name: "Редкая тайная карта", sub: "откроется позже", low: "редкая карта", rim: "#b8d0ec", rim2: "#34465e", bg: ["#1a2a46", "#2a3b5c"], glow: "140,190,255", hidden: true },
-               legend: { name: "Легендарная тайная карта", sub: "откроется позже", low: "легендарная карта", rim: "#ffcf5a", rim2: "#5a3a12", bg: ["#2a1a46", "#3b2a5c"], glow: "255,190,90", hidden: true },
+  var LOOT = { common: { name: "Обычная тайная карта", sub: "C · откроется позже", low: "обычная карта", rim: "#d6dae4", rim2: "#555a66", glow: "190,195,205", hidden: true },
+               uncommon: { name: "Необычная тайная карта", sub: "UC · откроется позже", low: "необычная карта", rim: "#8dd7a0", rim2: "#285b3a", glow: "110,220,145", hidden: true },
+               rare: { name: "Редкая тайная карта", sub: "R · откроется позже", low: "редкая карта", rim: "#b8d0ec", rim2: "#34465e", bg: ["#1a2a46", "#2a3b5c"], glow: "140,190,255", hidden: true },
+               super: { name: "Сверхредкая тайная карта", sub: "SR · откроется позже", low: "сверхредкая карта", rim: "#d9b8ff", rim2: "#59317c", glow: "195,125,255", hidden: true },
+               mythic: { name: "Мифическая тайная карта", sub: "M · откроется позже", low: "мифическая карта", rim: "#ffcf5a", rim2: "#7c4515", glow: "255,190,90", hidden: true },
+               secret: { name: "Секретная тайная карта", sub: "SEC · откроется позже", low: "секретная карта", rim: "#ff9ac8", rim2: "#6e163e", glow: "255,90,170", hidden: true },
                coal: { name: "Звёздный уголь", sub: "", low: "звёздный уголь", rim: "#c08a5a", rim2: "#3a2416", bg: ["#1c1820", "#2a2430"], glow: "255,170,90" },
                seed: { name: "Странное семя", sub: "", low: "странное семя", rim: "#e0505e", rim2: "#3a0a18", bg: ["#2a0c22", "#3a1030"], glow: "255,80,110" } };
-  LOOT.card = LOOT.legend;                                                    // старое имя легендарной
+  LOOT.legend = LOOT.card = LOOT.mythic;                                     // старые ответы незаконченного похода
   // его правка 2026-11-20: в бустере всегда карта, уголь или семя — добавкой с шансом (как на сервере: ALTAR_CARD, ALTAR_EXTRA)
-  var CARD_P = [["rare", .73], ["legend", .27]], EXTRA_P = [["coal", .30], ["seed", .15]], lootGot = null, lootEx = null;
+  var CARD_P = [["rare", .73], ["super", .20], ["mythic", .06], ["secret", .01]], EXTRA_P = [["coal", .30], ["seed", .15]], lootGot = null, lootEx = null;
   function pickP(t) { var x = Math.random(); for (var n = 0; n < t.length; n++) { if (x < t[n][1]) return t[n][0]; x -= t[n][1]; } return null; }
   function lootLow() { return lootGot ? LOOT[lootGot].low + (lootEx ? " и " + LOOT[lootEx].low : "") : ""; }
   var lootDummy = null;     // шансы — как на сервере (ALTAR_LOOT); пробный бой без сервера бросает сам
@@ -731,10 +789,10 @@
   // бустер и рубашка — его рисунки (исходники «Подземелье — прототип/исходники/бустер»): картинки сразу в точках экрана (мир × 4),
   // карта 90×136 мира, бустер 82×150. Лицо карты — его рубашка в цвете редкости, посередине «?» (карты пока скрыты) или значок находки
   var rev = null, CWd = 90, CHd = 136, PW = 82, PH = 150, TEAR = 80, cardC = mk(360, 544), cardG = cardC.getContext("2d"), artC = mk(16, 16), artG = artC.getContext("2d"), FACE = {};
-  var TINT = { rare: "rgba(70,130,230,.75)", legend: "rgba(230,170,60,.75)", coal: "rgba(190,120,70,.6)", seed: null };
+  var TINT = { common: "rgba(150,155,165,.72)", uncommon: "rgba(70,170,100,.72)", rare: "rgba(70,130,230,.75)", super: "rgba(155,80,225,.75)", mythic: "rgba(230,170,60,.75)", legend: "rgba(230,170,60,.75)", secret: "rgba(235,55,135,.78)", coal: "rgba(190,120,70,.6)", seed: null };
   // бустер медленнее (×0,6) и ждёт тапа (его правка 2026-11-20): прилетел — «нажми, чтобы вскрыть»; карта встала — «нажми, чтобы перевернуть»
   var REV_SPEED = .6, HOLD_TEAR = .8, HOLD_FLIP = 1.8;
-  function reveal(k, from, ex) { rev = { k: k, ex: ex || null, t0: T, sx: from[0], sy: from[1], out: 0, e: 0, last: T, stage: 0 }; }
+  function reveal(k, from, ex, pack) { rev = { k: k, ex: ex || null, t0: T, sx: from[0], sy: from[1], out: 0, e: 0, last: T, stage: 0, pack: pack || IMG.booster }; }
   function revTap() { if (!rev || rev.out) return;
     if (rev.stage === 0) { if (rev.e >= HOLD_TEAR - .01) rev.stage = 1; return; }
     if (rev.stage === 1) { if (rev.e >= HOLD_FLIP - .01) rev.stage = 2; return; }
@@ -806,12 +864,12 @@
         if (e < 1.5) for (i = 0; i < 8; i++) { var ph9 = ((e - 1.0) * 2.2 + i / 8) % 1; ctx.globalAlpha = 1 - ph9; px(ctx, cxs + Math.sin(i * 2.1 + e * 6) * 22, cys - PH / 2 + tw - ph9 * 30, 2, 2, i % 2 ? "#ffd0dc" : "#ff4a6a"); ctx.globalAlpha = 1; } };
       if (e > 1.0 && e <= 1.4) cardAt();                                                                                   // ещё в пакете — позади его стенки
       ctx.globalAlpha = 1 - fall; ctx.save(); ctx.translate(px0 + shake, py0 + fall * 160); ctx.rotate(-.05 + Math.sin(e * 3) * .04 + fall * .35); ctx.scale(sc, sc);
-      if (torn) ctx.drawImage(IMG.booster, 0, TEAR, IMG.booster.width, IMG.booster.height - TEAR, -PW / 2, -PH / 2 + tw, PW, PH - tw);
-      else ctx.drawImage(IMG.booster, -PW / 2, -PH / 2, PW, PH);
+      if (torn) ctx.drawImage(rev.pack, 0, TEAR, rev.pack.width, rev.pack.height - TEAR, -PW / 2, -PH / 2 + tw, PW, PH - tw);
+      else ctx.drawImage(rev.pack, -PW / 2, -PH / 2, PW, PH);
       ctx.restore(); ctx.globalAlpha = 1;
       if (e > 1.4) cardAt();                                                                                               // вылетела — впереди падающего пакета
       if (e > .85 && e < 1.45) { var tk = (e - .85) / .6; ctx.globalAlpha = 1 - tk; ctx.save(); ctx.translate(cxs + 24 * tk + 4, cys - PH / 2 + tw / 2 - 46 * tk); ctx.rotate(-.05 + tk * 1.3);   // сорванная полоска
-        ctx.drawImage(IMG.booster, 0, 0, IMG.booster.width, TEAR, -PW / 2, -tw / 2, PW, tw); ctx.restore();
+        ctx.drawImage(rev.pack, 0, 0, rev.pack.width, TEAR, -PW / 2, -tw / 2, PW, tw); ctx.restore();
         for (i = 0; i < 12; i++) { var a = i * .52, d = 6 + tk * 34; px(ctx, cxs + Math.cos(a) * d * 1.4, cys - PH / 2 + tw + Math.sin(a) * d * .5 - tk * 8, 2, 2, i % 2 ? "#ffd0dc" : "#ff4a6a"); } ctx.globalAlpha = 1; }
       ctx.imageSmoothingEnabled = prev;
       if (rev.stage === 0 && e >= HOLD_TEAR) tapHint("нажми, чтобы вскрыть", cys + PH / 2 + 18);
@@ -986,6 +1044,11 @@
   var SWC = { k: "#14101a", W: "#f4f6fb", S: "#9aa4bc", G: "#d9a441", B: "#6a4426", P: "#ffd27a" }, swordC = null;
   function swordIcon(x, y) { if (!swordC) { swordC = mk(16, 16); var g = swordC.getContext("2d"); SWORD.forEach(function (r, j) { for (var i = 0; i < 16; i++) { var ch = r.charAt(i); if (SWC[ch]) { g.fillStyle = SWC[ch]; g.fillRect(i, j, 1, 1); } } }); }
     ctx.drawImage(swordC, Math.round(x - 12), Math.round(y - 12), 24, 24); }   // 24 мира — каждая клетка ровно 6 точек экрана (его правка 2026-11-20: чуть меньше)
+  function chestFrame(c) { if (c.opened) return 4; if (!c.opening) return 0; return Math.min(4, Math.floor(c.opening / .62 * 5)); }
+  function chestDraw(c) { var s = S(c.u, c.v), f = chestFrame(c), x = Math.round(s[0]), y = Math.round(s[1] - 42); ctx.save(); if (c.flip) { ctx.translate(x, 0); ctx.scale(-1, 1); ctx.drawImage(IMG.chest, f * 64, 0, 64, 64, -24, y, 48, 48); } else ctx.drawImage(IMG.chest, f * 64, 0, 64, 64, x - 24, y, 48, 48); ctx.restore(); }
+  function chestSparkles(c, t) { if (c.opened || c.opening) return; var s = S(c.u, c.v);
+    for (var q = 0; q < 6; q++) { var ph = (t * .7 + q * .173) % 1; if (ph > .55) continue; var a = 1 - ph / .55, x = s[0] + Math.sin(q * 2.1) * (15 + q % 2 * 4), y = s[1] - 23 - ph * 14 + Math.cos(q * 1.7) * 8;
+      ctx.globalAlpha = a; px(ctx, x, y, a > .55 ? 2 : 1, a > .55 ? 2 : 1, q % 2 ? "#fff3bc" : "#e8b85c"); } ctx.globalAlpha = 1; }
   // заклинание (его решение 2026-11-20): у алтаря нажал книгу — на экране строки на непонятном языке, по букве, дрожат и светятся; потом — бустер
   var spell = null, SPELL_T = 2.8;
   // знаки — те же, что в имени продавца странного семени в лавке (сервер, anomalyMarket): старинные буквы и перечёркивающие штрихи (его правка 2026-11-20)
@@ -1159,6 +1222,7 @@
   }
   var T = 0;
   function draw(ts) {
+    stage.classList.toggle("page-open", !!chestPage);
     var t = ts / 1000, i, j; T = t; camSet();
     ctx.setTransform(Z, 0, 0, Z, 0, 0); ctx.globalCompositeOperation = "source-over"; ctx.drawImage(STARBG, 0, 0, W, H);
     ctx.setTransform(Z, 0, 0, Z, -camFX * Z, -camFY * Z);
@@ -1206,6 +1270,7 @@
       var k = p.k === "brazier" ? "brazier_f" + (Math.floor(T * 9 + p.i * 3 + p.j) % 9) : p.k;     // жаровня — его 9 кадров огня, тумба неподвижна
       if (k.charAt(1) === "_") { var s0 = S(p.i, p.j), tx = Math.round(s0[0] - TW / 2), ty = Math.round(s0[1] - 36); img(k, tx, ty); return tileFx(k, tx, ty, T, p.i * 3.1 + p.j * 1.7); }   // предмет со своей плитки — точно над ней
       var s = S(p.i + .5, p.j + .5), im = IMG[k], x0 = Math.round(s[0] - im.width / 2), y0 = Math.round(s[1] - im.height + 16); img(k, x0, y0); } }); });
+    if (cur.chest) list.push({ z: cur.chest.u + cur.chest.v + .6, f: function () { chestDraw(cur.chest); } });
     cur.drops.forEach(function (d) { list.push({ z: d.u + d.v, f: function () { var s = S(d.u, d.v), bob = Math.round(Math.sin(d.t * 5) * 2); px(ctx, s[0] - 5, s[1], 10, 2, "rgba(8,6,10,.4)"); ctx.drawImage(boneC, Math.round(s[0] - 6), Math.round(s[1] - 12 + bob)); } }); });
     if (cur.altar) list.push({ z: cur.altar.u + cur.altar.v, f: function () { altarDraw(cur.altar, t); } });
     (cur.shots || []).forEach(function (b) { list.push({ z: b.u + b.v + .9, f: function () {   /* поверх слизней рядом: было видно, как пуля «врезается» в слизня, пролетая за ним (его замечание 2026-11-20) */      // плевок: зелёный комок с хвостом и тенью
@@ -1252,6 +1317,13 @@
     if (cur.altar) { var cs = S(cur.altar.u, cur.altar.v), ah = cur.altar.hitT && cur.altar.hitT < .6 ? 1 - cur.altar.hitT / .6 : 0; glow(cs[0], cs[1] - 30, 130, "rgba(255,60,70,A)", .75 + Math.sin(t * 1.9) * .12 + ah * .9); }
     cur.drops.forEach(function (d) { var s = S(d.u, d.v); glow(s[0], s[1] - 6, 20, "rgba(255,240,200,A)", .35); });
     ctx.globalCompositeOperation = "multiply"; ctx.drawImage(lightC, 0, 0, W + 1, H + 1); ctx.globalCompositeOperation = "source-over";
+    if (cur.chest) chestSparkles(cur.chest, t);
+    if (chestBones) { var bs = S(chestBones.u, chestBones.v), bh = S(hero.u, hero.v);
+      for (var cb = 0; cb < chestBones.count; cb++) { var cq = Math.max(0, Math.min(1, (chestBones.t - cb * .025) / .8)); if (!cq || cq >= 1) continue;
+        var cr = 1 - cq, cx1 = bs[0] + (cb % 5 - 2) * 6, cy1 = bs[1] - 25, ccx = (bs[0] + bh[0]) / 2 + Math.sin(cb * 2.1) * 24, ccy = Math.min(bs[1], bh[1]) - 85 - cb % 3 * 8;
+        var bx1 = cr * cr * cx1 + 2 * cr * cq * ccx + cq * cq * bh[0], by1 = cr * cr * cy1 + 2 * cr * cq * ccy + cq * cq * (bh[1] - 22);
+        ctx.globalAlpha = cq > .82 ? (1 - cq) / .18 : 1; ctx.drawImage(boneC, Math.round(bx1 - 6), Math.round(by1 - 6)); }
+      ctx.globalAlpha = 1; }
 
     var tg = hero.st !== "dead" ? nearest(100) : null;
     if (tg) { var ts2 = S(tg.u, tg.v), jx = Math.round(ts2[0]), jy = Math.round(ts2[1] - 7), sz = 13 + Math.round(Math.sin(t * 6)), c3 = "#f4ead0";
@@ -1307,7 +1379,7 @@
     if (spell) spellDraw();                                                         // заклинание на непонятном языке
     if (rev) boosterDraw();                                                         // находка из бустера — поверх всего
     dodgeButton.hidden = !!(spell || rev || done || paused);
-    var dodgeDisabled = canDodge() ? "false" : "true";
+    var dodgeDisabled = !chestPage && canDodge() ? "false" : "true";
     if (dodgeButton.getAttribute("aria-disabled") !== dodgeDisabled) dodgeButton.setAttribute("aria-disabled", dodgeDisabled);
     if (spell || rev) { if (trans) { ctx.fillStyle = "rgba(6,5,9," + Math.min(1, 1 - Math.abs(trans.t - .16) / .16) + ")"; ctx.fillRect(0, 0, W, H); } return; }   // на время чтения и бустера кнопок нет (2026-11-20)
     // джойстик: основание и ручка
@@ -1318,9 +1390,17 @@
     hitFlash = Math.max(0, hitFlash - 1 / 60);
     ctx.globalAlpha = hitFlash > 0 ? .75 : .45; ctx.fillStyle = hitFlash > 0 ? "#ffd27a" : "#3a2f45"; ctx.beginPath(); ctx.arc(BX, BY, BR, 0, 7); ctx.fill();
     ctx.globalAlpha = .7; ctx.strokeStyle = "#efe6d2"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(BX, BY, BR, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
-    if (atAltar()) { var bi = IMG.bookicon, bw = 34, bh = Math.round(34 * bi.height / bi.width), bob = Math.round(Math.sin(T * 3) * 1.5);   // у алтаря — его книга (2026-11-20)
+    if (canOpenChest()) { var cprev = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false; ctx.drawImage(IMG.chest, 12, 8, 43, 54, BX - 12, BY - 15, 24, 30); ctx.imageSmoothingEnabled = cprev; }
+    else if (atAltar()) { var bi = IMG.bookicon, bw = 34, bh = Math.round(34 * bi.height / bi.width), bob = Math.round(Math.sin(T * 3) * 1.5);   // у алтаря — его книга (2026-11-20)
       var prevS = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = true; ctx.drawImage(bi, BX - bw / 2, BY - bh / 2 + bob, bw, bh); ctx.imageSmoothingEnabled = prevS; }
     else swordIcon(BX, BY);
+    if (chestPage) { var pg = ez(chestPage.t / .5), pw = 28 + pg * 166, ph = pw * CHESTPAGE.height / CHESTPAGE.width;
+      ctx.fillStyle = "rgba(5,2,8," + (.78 * pg).toFixed(3) + ")"; ctx.fillRect(0, 0, W, H); var ps = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(CHESTPAGE, W / 2 - pw / 2, H / 2 - ph / 2, pw, ph); ctx.imageSmoothingEnabled = ps;
+      if (pg > .72) { ctx.globalAlpha = Math.min(1, (pg - .72) / .23); ctx.textAlign = "center"; ctx.fillStyle = "#3b1820"; ctx.font = "300 24px 'Inter Tight', 'Helvetica Neue', Arial, sans-serif";
+        ctx.fillText(chestPage.glyph + " = " + chestPage.letter.toUpperCase(), W / 2, H / 2 + 5); ctx.globalAlpha = 1; }
+      if (pg > .95) { ctx.textAlign = "center"; ctx.fillStyle = "#f0dfc7"; ctx.font = "700 9px -apple-system, sans-serif"; ctx.fillText("Найдено " + chestPage.found + " из " + chestPage.total, W / 2, H / 2 + ph / 2 + 16);
+        ctx.fillStyle = "#b7aabf"; ctx.font = "600 8px -apple-system, sans-serif"; ctx.fillText("нажми, чтобы сохранить страницу", W / 2, H / 2 + ph / 2 + 30); ctx.textAlign = "start"; } }
     if (trans) { ctx.fillStyle = "rgba(6,5,9," + Math.min(1, 1 - Math.abs(trans.t - .16) / .16) + ")"; ctx.fillRect(0, 0, W, H); }
   }
 
