@@ -19,6 +19,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Workshop%2047%2C%20Vol.%203"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/1138334481"
    }
   ]
  },
@@ -42,6 +46,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20The%20Lay%20of%20Chalt%C3%A9n"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/1119697732"
    }
   ],
   "subRu": "Из фильма Патагония. Нежданное путешествие"
@@ -66,6 +74,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20A%20Ballad%20of%20Cold%20Hearts"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/975380731"
    }
   ]
  },
@@ -89,6 +101,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Workshop%2047%2C%20Vol.%202"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/949627531"
    }
   ]
  },
@@ -112,6 +128,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Workshop%2047%2C%20Vol.%201"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/858170022"
    }
   ]
  },
@@ -135,6 +155,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20The%20Way%20Back"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/756216531"
    }
   ],
   "subRu": "Из фильма Предел высоты: The Original Motion Picture Soundtrack"
@@ -159,6 +183,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20The%20Road"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/751782021"
    }
   ]
  },
@@ -228,6 +256,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Theory%20Two"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/706225631"
    }
   ]
  },
@@ -251,6 +283,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Theory%20One"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/576811881"
    }
   ]
  },
@@ -274,6 +310,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Little%20Big%20Story"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/542878442"
    }
   ]
  },
@@ -297,6 +337,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Symphony%20of%20Hurrying%20Time"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/482068005"
    }
   ]
  },
@@ -320,6 +364,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20EDEN"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/470373975"
    }
   ]
  },
@@ -343,6 +391,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Xenon%20Dawn"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/445395125"
    }
   ]
  },
@@ -366,6 +418,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Storm%20Time"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/406210507"
    }
   ]
  },
@@ -389,6 +445,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Rebirth"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/352922277"
    }
   ]
  },
@@ -412,6 +472,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Ti%3AMe"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/231012342"
    }
   ]
  },
@@ -435,6 +499,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Kod"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/51790212"
    }
   ]
  },
@@ -458,6 +526,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20Alone%20With%20Universe"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/9363182"
    }
   ]
  },
@@ -481,6 +553,10 @@ window.RELEASES = [
    {
     "name": "YouTube Music",
     "url": "https://music.youtube.com/search?q=Yuriy%20Leontiev%20The%20East%20Wind"
+   },
+   {
+    "name": "Deezer",
+    "url": "https://www.deezer.com/album/9113801"
    }
   ]
  }
