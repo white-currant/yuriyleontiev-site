@@ -1354,7 +1354,7 @@
     tabNow = k; try { sessionStorage.setItem("guild-tab", k); } catch (e) {}
     document.querySelectorAll("#tabs button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.tab === k)); });
     ["games", "hall", "coll"].forEach(function (t) { $("tab-" + t).hidden = t !== k; });
-    if (k === "coll") renderColl();
+    if (k === "coll") { renderColl(); loadItems(); }                 // после мини-игры перечитать находки: старый список не скрывает новую карту
   }
   document.querySelectorAll("#tabs button").forEach(function (b) { b.onclick = function () { haptic("light"); setTab(b.dataset.tab); }; });
   function home() {
