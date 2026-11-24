@@ -999,11 +999,13 @@
     GOOD = GLYPHS.filter(function (ch) { var p = pix(ch); return p !== tofu && p !== tofu2 && /[^0,]/.test(p); });
     if (GOOD.length < 8) GOOD = GLYPHS; return GOOD;
   }
-  function spellLines() {                                        // строки — массивы знаков (знак + штрих рисуются вместе)
-    var rr = rng((Date.now() ^ (T * 1e6)) & 0xffffff), out = [], GL = goodGlyphs();
-    function word() { var w = [], n = 3 + Math.floor(rr() * 4); for (var i = 0; i < n; i++) w.push(GL[Math.floor(rr() * GL.length)] + MARKS[Math.floor(rr() * MARKS.length)]); return w; }
-    for (var l = 0; l < 3; l++) { var ln = [], k = 2 + Math.floor(rr() * 2); for (var q = 0; q < k; q++) { if (q) ln.push(" "); ln = ln.concat(word()); } out.push(ln); }
-    return out;
+  var SPELL_ALPHA = Array.from("абвгдеёжзийклмнопрстуфхцчшщъыьэюя"), SPELL_MAP = {},
+      SPELL_TEXT = ["Девять глаз. Девять стихий.", "Девять богов, сотворивших мир.", "Настанет день — откроются", "врата Перехода."];
+  SPELL_ALPHA.forEach(function (ch, i) { SPELL_MAP[ch] = GLYPHS[i] + MARKS[(i * 5 + 2) % MARKS.length]; });
+  function spellLines() {                                        // постоянный шифр пророчества: одинаковая буква всегда даёт одинаковый знак
+    return SPELL_TEXT.map(function (line) { return Array.from(line.toLowerCase()).map(function (ch) {
+      return SPELL_MAP[ch] || (ch === "." || ch === "," ? "⁂" : ch === "—" ? "‡" : ch);
+    }); });
   }
   function spellDraw() {
     var e = T - spell.t0, a = spell.a, total = spell.lines.reduce(function (n, l) { return n + l.length; }, 0), shown = Math.floor(Math.min(1, e / (SPELL_T - .6)) * total), cnt = 0;
@@ -1013,7 +1015,7 @@
     var FONT = " 'Inter Tight', 'Helvetica Neue', Arial, sans-serif", fs = 15; ctx.font = "300 " + fs + "px" + FONT;   // тонкий белый — его правка 2026-11-20
     var mw = Math.max.apply(null, spell.lines.map(function (l) { return ctx.measureText(l.join("")).width; })); if (mw > W - 24) { fs = Math.floor(fs * (W - 24) / mw); ctx.font = "300 " + fs + "px" + FONT; }
     ctx.textAlign = "left"; ctx.fillStyle = "#ffffff";
-    spell.lines.forEach(function (ln, li) { var y = 118 + li * 26, x = W / 2 - ctx.measureText(ln.join("")).width / 2;
+    spell.lines.forEach(function (ln, li) { var y = 105 + li * 26, x = W / 2 - ctx.measureText(ln.join("")).width / 2;
       for (var i = 0; i < ln.length; i++) { if (cnt++ >= shown) break; var age = Math.min(1, (shown - cnt + 1) / 5);
         ctx.globalAlpha = fade * age; ctx.fillText(ln[i], x, y); x += ctx.measureText(ln[i]).width; } });
     ctx.globalAlpha = 1; ctx.textAlign = "start";
