@@ -2255,7 +2255,7 @@ const NOTICES: Record<number, { id: string; title: string; text: string; points?
   // Yehor нашёл сундук, перекрывший проход в подземелье (2026-11-24) — два сухпайка по 8 сытости
   7198897150: { id: "bug-dungeon-chest", title: "Спасибо, что нашёл баг!", gift: { item: "p:ration", n: 2 },
     text: "Ты нашёл сундук, который перекрыл проход в подземелье. Мы исправили генерацию. В благодарность — два бонусных сухпайка, каждый с сытостью 8.",
-    until: Date.UTC(2026, 11, 1) / 1000 },
+    until: Date.UTC(2027, 0, 1) / 1000 },
 };
 async function noticeFor(uid: number) {
   const n = NOTICES[uid]; if (!n || now() > n.until) return null;
