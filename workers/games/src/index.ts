@@ -284,9 +284,10 @@ async function playerCard(ref: string) {
   const ids = fm ? (await q("SELECT strain FROM f_inv WHERE user = ?", [uid])).map((x) => String(x[0])) : [];
   const seen = new Set(Object.values(await farm.strains(ids)).filter((g) => !g.odd && g.color !== "anomaly").map((g) => `${g.shape}/${g.color}`));   // аномалия и «странные» гибриды — не виды
   const it = await q("SELECT game, kind, item, tier, finish, count, first_at FROM g_items WHERE user = ? ORDER BY first_at DESC", [uid]);
+  const cards = await farm.cardsOf(uid);
   return { name: p[0], points: Number(p[1]), karma: p[2] == null ? KARMA_START : Number(p[2]), title: p[3], place: Number(p[4] || 0), avatar: p[5] ? `/avatar/${p[5]}` : null,
            farm: fm ? { pub: fm[0], beds: Number(fm[1]), species: seen.size, species_total: farm.SPECIES_TOTAL } : null,
-           items: it.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
+           cards, items: it.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
 }
 
 // коллекция: предметы всех игр, которые выпали игроку (профиль гильдии показывает их вместе)

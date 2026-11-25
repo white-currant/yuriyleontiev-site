@@ -1327,21 +1327,33 @@
           body.appendChild(fm);
           if (p.farm.pub) body.appendChild(btn("В гости на ферму", "ghost", function () { close(); visit(p.farm.pub); }));
         }
-        var vs = (p.items || []).filter(function (x) { return x.game === "farm" && x.kind === "vinyl"; })
-          .sort(function (a, b) { return TRANK[b.tier] - TRANK[a.tier] || FRANK[b.finish] - FRANK[a.finish] || b.at - a.at; });
-        var h = el("div", "mono", "Коллекция · " + vs.length); h.style.marginTop = "18px"; body.appendChild(h);
-        if (!vs.length) { body.appendChild(el("div", "sub", "Пока ничего не выпало.")); return; }
-        var g = el("div", "vgrid");
-        vs.forEach(function (v) {
-          var tr = F.trackById[v.id]; if (!tr) return;
-          var cell = el("div", "vrec" + finCls(v.finish)), cv = el("canvas", "pix"); cell.appendChild(cv); drawVinyl(cv, tr, 40, v.tier, v.finish);
-          cell.appendChild(el("span", "", tr.title));
-          var tl = el("span", "tier", (TIER[v.tier] || TIER.common)[0] + (v.finish !== "plain" ? ", " + FINISH[v.finish] : "") + (v.count > 1 ? " ×" + v.count : ""));
-          tl.style.color = (TIER[v.tier] || TIER.common)[1]; cell.appendChild(tl); g.appendChild(cell);
-        });
-        body.appendChild(g);
+        var collection = el("div"); body.appendChild(collection); renderPlayerCollection(collection, p);
       }).catch(function (e) { body.textContent = "Не получилось: " + e.message; });
     });
+  }
+  function renderPlayerCollection(box, p) {
+    var tab = "vinyl", vs = (p.items || []).filter(function (x) { return x.game === "farm" && x.kind === "vinyl"; })
+      .sort(function (a, b) { return TRANK[b.tier] - TRANK[a.tier] || FRANK[b.finish] - FRANK[a.finish] || b.at - a.at; });
+    var cs = (p.cards || []).slice().sort(function (a, b) { return (CARDRANK[b.kind] || 0) - (CARDRANK[a.kind] || 0) || (b.foil ? 1 : 0) - (a.foil ? 1 : 0) || b.at - a.at; });
+    function draw() {
+      box.innerHTML = ""; var tabs = el("div", "colltabs");
+      [["vinyl", "Пластинки"], ["cards", "Карты"]].forEach(function (x) { var b = el("button", tab === x[0] ? "on" : "", x[1]); b.type = "button";
+        b.onclick = function () { if (tab === x[0]) return; haptic("light"); tab = x[0]; draw(); }; tabs.appendChild(b); });
+      box.appendChild(tabs);
+      var list = tab === "cards" ? cs : vs, h = el("div", "mono", (tab === "cards" ? "Карты" : "Пластинки") + " · " + list.length); h.style.marginTop = "18px"; box.appendChild(h);
+      if (!list.length) { box.appendChild(el("div", "sub", tab === "cards" ? "Карт пока нет." : "Пластинок пока нет.")); return; }
+      var g = el("div", "vgrid" + (tab === "cards" ? " cgrid" : ""));
+      if (tab === "cards") cs.forEach(function (c) { var K = CARDK[c.kind] || CARDK.rare, b = el("button", "vrec crec"); b.type = "button"; var cv = el("canvas"); cardThumb(cv, c.kind); b.appendChild(cardWrap(cv, c.foil));
+        b.appendChild(el("span", "serial", "№ " + (c.serial || String(c.id).padStart(6, "0")))); b.appendChild(el("span", "", K[0]));
+        var tl = el("span", "tier", c.foil ? "фольга · откроется позже" : "откроется позже"); tl.style.color = K[3]; b.appendChild(tl);
+        b.onclick = function () { haptic("light"); cardSheet(c); }; g.appendChild(b); });
+      else vs.forEach(function (v) { var tr = F.trackById[v.id]; if (!tr) return;
+        var cell = el("div", "vrec" + finCls(v.finish)), cv = el("canvas", "pix"); cell.appendChild(cv); drawVinyl(cv, tr, 40, v.tier, v.finish); cell.appendChild(el("span", "", tr.title));
+        var tl = el("span", "tier", (TIER[v.tier] || TIER.common)[0] + (v.finish !== "plain" ? ", " + FINISH[v.finish] : "") + (v.count > 1 ? " ×" + v.count : ""));
+        tl.style.color = (TIER[v.tier] || TIER.common)[1]; cell.appendChild(tl); g.appendChild(cell); });
+      box.appendChild(g);
+    }
+    draw();
   }
   document.querySelectorAll("#tab-hall .seg button").forEach(function (b) {
     b.onclick = function () {
