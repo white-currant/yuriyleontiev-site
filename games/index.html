@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611230255";
+    var BUILD = "202611251857";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -681,6 +681,7 @@
     background: inherit; box-shadow: 0 -10px 14px -6px rgba(20, 10, 4, .55); z-index: 2; }
   .sheetfoot .sub:first-child { margin-top: 0; }
   html.locked, html.locked body { overflow: hidden; }
+  .invgrid.drag { isolation: isolate; }   /* значки ячеек остаются под закреплёнными кнопками */
   .invgrid.drag .slot { touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }   /* листать можно; поднять — задержать палец */
   .invgrid.drag .slot.holding { transform: scale(.92); transition: transform .33s ease-in; }
   .slot.ghost { position: fixed; z-index: 60; transform: translate(-50%, -60%) scale(1.12); pointer-events: none; opacity: .95; margin: 0; }
