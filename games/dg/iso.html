@@ -682,7 +682,14 @@
       hero.hp -= dmg; hero.inv = inv; hero.st = "hurt"; hero.t = 0; hero.dir = "side"; hero.flip = S(fu, fv)[0] > S(hero.u, hero.v)[0] ? 1 : -1;
       var nu3 = hero.u + hx / hd * .18, nv3 = hero.v + hy / hd * .18; if (!blocked(nu3, nv3)) { hero.u = nu3; hero.v = nv3; } hud();
       if (hero.hp <= 0 && hero.revive > 0) { reviveHero(); return; }               // мифическое блюдо: одно возрождение с полным здоровьем (его решение 2026-11-20)
-      if (hero.hp <= 0) { hero.st = "dead"; hero.t = 0; finish("Герой пал", (keptChestLoot() ? "Кости и находка алтаря потеряны. Карты и страницы из сундуков сохранены" : (lootGot ? "Карта и всё найденное потеряно" : "Всё найденное потеряно")) + (RUN ? ", здоровье в убежище −20" : "")); }
+      if (hero.hp <= 0) {
+        hero.st = "dead"; hero.t = 0;
+        var summary = "Кости потеряны";
+        if (lootGot) summary += ". Находка алтаря сохранена";
+        if (keptChestLoot()) summary += ". Карты и страницы из сундуков сохранены";
+        if (RUN) summary += ". Здоровье в убежище −20";
+        finish("Герой пал", summary);
+      }
     }
     detonateSlimes(hurt);
     var shots = cur.shots || (cur.shots = []);

@@ -2423,8 +2423,8 @@ export async function dgStart(u: any, size: string) {                      // в
 }
 // странная комната (его решения 2026-11-19): поход со Странной похлёбкой — за дверью с глазом красный зал, в центре алтарь, обвитый щупальцем.
 // Удар по алтарю — одна находка за поход, бросок на сервере: карта — чаще всего (иначе семя не будет редкостью), и карты бывают
-// редкие и легендарные (его правка 2026-11-19); ещё звёздный уголь или странное семя. Находка держится до конца похода:
-// погиб — пропала, вышел или зачистил — твоя (у алтаря её не делят пополам)
+// редкие и легендарные (его правка 2026-11-19); ещё звёздный уголь или странное семя.
+// Находку выдаём целиком при завершении похода, в том числе при гибели героя.
 // его правка 2026-11-20: в бустере всегда карта (редкая или легендарная), а уголь или странное семя — с шансом добавкой к ней
 export const ALTAR_CARD: [string, number][] = [["rare", 73], ["super", 20], ["mythic", 6], ["secret", 1]], ALTAR_EXTRA: [string, number][] = [["coal", .30], ["seed", .15]];
 function altarRoll(t: [string, number][]) { let r = Math.random(); for (const [k, p] of t) { if (r < p) return k; r -= p; } return null; }
@@ -2561,7 +2561,11 @@ export async function dgFinish(u: any, run: string, bones: number, dead = false,
   if (my && revived) { await q("DELETE FROM d_pack WHERE user = ? AND slot = ? AND item = ?", [u.id, Number(my[0]), String(my[1])]); await q("DELETE FROM d_bite WHERE user = ? AND slot = ?", [u.id, Number(my[0])]); }
   const [al] = await q("DELETE FROM d_altar WHERE user = ? AND run = ? RETURNING loot", [u.id, run]);
   let loot: string | null = null;                                            // «карта+добавка» — выдаётся всё
-  if (al && !dead) { const got = []; for (const k of String(al[0]).split("+")) got.push(await altarGive(u.id, k)); loot = got.join("+"); }
+  if (al) {
+    const rewards = [];
+    for (const item of String(al[0]).split("+")) rewards.push(await altarGive(u.id, item));
+    loot = rewards.join("+");
+  }
   const chestRows = await q("SELECT loot, detail, slot FROM d_chest WHERE user = ? AND run = ? AND opened = 1", [u.id, run]);
   await q("DELETE FROM d_chest WHERE user = ? AND run = ?", [u.id, run]);
   const chest: any[] = [];
