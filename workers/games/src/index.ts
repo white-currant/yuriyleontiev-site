@@ -338,8 +338,10 @@ async function recordPlay(uid: number, mode: string, seconds: unknown) {
     ) WHERE credited > 0`, [uid, now(), Math.min(PLAY_MAX_SECONDS, Math.floor(seconds)), game]);
 }
 async function playCutover() {
-  const [row] = await q("SELECT value FROM g_meta WHERE key = 'play_measured_day'");
-  return row ? dayStart(Number(row[0])) : Infinity;
+  const [row] = await q(`SELECT
+    COALESCE((SELECT CAST(value AS INTEGER) FROM g_meta WHERE key = 'play_measured_at'),
+             (SELECT CAST(value AS INTEGER) * 86400 - ? FROM g_meta WHERE key = 'play_measured_day'))`, [TZ_SHIFT]);
+  return row?.[0] == null ? Infinity : Number(row[0]);
 }
 async function playSlices(uid: number, from: number, until: number) {
   if (from >= until) return [];
@@ -363,7 +365,7 @@ function playDays(ev: any[][], slices: any[][], day0: number, n: number) {
     const g = games[game] ??= { name: game, sec: 0, acts: 0 };
     g.sec += sec; g.acts += act;
   }
-  // Дни до перехода на замер оставляем оценкой по действиям.
+  // Время до публикации нового клиента остаётся оценкой по действиям.
   let prev = 0, prevDay = -1;
   for (const [at0, reason] of ev) {
     const at = Number(at0), day = playDay(at), d = days[day - day0]; if (!d) continue;

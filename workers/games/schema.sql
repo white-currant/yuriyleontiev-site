@@ -109,8 +109,10 @@ DROP TRIGGER IF EXISTS g_events_daypts;
 CREATE TABLE IF NOT EXISTS g_playtime (user INTEGER PRIMARY KEY, sec INTEGER NOT NULL DEFAULT 0, upto INTEGER NOT NULL DEFAULT 0, since INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS g_play_slice (user INTEGER NOT NULL, at INTEGER NOT NULL, sec INTEGER NOT NULL, game TEXT NOT NULL, PRIMARY KEY (user, at));
 CREATE INDEX IF NOT EXISTS g_play_slice_at ON g_play_slice (at);
--- Старые оценки остаются до даты миграции (сутки по Минску).
-INSERT OR IGNORE INTO g_meta (key, value) VALUES ('play_measured_day', CAST((unixepoch() + 10800) / 86400 AS TEXT));
+-- Переход произошёл при публикации клиента, а не в полночь дня первой миграции.
+INSERT OR IGNORE INTO g_meta (key, value) VALUES ('play_measured_at',
+  CAST(CASE WHEN (SELECT value FROM g_meta WHERE key = 'play_measured_day') = '20783'
+    THEN unixepoch('2026-11-26T18:21:45Z') ELSE unixepoch() END AS TEXT));
 -- улей (2026-11-18): таймер мёда созревшего растения (planted — какая посадка, got — баночка уже в улье) и мёд, ждущий в улье
 CREATE TABLE IF NOT EXISTS f_honey (user INTEGER NOT NULL, idx INTEGER NOT NULL, planted INTEGER NOT NULL, item TEXT NOT NULL, until INTEGER NOT NULL, got INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, idx));
 CREATE TABLE IF NOT EXISTS f_hive (user INTEGER NOT NULL, item TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, item));
