@@ -4852,7 +4852,7 @@
     if (s.sales && s.sales.length) {
       var sum = s.sales.reduce(function (a, x) { return a + x.price; }, 0), sb = el("div", "banner gift");
       var who = s.sales.map(function (x) { return x.buyer; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
-      sb.appendChild(el("span", "", "🛒 В твоей лавке купили семена на ✦ " + sum + ": " + who.slice(0, 3).join(", ") + (who.length > 3 ? " и др." : "")));
+      sb.appendChild(el("span", "", "🛒 Покупки в твоей лавке на ✦ " + sum + ": " + who.slice(0, 3).join(", ") + (who.length > 3 ? " и др." : "")));
       var ok = el("button", "", "Ок"); ok.onclick = function () { haptic("light"); F.state.sales = []; renderFarm(); farmCall("/api/farm/sales/seen").catch(function () {}); };
       sb.appendChild(ok); ban.appendChild(sb);
     }
