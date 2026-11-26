@@ -319,40 +319,101 @@ export default {
 };
 
 // ---------- время в играх ----------
-// Считаем по действиям, за которые идут очки. Заход — действия подряд с паузами до 5 минут; на каждый заход прибавляется минута.
-// Сутки — по Минску; в полночь заход обрывается, поэтому сутки считаются независимо и их можно складывать по одним.
-function playDays(ev: any[][], day0: number, n: number) {
-  const days = Array.from({ length: n }, (_, i) => ({ day: new Date((day0 + i) * 86400000).toISOString().slice(0, 10), sec: 0, acts: 0, visits: 0, by: {} as Record<string, number> }));
-  const hours = Array.from({ length: 24 }, () => 0), games: Record<string, { name: string; sec: number; acts: number }> = {};
+const PLAY_GAMES = new Map([
+  ["guild", "Звёздная гильдия"],
+  ["farm", "Лунная ферма"],
+  ["dungeon", "Подземелье"],
+  ["guess", "Угадай трек"],
+]);
+const PLAY_MAX_SECONDS = 25;
+const playDay = (at: number) => Math.floor((at + TZ_SHIFT) / 86400);
+const dayStart = (day: number) => day * 86400 - TZ_SHIFT;
+async function recordPlay(uid: number, mode: string, seconds: unknown) {
+  const game = PLAY_GAMES.get(mode);
+  if (!game || typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 1) return;
+  // Часы сервера и конец последнего интервала не дают двум открытым вкладкам удвоить время.
+  await q(`INSERT OR IGNORE INTO g_play_slice (user, at, sec, game)
+    SELECT ?1, ?2, credited, ?4 FROM (
+      SELECT MIN(?3, ?2 - COALESCE(MAX(at), 0)) AS credited FROM g_play_slice WHERE user = ?1
+    ) WHERE credited > 0`, [uid, now(), Math.min(PLAY_MAX_SECONDS, Math.floor(seconds)), game]);
+}
+async function playCutover() {
+  const [row] = await q("SELECT value FROM g_meta WHERE key = 'play_measured_day'");
+  return row ? dayStart(Number(row[0])) : Infinity;
+}
+async function playSlices(uid: number, from: number, until: number) {
+  if (from >= until) return [];
+  // Последний интервал может начаться до полуночи и прийти уже после неё.
+  return q("SELECT at, MIN(sec, at - ?2), game FROM g_play_slice WHERE user = ?1 AND at > ?2 AND at < ?3 ORDER BY at",
+           [uid, from, until + PLAY_MAX_SECONDS]);
+}
+async function scoreActivity(uid: number, from: number, until: number) {
+  if (from >= until) return [];
+  return q("SELECT at, reason FROM g_events WHERE user = ? AND at >= ? AND at < ? AND reason != 'unlink' ORDER BY at",
+           [uid, from, until]);
+}
+
+function playDays(ev: any[][], slices: any[][], day0: number, n: number) {
+  const days = Array.from({ length: n }, (_, i) => ({ day: new Date((day0 + i) * 86400000).toISOString().slice(0, 10), sec: 0, acts: 0, visits: 0, estimated: false, by: {} as Record<string, number> }));
+  const hours = Array.from({ length: 24 }, () => 0), games: Record<string, { name: string; sec: number; acts: number }> = Object.create(null);
+  function addTime(at: number, game: string, sec: number, act = 0) {
+    const d = days[playDay(at) - day0];
+    d.sec += sec; d.acts += act; d.by[game] = (d.by[game] || 0) + sec;
+    hours[Math.floor((at + TZ_SHIFT) % 86400 / 3600)] += sec;
+    const g = games[game] ??= { name: game, sec: 0, acts: 0 };
+    g.sec += sec; g.acts += act;
+  }
+  // Дни до перехода на замер оставляем оценкой по действиям.
   let prev = 0, prevDay = -1;
   for (const [at0, reason] of ev) {
-    const at = Number(at0), loc = at + TZ_SHIFT, di = Math.floor(loc / 86400) - day0, d = days[di]; if (!d) continue;
-    const cont = prev > 0 && di === prevDay && at - prev <= 300, add = cont ? at - prev : 60;
+    const at = Number(at0), day = playDay(at), d = days[day - day0]; if (!d) continue;
+    const cont = prev > 0 && day === prevDay && at - prev <= 300;
     if (!cont) d.visits++;
-    const game = String(reason || "Игры").split(",")[0].trim() || "Игры";       // «Угадай трек, серия» — та же игра; время идёт игре этого действия
-    d.sec += add; d.acts++; d.by[game] = (d.by[game] || 0) + add; hours[Math.floor(loc % 86400 / 3600)] += add;
-    (games[game] ??= { name: game, sec: 0, acts: 0 }).sec += add; games[game].acts++;
-    prev = at; prevDay = di;
+    d.estimated = true;
+    const game = String(reason || "Игры").split(",")[0].trim() || "Игры";
+    addTime(at, game, cont ? at - prev : 60, 1);
+    prev = at; prevDay = day;
+  }
+  let prevEnd = 0;
+  for (const [at, sec, game] of slices) {
+    const start = Math.max(Number(at) - Number(sec), dayStart(day0));
+    const end = Math.min(Number(at), dayStart(day0 + n));
+    if (start >= end) continue;
+    if (!prevEnd || start - prevEnd > 60) days[playDay(start) - day0].visits++;
+    for (let t = start; t < end;) {
+      const next = Math.min(end, (Math.floor(t / 3600) + 1) * 3600);
+      addTime(t, String(game), next - t);
+      t = next;
+    }
+    prevEnd = end;
   }
   return { days, hours, games: Object.values(games).sort((a, b) => b.sec - a.sec) };
 }
-// «Всего в игре»: действия старше 30 дней удаляются, поэтому завершённые сутки (до today, не включая) складываем в g_playtime.
-// Читает только то, что ещё не сложено. Сегодняшние сутки сюда не входят — их прибавляет тот, кто спрашивает.
+
+// Складываем в g_playtime только дни до вчерашнего: пересекающий полночь интервал мог прийти утром.
 let FOLD_DAY = 0;
-async function foldPlay(uid: number, today: number): Promise<{ sec: number; since: number }> {
+async function foldPlay(uid: number, until: number, trackedAt: number) {
   const [row] = await q("SELECT sec, upto, since FROM g_playtime WHERE user = ?", [uid]);
   const have = row ? Number(row[0]) : 0, upto = row ? Number(row[1]) : -1, since0 = row ? Number(row[2]) : 0;
-  if (upto >= today) return { sec: have, since: since0 };
-  const ev = await q("SELECT at, reason FROM g_events WHERE user = ? AND at >= ? AND at < ? AND reason != 'unlink' ORDER BY at",
-                     [uid, upto < 0 ? 0 : upto * 86400 - TZ_SHIFT, today * 86400 - TZ_SHIFT]);
-  if (!ev.length && !row) return { sec: 0, since: 0 };
-  const first = ev.length ? Math.floor((Number(ev[0][0]) + TZ_SHIFT) / 86400) : today;
-  const add = ev.length ? playDays(ev, first, today - first).days.reduce((a, d) => a + d.sec, 0) : 0, since = since0 || (ev.length ? Number(ev[0][0]) : 0);
+  if (upto >= until) return { sec: have, since: since0, upto };
+  const from = upto < 0 ? 0 : dayStart(upto), to = dayStart(until);
+  const [ev, slices] = await Promise.all([scoreActivity(uid, from, Math.min(to, trackedAt)), playSlices(uid, Math.max(from, trackedAt), to)]);
+  const firstAt = firstPlayAt(ev, slices, from, to);
+  if (!firstAt && !row) return { sec: 0, since: 0, upto: until };
+  const first = firstAt ? playDay(firstAt) : until;
+  const add = playDays(ev, slices, first, until - first).days.reduce((a, d) => a + d.sec, 0), since = since0 || firstAt;
   // складывает ровно один запрос: условие «upto прежний» не даст двум одновременным запросам прибавить дважды
   await q(`INSERT INTO g_playtime (user, sec, upto, since) VALUES (?, ?, ?, ?)
            ON CONFLICT(user) DO UPDATE SET sec = g_playtime.sec + excluded.sec, upto = excluded.upto, since = CASE WHEN g_playtime.since > 0 THEN g_playtime.since ELSE excluded.since END
-           WHERE g_playtime.upto = ?`, [uid, add, today, since, upto]);
-  return { sec: have + add, since };
+           WHERE g_playtime.upto = ?`, [uid, add, until, since, upto]);
+  return { sec: have + add, since, upto: until };
+}
+
+function firstPlayAt(ev: any[][], slices: any[][], from: number, until: number) {
+  const firstEvent = ev.length ? Number(ev[0][0]) : until;
+  const firstMeasured = slices.length ? Math.max(from, Number(slices[0][0]) - Number(slices[0][1])) : until;
+  const first = Math.min(firstEvent, firstMeasured);
+  return first < until ? first : 0;
 }
 
 async function handle(req: Request): Promise<Response> {
@@ -430,12 +491,20 @@ async function handle(req: Request): Promise<Response> {
         if (FOLD_DAY !== today) {                                  // раз в сутки: время тех, чьи действия скоро удалятся, — в накопленное
           const [m] = await q("SELECT value FROM g_meta WHERE key = 'playfold'");
           if (!m || Number(m[0]) !== today) {
-            for (const [u] of await q("SELECT DISTINCT user FROM g_events WHERE at < ?", [now() - 28 * 86400])) await foldPlay(Number(u), today);
+            const trackedAt = await playCutover();
+            for (const [u] of await q(`SELECT user FROM g_events WHERE at < ?1 UNION
+              SELECT s.user FROM g_play_slice s LEFT JOIN g_playtime p ON p.user = s.user
+              WHERE s.at < ?1 AND (p.upto IS NULL OR s.at >= p.upto * 86400 - ?2)`, [now() - 28 * 86400, TZ_SHIFT])) {
+              const uid = Number(u);
+              await foldPlay(uid, today - 1, trackedAt);
+            }
             await q("INSERT INTO g_meta (key, value) VALUES ('playfold', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(today)]);
           }
           FOLD_DAY = today;
         }
         await q("DELETE FROM g_events WHERE +id <= ? AND at < ?", [Number(body.consumed), now() - 30 * 86400]);
+        await q(`DELETE FROM g_play_slice WHERE at < ? AND
+          at < (SELECT p.upto * 86400 - ? FROM g_playtime p WHERE p.user = g_play_slice.user)`, [now() - 30 * 86400, TZ_SHIFT]);
         await q("DELETE FROM g_daypts WHERE day < ?", [Math.floor((now() + TZ_SHIFT) / 86400) - 2]);   // «+id» — искать по индексу времени, а не перебирать номера
       }
       return json({ ok: true });
@@ -456,10 +525,18 @@ async function handle(req: Request): Promise<Response> {
     }
     // время в играх для карточки бота (команда /gametime в чате, 2026-11-18) — см. playDays и foldPlay ниже
     if (req.method === "GET" && url.pathname === "/bot/playtime") {
-      const uid = Number(url.searchParams.get("user") || 0), today = Math.floor((now() + TZ_SHIFT) / 86400), day0 = today - 6;
-      const ev = await q("SELECT at, reason FROM g_events WHERE user = ? AND at >= ? AND reason != 'unlink' ORDER BY at LIMIT 30000", [uid, day0 * 86400 - TZ_SHIFT]);
-      const week = playDays(ev, day0, 7), all = await foldPlay(uid, today);
-      return json({ ...week, total: all.sec + week.days[6].sec, since: all.since || (ev.length ? Number(ev[0][0]) : 0) });
+      const uid = Number(url.searchParams.get("user") || 0), today = playDay(now()), day0 = today - 6;
+      const from = dayStart(day0), until = dayStart(today + 1);
+      const trackedAt = await playCutover();
+      const [ev, slices, all] = await Promise.all([
+        scoreActivity(uid, from, Math.min(until, trackedAt)),
+        playSlices(uid, Math.max(from, trackedAt), until),
+        foldPlay(uid, today - 1, trackedAt),
+      ]);
+      const week = playDays(ev, slices, day0, 7);
+      const recent = week.days.slice(Math.max(0, all.upto - day0)).reduce((sum, d) => sum + d.sec, 0);
+      const total = all.sec + recent, since = all.since || firstPlayAt(ev, slices, from, until);
+      return json({ ...week, total, since, includes_estimate: week.days.slice(0, -1).some((d) => d.estimated) });
     }
     if (req.method === "GET" && url.pathname === "/bot/weather") return json(farm.weatherView(now()));   // для объявлений бота в чате
     if (req.method === "GET" && url.pathname === "/bot/mono") return json(await farm.monoFeed(Number(url.searchParams.get("after")) || 0));   // события моно-фермы — объявить в чате
@@ -468,7 +545,7 @@ async function handle(req: Request): Promise<Response> {
     }
     if (req.method === "POST" && url.pathname === "/bot/forget") {
       const uid = Number((await req.json()).user);
-      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items", "g_refs", "g_daypts", "g_playtime"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
+      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items", "g_refs", "g_daypts", "g_playtime", "g_play_slice"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
       await farm.forgetFarm(uid);
       return json({ ok: true });
     }
@@ -483,6 +560,7 @@ async function handle(req: Request): Promise<Response> {
   let body: any = {};
   try { body = await req.json(); } catch { /* пустое тело */ }
   switch (url.pathname) {
+    case "/api/playtime": await recordPlay(user.id, String(body.game || ""), body.seconds); return json({ ok: true });
     case "/api/me": return json(await profile(user));
     case "/api/round": return json(await newRound(user));
     case "/api/answer": return json(await answer(user, String(body.round || ""), String(body.choice || "")));

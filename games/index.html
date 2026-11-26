@@ -1173,14 +1173,53 @@
   var $ = function (id) { return document.getElementById(id); };
 
   // ---------- сервер ----------
-  function call(path, body) {
-    return fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json", "X-Init-Data": initData }, body: JSON.stringify(body || {}) })
+  function call(path, body, keepalive) {
+    return fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json", "X-Init-Data": initData }, body: JSON.stringify(body || {}), keepalive: !!keepalive })
       .catch(function () { throw new Error("нет связи с сервером игр"); })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
   }
+  var playScreen = "", playAt = null, playCarry = 0;
+  function playFlush(keepalive) {
+    if (playAt === null) return;
+    var at = performance.now(), elapsed = at - playAt;
+    playAt = at;
+    // Если устройство уснуло без события видимости, не считаем пропущенный интервал.
+    if (elapsed > 25000) { playCarry = 0; return; }
+    playCarry += elapsed;
+    var seconds = Math.floor(playCarry / 1000);
+    if (!seconds) return;
+    playCarry -= seconds * 1000;
+    call("/api/playtime", { game: playScreen, seconds: seconds }, keepalive).catch(function () {});
+  }
+  function playResume() {
+    if (initData && playScreen && !document.hidden && (!tg || tg.isActive !== false) && playAt === null) playAt = performance.now();
+  }
+  function playSuspend() { playFlush(true); playAt = null; }
+  function playSelect(screen) {
+    if (playScreen === screen) return;
+    playSuspend();
+    playScreen = screen;
+    playCarry = 0;
+    playResume();
+  }
+  function playGameFor(id) {
+    if (id === "home") return "guild";
+    if (id === "game") return "guess";
+    return id.indexOf("farm") === 0 ? "farm" : "";
+  }
+  setInterval(function () { playFlush(false); }, 15000);
+  document.addEventListener("visibilitychange", function () { if (document.hidden) playSuspend(); else playResume(); });
+  addEventListener("pagehide", playSuspend);
+  addEventListener("pageshow", playResume);
+  if (tg && tg.onEvent) {
+    tg.onEvent("deactivated", playSuspend);
+    tg.onEvent("activated", playResume);
+  }
+
   function show(id) {
     ["home", "game", "nope", "farm", "farm-shop", "farm-neighbors", "farm-visit"].forEach(function (s) { $(s).hidden = s !== id; });
     var was = document.body.dataset.screen; document.body.dataset.screen = id; scrollTo(0, 0);
+    playSelect(playGameFor(id));
     if (id !== "farm") dropGem();
     if (was && was !== id) document.querySelectorAll(".sheet-wrap,.thanks-wrap").forEach(function (w) { w.remove(); });   // ушёл с экрана — его окна закрываются (баг 2026-11-16: окно семени осталось поверх гильдии)
     if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked");
@@ -5606,7 +5645,7 @@
         } else if (q <= SH + 1) {
           var sh2 = SHAPES[q - 2], found = COLORS.filter(function (c) { return kn[sh2[0] + "/" + c[0]]; }).length;
           page.appendChild(el("h3", "", sh2[1]));
-          page.appendChild(el("div", "bsub", "Найдено расцветок: " + found + " из " + COLORS.length + (q > 5 ? " · только мутацией" : "")));
+          page.appendChild(el("div", "bsub", "Найдено расцветок: " + found + " из " + COLORS.length));
           var grid = el("div", "bgrid"), info = el("div", "binfo", "Нажми на растение, чтобы узнать о нём.");
           COLORS.forEach(function (c) {
             var e = kn[sh2[0] + "/" + c[0]], cell = el("button", "bcell" + (e ? "" : " unknown")); cell.type = "button";
@@ -7536,11 +7575,17 @@
     var w = el("div", "dgwrap"), f = el("iframe"), x = el("button", "dgx", "✕");
     f.src = "dg/hub.html?v=" + Date.now(); f.setAttribute("allow", "autoplay"); x.type = "button"; x.setAttribute("aria-label", "Закрыть");
     attractor.stop();                                                               // фон главного экрана под подземельем не крутим — телефон тормозил (жалоба 2026-11-17)
-    var bb = tg && tg.BackButton, close = function () { haptic("light"); w.remove(); window.dgFarm(); document.documentElement.classList.remove("locked"); if (bb && document.body.dataset.screen === "home") bb.hide(); if (document.body.dataset.screen === "home") attractor.start(); };
+    var bb = tg && tg.BackButton, close = function () {
+      haptic("light"); playSelect(playGameFor(document.body.dataset.screen));
+      w.remove(); window.dgFarm(); document.documentElement.classList.remove("locked");
+      if (bb && document.body.dataset.screen === "home") bb.hide();
+      if (document.body.dataset.screen === "home") attractor.start();
+    };
     w._close = close; x.onclick = close; w.appendChild(f);
     if (bb && bb.show) bb.show();
     if (!(bb && bb.isVisible)) w.appendChild(x);                                    // вне Телеграма (или старый клиент) «Назад» нет — свой крестик       // в Телеграме выход — его кнопка «Назад» в шапке (её ловит back()), свой крестик не налезает на кнопки игры
     document.body.appendChild(w); document.documentElement.classList.add("locked");
+    playSelect("dungeon");
   }
   var dgLockTimer = 0, dgLocked = false;
   function dgLock(at, srvNow) {                                  // отсчёт до открытия: разница часов телефона и сервера учитывается
