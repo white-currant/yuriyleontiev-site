@@ -749,6 +749,10 @@ async function teaPrank(uid: number) {
     remaining: Math.max(0, Number(deadline) - Date.now()) };
 }
 
+export async function completedTeaEvent(uid: number) {
+  return Number(uid) === TEA_PRANK_PLAYER && (await teaPrank(uid)).awarded != null;
+}
+
 export async function startTeaPrank(uid: number) {
   if (Number(uid) !== TEA_PRANK_PLAYER) return { error: "Записка не найдена" };
   const existing = await teaPrank(uid);

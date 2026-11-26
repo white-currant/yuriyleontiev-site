@@ -287,14 +287,16 @@ async function playerCard(ref: string) {
   const cards = await farm.cardsOf(uid);
   return { name: p[0], points: Number(p[1]), karma: p[2] == null ? KARMA_START : Number(p[2]), title: p[3], place: Number(p[4] || 0), avatar: p[5] ? `/avatar/${p[5]}` : null,
            farm: fm ? { pub: fm[0], beds: Number(fm[1]), species: seen.size, species_total: farm.SPECIES_TOTAL } : null,
-           cards, items: it.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
+           cards, tea_event_completed: await farm.completedTeaEvent(uid),
+           items: it.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
 }
 
 // коллекция: предметы всех игр, которые выпали игроку (профиль гильдии показывает их вместе)
 async function items(u: any) {
   const rows = await q("SELECT game, kind, item, tier, finish, count, first_at FROM g_items WHERE user = ? ORDER BY first_at DESC", [u.id]);
   const cards = await farm.cardsOf(u.id);                                    // карты подземелья — в коллекцию, у каждой свой номер (2026-11-20)   // карты подземелья — в коллекцию (2026-11-20)
-  return { cards, items: rows.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
+  return { cards, tea_event_completed: await farm.completedTeaEvent(u.id),
+           items: rows.map(([game, kind, item, tier, finish, count, at]) => ({ game, kind, id: item, tier, finish, count: Number(count), at: Number(at) })) };
 }
 
 // ---------- HTTP ----------
