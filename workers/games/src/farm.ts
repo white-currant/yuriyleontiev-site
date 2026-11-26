@@ -738,6 +738,55 @@ function farmReads(uid: number, t: number): [string, any[]][] {
 // нашествие слизней (его промо подземелья, 2026-11-20): разовое событие у каждого — зашёл на ферму, 30 секунд приходят слизни,
 // тап — исчез; без наказаний. Флаг «promo:slimes» в f_evlog (с двоеточием — не считается погодным событием), снимается, когда прогнал всех
 export async function slimesDone(u: any) { await q("DELETE FROM f_evlog WHERE user = ? AND kind = 'promo:slimes'", [u.id]); return { ok: true }; }
+
+const TEA_PRANK_PLAYER = 8808980009;
+
+async function teaPrank(uid: number) {
+  const [row] = await q("SELECT deadline, barn_slots, inv_slots, awarded FROM f_tea_prank WHERE user = ?", [uid]);
+  if (!row) return { deadline: 0, barn: 0, inv: 0, awarded: null, remaining: 0 };
+  const [deadline, barn, inv, awarded] = row;
+  return { deadline: Number(deadline), barn: Number(barn), inv: Number(inv), awarded: awarded == null ? null : Number(awarded),
+    remaining: Math.max(0, Number(deadline) - Date.now()) };
+}
+
+export async function startTeaPrank(uid: number) {
+  if (Number(uid) !== TEA_PRANK_PLAYER) return { error: "Записка не найдена" };
+  const existing = await teaPrank(uid);
+  if (existing.deadline) return existing;
+  const [[barn]] = await q("SELECT COUNT(*) FROM f_barn WHERE user = ? AND count > 0", [uid]);
+  const inventory = await q("SELECT strain, count - listed FROM f_inv WHERE user = ? AND count > listed", [uid]);
+  const varieties = await strains(inventory.map(([id]) => String(id)));
+  const groups = new Set<string>();
+  let inv = Number((await q("SELECT count FROM f_shell WHERE user = ?", [uid]))[0]?.[0] || 0);
+  for (const [id, count] of inventory) {
+    if (id === "anomaly") inv += Number(count);
+    else if (varieties[id]) groups.add(varieties[id].name);
+  }
+  inv += groups.size;
+  await q("INSERT OR IGNORE INTO f_tea_prank (user, deadline, barn_slots, inv_slots) VALUES (?, ?, ?, ?)", [uid, Date.now() + 60000, Number(barn), inv]);
+  return teaPrank(uid);
+}
+
+export async function finishTeaPrank(uid: number, slots: unknown) {
+  if (Number(uid) !== TEA_PRANK_PLAYER) return { error: "Записка не найдена" };
+  const state = await teaPrank(uid);
+  if (!state.deadline) return { error: "Чайная минута ещё не началась" };
+  if (state.awarded != null || state.remaining > 0) return state;
+  const limit = state.barn + state.inv;
+  if (!Array.isArray(slots) || slots.length > limit || slots.some(slot =>
+    typeof slot !== "string" || !/^[bi](0|[1-9]\d*)$/.test(slot) || Number(slot.slice(1)) >= (slot[0] === "b" ? state.barn : state.inv)))
+    return { error: "Некорректные отметки чая" };
+  const count = new Set(slots).size;
+  // Начисление и закрытие события идут одной транзакцией, в том числе при повторной отправке.
+  await DB.batch([
+    DB.prepare(`INSERT INTO f_barn (user, strain, count)
+      SELECT user, 'p:tea', ? FROM f_tea_prank WHERE user = ? AND awarded IS NULL AND deadline <= ? AND ? > 0
+      ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(count, uid, Date.now(), count),
+    DB.prepare("UPDATE f_tea_prank SET awarded = ? WHERE user = ? AND awarded IS NULL AND deadline <= ?").bind(count, uid, Date.now()),
+  ]);
+  return teaPrank(uid);
+}
+
 export async function farmState(u: any) {
   // первым в пакете — «завести ферму, если её нет» (то же, что ensureFarm); новичку следом — стартовый мешок
   const pub0 = [...crypto.getRandomValues(new Uint8Array(9))].map((b) => b.toString(16).padStart(2, "0")).join(""), t0 = now();
@@ -780,6 +829,7 @@ async function farmState1(u: any, t: number) {
   const chicken_pen = kit.builds.includes("chicken_pen") ? { ...await chickenPenState(u.id, t), has_barn: kit.builds.includes("barn") } : null;
   return {
     chicken_pen,
+    ...(Number(u.id) === TEA_PRANK_PLAYER ? { tea_prank: await teaPrank(u.id) } : {}),
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
     plots: Array.from({ length: PLOTS_MAX }, (_, i) => plotView(by.get(i), i, Number(unlocked), EVS[i], HON[i], FER[i])), events_seen: await seenEvents(u.id),
     stars: (await q("SELECT id, x, y, dust FROM f_stars WHERE user = ?", [u.id])).map(([id, x, y, d]) => ({ id: Number(id), x: Number(x), y: Number(y), dust: Number(d) })),
@@ -2140,7 +2190,7 @@ export async function forgetFarm(uid: number) {
   await q("DELETE FROM f_feed WHERE actor = ? OR target = ?", [uid, uid]);              // из ленты новостей — тоже
   // всё, что добавилось после (его решение 2026-11-20: удалил данные — теряешь всё наигранное): украшения, улей, подземелье…
   for (const t of ["f_chest", "f_stars", "f_cratercrop", "f_prices", "f_mono", "f_monomark", "f_clumps", "f_notify", "f_orders", "f_decor", "f_style",
-                   "f_yard", "f_shell", "f_honey", "f_hive", "f_chicken_pen", "f_wet", "f_fert", "d_hero", "d_pack", "d_bite", "d_myth", "d_brew", "d_secret", "d_armor", "d_altar", "d_chest", "d_cipher"])
+                   "f_yard", "f_shell", "f_honey", "f_hive", "f_chicken_pen", "f_wet", "f_fert", "d_hero", "d_pack", "d_bite", "d_myth", "d_brew", "d_secret", "d_armor", "d_altar", "d_chest", "d_cipher", "f_tea_prank"])
     await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
   // карты отвязываются: становятся ничьими (user = 0), в журнал — запись «владелец удалил данные». Сами карты и журнал не стираются
   for (const [id] of await q("SELECT id FROM d_cards WHERE user = ?", [uid])) {

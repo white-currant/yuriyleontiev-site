@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611252053";
+    var BUILD = "202611261912";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -680,6 +680,19 @@
   .sheetfoot { position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); margin: 12px -16px calc(-18px - env(safe-area-inset-bottom)); padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
     background: inherit; box-shadow: 0 -10px 14px -6px rgba(20, 10, 4, .55); z-index: 2; }
   .sheetfoot .sub:first-child { margin-top: 0; }
+  .tea-prank-grid .tea-taken { outline: 2px solid #76c58c; outline-offset: -4px; }
+  .tea-prank-grid .tea-taken .n { color: #9af0a7; }
+  .tea-prank-grid .tea-note > canvas { width: 74%; height: auto; }
+  .tea-prank-grid .tea-cup { touch-action: manipulation; }
+  .tea-prank-open > .sheet { max-height: min(88vh, calc(100% - max(var(--top), env(safe-area-inset-top)) - 100px)); }
+  .tea-prank-clock { position: absolute; z-index: 1; top: calc(max(var(--top), env(safe-area-inset-top)) + 12px); left: 0; right: 0;
+    pointer-events: none; text-align: center; color: #ff543e; font: 900 clamp(50px, 14vw, 76px)/1 var(--mono);
+    font-variant-numeric: tabular-nums; text-shadow: 0 3px 0 #4a140d, 0 0 18px #bf2e23; }
+  .tea-prank-clock.urgent { animation: tea-urgent .8s ease-in-out infinite alternate; }
+  .tea-prank-clock.farm-tea-clock { position: fixed; z-index: 29; }
+  body:not([data-screen="farm"]) > .farm-tea-clock, body:has(.sheet-wrap) > .farm-tea-clock { display: none; }
+  @keyframes tea-urgent { to { transform: scale(1.08); text-shadow: 0 3px 0 #4a140d, 0 0 26px #ff543e; } }
+  @media (prefers-reduced-motion: reduce) { .tea-prank-clock.urgent { animation: none; } }
   html.locked, html.locked body { overflow: hidden; }
   .invgrid.drag { isolation: isolate; }   /* значки ячеек остаются под закреплёнными кнопками */
   .invgrid.drag .slot { touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }   /* листать можно; поднять — задержать палец */
@@ -4841,6 +4854,7 @@
     var wasW = F.state && F.state.wanderer && F.state.wanderer.left > 0 && F.wanderIn;       // стоял странник, а полнолуние кончилось — уходит
     evSpot(st);
     F.state = st; F.fetched = Date.now(); if (wasW && !st.wanderer) { F.wanderIn = 0; wanderLeave(); } renderFarm(); if (F.invRedraw) F.invRedraw();
+    if (st.tea_prank) updateTeaPrank(st.tea_prank);
     if (!$("farm-shop").hidden) { setText($("shopdust"), "✦ " + st.dust); if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
   }
   function farmLoop() {
@@ -5498,11 +5512,20 @@
     if (!isTool(F.sel) && shown.indexOf(F.sel) < 0) shown[3] = F.sel;
     bar.innerHTML = "";
     var tb = $("toolbox"); if (tb) { tb.innerHTML = ""; tb.appendChild(toolsCol()); }   // лейка и лопата — на самой ферме, внизу слева (его решение 2026-11-15)
-    shown.forEach(function (k) { bar.appendChild(makeSlot(k)); });
+    var tea = teaPrankVisible();
+    shown.forEach(function (k) {
+      if (!tea) { bar.appendChild(makeSlot(k)); return; }
+      var cup = el("button", "slot tea-cup");
+      cup.type = "button";
+      cup.setAttribute("aria-label", "Чашка чая — открыть инвентарь");
+      cup.appendChild(teaCupIcon());
+      cup.onclick = invSheet;
+      bar.appendChild(cup);
+    });
     for (var k = shown.length; k < 4; k++) bar.appendChild(el("div", "slot empty"));
     var more = el("button", "slot more", keys.length > 4 ? "ещё " + (keys.length - 4) : "все"); more.type = "button";
     more.onclick = function () { haptic("light"); invSheet(); }; bar.appendChild(more);
-    setText($("selnote"), selText());
+    setText($("selnote"), tea ? "Чашки можно спасти в амбаре и инвентаре." : selText());
   }
   // ---------- справочник растений и гибридов: книжка на пергаменте (открывается по домику) ----------
   // Страницы: как всё растёт; по странице на каждую форму растения (9 расцветок: найденные нарисованы, ненайденные — силуэтом);
@@ -5915,8 +5938,200 @@
     clearTimeout(seedBadgeTimer);
     seedBadgeTimer = setTimeout(expireSeedBadges, 0);
   }
+  var TEA_PROGRESS_KEY = "starguardian-tea-minute-v1";
+  var teaProgress, teaRequest, teaRetry, teaClock, teaFarmClock, teaPanel, teaBarnRedraw, teaAwarded = false;
+
+  function teaPrankVisible() {
+    var state = F.state && F.state.tea_prank;
+    return !!state && state.awarded == null && !teaAwarded && (!teaProgress || Date.now() < teaProgress.end);
+  }
+  function teaCupIcon() {
+    var icon = el("canvas", "pix");
+    itemIcon(icon, "p:tea");
+    fitIcon(icon, 80);
+    return icon;
+  }
+  function drawTeaClock(clock, left) {
+    setText(clock, Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0"));
+    clock.classList.toggle("urgent", left <= 10);
+  }
+
+  function saveTeaProgress() {
+    try { localStorage.setItem(TEA_PROGRESS_KEY, JSON.stringify(teaProgress)); } catch (e) {}
+  }
+  function updateTeaPrank(state) {
+    if (teaAwarded) return;
+    if (state.awarded != null) { teaAwarded = true; tickTeaPrank(); return; }
+    if (!teaProgress) {
+      try { teaProgress = JSON.parse(localStorage.getItem(TEA_PROGRESS_KEY) || "null"); } catch (e) {}
+      if (teaProgress && teaProgress.serverDeadline && teaProgress.serverDeadline !== state.deadline) teaProgress = null;
+    }
+    if (state.deadline && !teaProgress) {
+      teaProgress = { end: Date.now() + state.remaining, serverDeadline: state.deadline, barn: state.barn, inv: state.inv, slots: [] };
+      saveTeaProgress();
+    }
+    if (state.deadline && teaProgress && !teaProgress.serverDeadline) reconcileTeaDeadline(state);
+    if (teaProgress) {
+      if (!teaClock && Date.now() < teaProgress.end) teaClock = setInterval(tickTeaPrank, 200);
+      tickTeaPrank();
+      if (!teaProgress.serverDeadline) syncTeaPrank();
+    }
+  }
+  function reconcileTeaDeadline(state) {
+    teaProgress.serverDeadline = state.deadline;
+    teaProgress.slots = teaProgress.slots.filter(function (slot) {
+      return Number(slot.slice(1)) < (slot[0] === "b" ? state.barn : state.inv);
+    });
+    saveTeaProgress();
+  }
+  function syncTeaPrank() {
+    if (!teaProgress || teaAwarded || teaRequest || teaRetry) return;
+    var starting = !teaProgress.serverDeadline;
+    if (!starting && Date.now() < teaProgress.end) return;
+    var action = starting ? "start" : "finish";
+    teaRequest = call("/api/farm/tea-prank/" + action, starting ? {} : { slots: teaProgress.slots }).then(function (state) {
+      teaRequest = null;
+      if (state.error) throw new Error(state.error);
+      if (state.awarded != null) {
+        teaAwarded = true;
+        if (F.state) F.state.tea_prank = state;
+        try { localStorage.removeItem(TEA_PROGRESS_KEY); } catch (e) {}
+        toast(state.awarded ? "Чайная минута закончилась. В амбаре +" + state.awarded + " чая!" : "Чайная минута закончилась. Припасы вернулись.");
+        loadFarm().then(function () {
+          if (teaBarnRedraw) teaBarnRedraw();
+          teaBarnRedraw = null;
+        }).catch(function () {});
+        return;
+      }
+      if (starting) reconcileTeaDeadline(state);
+      if (Date.now() >= teaProgress.end) {
+        teaRetry = setTimeout(function () { teaRetry = null; syncTeaPrank(); }, Math.max(100, state.remaining + 100));
+      }
+    }).catch(function () {
+      teaRequest = null;
+      teaRetry = setTimeout(function () { teaRetry = null; syncTeaPrank(); }, 5000);
+    });
+  }
+  function tickTeaPrank() {
+    var left = teaProgress && !teaAwarded ? Math.max(0, Math.ceil((teaProgress.end - Date.now()) / 1000)) : 0;
+    if (left) {
+      if (!teaFarmClock) {
+        teaFarmClock = el("div", "tea-prank-clock farm-tea-clock");
+        teaFarmClock.setAttribute("role", "timer");
+        document.body.appendChild(teaFarmClock);
+      }
+      drawTeaClock(teaFarmClock, left);
+    } else if (teaFarmClock) {
+      teaFarmClock.remove();
+      teaFarmClock = null;
+      renderHotbar();
+    }
+    if (!teaProgress || teaAwarded) { clearInterval(teaClock); teaClock = null; return; }
+    if (teaPanel && teaPanel.node.isConnected && teaPanel.update) teaPanel.update();
+    if (Date.now() < teaProgress.end) return;
+    clearInterval(teaClock); teaClock = null;
+    if (teaPanel && teaPanel.node.isConnected && teaPanel.update) {
+      var view = teaPanel;
+      view.close();
+      if (view.kind === "barn") barnSheet(); else invSheet();
+    }
+    syncTeaPrank();
+  }
+  function teaPrankSizes() {
+    var groups = groupItems();
+    return { barn: barnItems().length, inv: groups.reduce(function (n, group) {
+      return n + (group.key === "anomaly" ? group.total : 1);
+    }, Number(F.state.shells || 0)) };
+  }
+  function showTeaNote() {
+    function startOnClose() {
+      if (teaProgress) return;
+      var sizes = teaPrankSizes();
+      teaProgress = { end: Date.now() + 60000, serverDeadline: 0, barn: sizes.barn, inv: sizes.inv, slots: [] };
+      saveTeaProgress();
+      teaClock = setInterval(tickTeaPrank, 200);
+      tickTeaPrank();
+      teaPrankSheet("barn");
+      syncTeaPrank();
+    }
+    var note = sheet(function (sh) {
+      sh.appendChild(el("h3", "", "Записка чайного воришки"));
+      sh.appendChild(el("p", "sub", "Я всё превратил в чай. Как только закроешь записку, у тебя будет одна минута, чтобы спасти сколько успеешь."));
+      sh.appendChild(el("p", "sub", "Нажимай на чашки в амбаре и инвентаре. Каждая чашка с галочкой останется у тебя. Через минуту твои вещи вернутся, а спасённый чай появится в амбаре."));
+      sh.appendChild(btn("Закрыть записку", "", function () { note.click(); }));
+    });
+    note.addEventListener("click", function (event) { if (event.target === note) startOnClose(); });
+  }
+  function teaPrankSheet(kind) {
+    if (!teaPrankVisible()) return false;
+    var sizes = teaProgress || teaPrankSizes(), active = !!teaProgress;
+    var clock = active ? el("div", "tea-prank-clock") : null;
+    var wrap = sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", kind === "barn" ? "Амбар" : "Инвентарь"));
+      var grid = el("div", "invgrid tea-prank-grid"), prefix = kind === "barn" ? "b" : "i";
+      var foot = el("div", "sheetfoot"), info = el("div", "sub"), actions = el("div", "salebtns");
+      function update() {
+        var left = Math.max(0, Math.ceil((teaProgress.end - Date.now()) / 1000));
+        drawTeaClock(clock, left);
+        setText(info, "Спасено чашек: " + teaProgress.slots.length);
+      }
+      teaPanel = { node: sh, kind: kind, close: close, update: active ? update : null };
+      for (var i = 0; i < sizes[kind]; i++) {
+        (function (slot) {
+          var cup = el("button", "slot tea-cup"), mark = el("span", "n");
+          cup.type = "button"; cup.setAttribute("aria-label", "Чашка чая");
+          cup.append(teaCupIcon(), mark);
+          function markCup() {
+            cup.classList.add("tea-taken"); cup.setAttribute("aria-pressed", "true"); mark.textContent = "✓";
+          }
+          cup.setAttribute("aria-pressed", "false");
+          if (active && teaProgress.slots.includes(slot)) markCup();
+          cup.onclick = function () {
+            if (!active) return toast("Внизу амбара кто-то оставил записку…");
+            if (Date.now() >= teaProgress.end || teaProgress.slots.includes(slot)) return;
+            teaProgress.slots.push(slot); markCup(); update(); saveTeaProgress();
+          };
+          grid.appendChild(cup);
+        })(prefix + i);
+      }
+      if (!active && kind === "barn") {
+        var note = el("button", "slot tea-note"), envelope = el("canvas", "pix");
+        envelope.width = 24; envelope.height = 16;
+        var ink = envelope.getContext("2d");
+        px(ink, 0, 0, 24, 16, "#302015");
+        px(ink, 1, 1, 22, 14, "#dfb78a");
+        px(ink, 2, 2, 20, 1, "#ffdeb1");
+        px(ink, 2, 13, 20, 1, "#b98756");
+        for (var fold = 0; fold < 10; fold++) {
+          var y = 3 + (fold >> 1);
+          px(ink, 2 + fold, y, 1, 1, "#9f633c");
+          px(ink, 21 - fold, y, 1, 1, "#9f633c");
+        }
+        px(ink, 10, 7, 4, 4, "#a63f30");
+        px(ink, 11, 7, 2, 1, "#df7660");
+        note.appendChild(envelope);
+        note.type = "button"; note.setAttribute("aria-label", "Открыть записку");
+        note.onclick = function () { close(); showTeaNote(); };
+        grid.appendChild(note);
+      }
+      if (active) update(); else info.textContent = "Что-то случилось с припасами…";
+      actions.appendChild(btn(kind === "barn" ? "Инвентарь" : "Амбар", "ghost", function () {
+        close(); if (kind === "barn") invSheet(); else barnSheet();
+      }));
+      actions.appendChild(btn("Готово", "", close));
+      foot.append(info, actions); sh.append(grid, foot);
+    });
+    if (clock) {
+      clock.setAttribute("role", "timer");
+      wrap.classList.add("tea-prank-open");
+      wrap.appendChild(clock);
+    }
+    return true;
+  }
+
   function invSheet() {
     var s = F.state; if (!s) return;
+    if (teaPrankSheet("inv")) return;
     sheet(function (sh, close) {
       var ihead = el("div", "invhead"); ihead.appendChild(el("h3", "", "Инвентарь")); sh.appendChild(ihead);
       var note = el("div", "selnote"), grid = el("div", "invgrid");
@@ -6013,6 +6228,7 @@
   }
   function barnSheet() {
     var s = F.state; if (!s) return;
+    if (teaPrankSheet("barn")) return;
     if (barnCursed()) return rotBarnSheet();
     sheet(function (sh, close) {
       sh.appendChild(el("h3", "", "Амбар"));
@@ -6093,6 +6309,7 @@
         footInfo.appendChild(acts);
       };
       drawBarn();
+      if (teaProgress && !teaAwarded) teaBarnRedraw = function () { if (sh.isConnected) drawBarn(); };
       var acts2 = el("div", "salebtns"); acts2.appendChild(btn("Готово", "", close)); foot.appendChild(acts2); sh.appendChild(foot);
     });
   }
