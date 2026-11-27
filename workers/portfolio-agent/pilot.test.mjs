@@ -5,6 +5,7 @@ import { createPilot } from './pilot.mjs';
 
 const home = 'https://yuriyleontiev.music/';
 const chatgpt = 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot';
+const searchbot = 'Mozilla/5.0; compatible; OAI-SearchBot/1.4; +https://openai.com/searchbot';
 const perplexity = 'Mozilla/5.0 (compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)';
 const commission = readFileSync(new URL('../../commission/index.html', import.meta.url), 'utf8');
 const portfolio = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
@@ -22,6 +23,7 @@ function request(agent, ip = '192.0.2.4', {
 
 function setup() {
   const feeds = new Map([
+    ['https://openai.com/searchbot.json', { prefixes: [{ ipv4Prefix: '203.0.113.96/28' }] }],
     ['https://openai.com/chatgpt-user.json', {
       prefixes: [{ ipv4Prefix: '192.0.2.32/28' }, { ipv6Prefix: '2001:db8::/48' }],
     }],
@@ -52,7 +54,7 @@ function assertUncacheable(response) {
 
 test('ordinary visitors and other bots get the original HTML regardless of Accept', async () => {
   const { serve, calls } = setup();
-  for (const agent of ['Mozilla/5.0', 'Googlebot/2.1', 'bingbot/2.0', 'OAI-SearchBot/1.4', 'Perplexity-User/1.0']) {
+  for (const agent of ['Mozilla/5.0', 'Googlebot/2.1', 'bingbot/2.0', 'GPTBot/1.4', 'Perplexity-User/1.0']) {
     const response = await serve(request(agent, '192.0.2.40', { headers: { Accept: 'text/markdown' } }));
     assert.equal(await response.text(), portfolio);
     assertUncacheable(response);
@@ -63,7 +65,7 @@ test('ordinary visitors and other bots get the original HTML regardless of Accep
 
 test('only matching bot ranges get lightweight HTML with the exact Commission body', async () => {
   const { serve } = setup();
-  for (const [agent, ip] of [[chatgpt, '192.0.2.40'], [chatgpt, '2001:db8::1'], [perplexity, '198.51.100.4']]) {
+  for (const [agent, ip] of [[chatgpt, '192.0.2.40'], [chatgpt, '2001:db8::1'], [perplexity, '198.51.100.4'], [searchbot, '203.0.113.100']]) {
     const response = await serve(request(agent, ip));
     assert.equal(response.headers.get('X-Portfolio-Variant'), 'commission');
     assert.match(response.headers.get('Content-Type'), /^text\/html/);
@@ -84,6 +86,10 @@ test('spoofed agents and IP headers are rejected, including after a verified req
   for (const req of [
     request(chatgpt, '192.0.2.4', { headers: { 'X-Forwarded-For': '192.0.2.40', 'X-Real-IP': '192.0.2.40' } }),
     request(chatgpt, '198.51.100.4'),
+    request(searchbot, '192.0.2.40'),
+    request(chatgpt, '203.0.113.100'),
+    request(searchbot, '203.0.113.112', { headers: { 'X-Forwarded-For': '203.0.113.100' } }),
+    request('GPTBot/1.4', '203.0.113.100'),
     request(perplexity, '192.0.2.40'),
     request(chatgpt, '', { headers: { 'X-Forwarded-For': '192.0.2.40' } }),
     request(chatgpt, '192.0.2.40', { edge: false }),
@@ -98,12 +104,12 @@ test('spoofed agents and IP headers are rejected, including after a verified req
 
 test('other paths and the query-string homepage pass through untouched', async () => {
   const { serve, calls } = setup();
-  for (const path of ['commission/', 'fonts.css', '?lang=en']) {
-    const response = await serve(request(chatgpt, '192.0.2.40', { url: home + path }));
+  for (const path of ['commission/', 'fonts.css', 'robots.txt', '?lang=en']) {
+    const response = await serve(request(searchbot, '203.0.113.100', { url: home + path }));
     assert.equal(await response.text(), portfolio);
     assert.equal(response.headers.get('Cache-Control'), 'public, max-age=600');
   }
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
   assert.ok(calls.every(([target]) => target instanceof Request));
 });
 

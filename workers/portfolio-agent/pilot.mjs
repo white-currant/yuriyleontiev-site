@@ -3,6 +3,10 @@ import { BlockList, isIP } from 'node:net';
 const home = 'https://yuriyleontiev.music/';
 const feeds = [
   {
+    agent: /(?:^|[\s;(])OAI-SearchBot\/\d+(?:\.\d+)*(?=$|[\s;)])/i,
+    url: 'https://openai.com/searchbot.json',
+  },
+  {
     agent: /(?:^|[\s;(])ChatGPT-User\/\d+(?:\.\d+)*(?=$|[\s;)])/i,
     url: 'https://openai.com/chatgpt-user.json',
   },
