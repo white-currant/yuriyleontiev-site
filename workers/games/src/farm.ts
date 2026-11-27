@@ -18,7 +18,7 @@ function dustContext(reason: string, details?: object) {
 }
 
 type Strain = { id: string; name: string; shape: string; color: string; minutes: number; dust: number; vinyl: number;
-                thirst: number; points: number; bonus: string | null; gen: number; cost?: number; base?: boolean; hidden?: boolean; odd?: boolean; price?: number; tier?: string; myth?: boolean; nonce?: string };
+                thirst: number; points: number; bonus: string | null; gen: number; cost?: number; base?: boolean; hidden?: boolean; odd?: boolean; price?: number; tier?: string; myth?: boolean; nonce?: string; created?: number };
 // базовые сорта: семена покупаются в «Семенной лавке станции» (cost — цена одного), дальше возвращаются с урожаем;
 // thirst — на сколько минут хватает одного полива
 // Баланс (его правка 2026-11-15, жалоба Evilin «у мха 24 пыли в час — где баланс»): разные стратегии, не к среднему.
@@ -275,7 +275,7 @@ async function hashId(g: any) {
 // Экономия чтений базы (2026-11-16, бесплатный лимит D1 — 5 млн строк в сутки): запись о сорте после создания не меняется
 // (id — хэш его свойств), поэтому прочитанные сорта живут в памяти сервера. Раньше каждый запрос фермы перечитывал их заново —
 // это была пятая часть всех чтений. Память у каждого экземпляра сервера своя и короткая; не нашёл в ней — читаем из базы.
-const STRAIN_MEM = new Map<string, { name: string; genes: any }>(), STRAIN_NONE = new Map<string, number>();   // NONE — чего в базе нет (на 10 минут)
+const STRAIN_MEM = new Map<string, { name: string; genes: any; created: number }>(), STRAIN_NONE = new Map<string, number>();   // NONE — чего в базе нет (на 10 минут)
 export async function strains(ids: string[]): Promise<Record<string, Strain>> {
   const out: Record<string, Strain> = {};
   for (const k in CROPS) if (!CROPS[k].hidden) out[k] = view(CROPS[k]);
@@ -288,12 +288,12 @@ export async function strains(ids: string[]): Promise<Record<string, Strain>> {
     if (STRAIN_NONE.size > 5000) STRAIN_NONE.clear();
     for (let k = 0; k < miss.length; k += 90) {                  // D1 принимает не больше 100 параметров на запрос
       const part = miss.slice(k, k + 90);
-      const rows = await q(`SELECT id, name, genes FROM f_strains WHERE id IN (${part.map(() => "?").join(",")})`, part);
-      for (const [id, name, genes] of rows) STRAIN_MEM.set(String(id), { name: String(name), genes: JSON.parse(genes) });
+      const rows = await q(`SELECT id, name, genes, created FROM f_strains WHERE id IN (${part.map(() => "?").join(",")})`, part);
+      for (const [id, name, genes, created] of rows) STRAIN_MEM.set(String(id), { name: String(name), genes: JSON.parse(genes), created: Number(created) });
       for (const id of part) if (!STRAIN_MEM.has(id)) STRAIN_NONE.set(id, t);
     }
   }
-  for (const id of need) { const m = STRAIN_MEM.get(id); if (m) out[id] = view({ id, name: m.name, ...m.genes }); }
+  for (const id of need) { const m = STRAIN_MEM.get(id); if (m) out[id] = view({ id, name: m.name, ...m.genes, created: m.created }); }
   return out;
 }
 // гибрид: форма — от собираемого растения, цвет — от соседа; свойства — среднее родителей ± мутация

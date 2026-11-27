@@ -609,15 +609,16 @@
   .vrow.head { padding-top: 0; padding-bottom: 0; font-size: 11px; color: var(--cream2); }
   .vrow.on { background: rgba(255, 214, 140, .2); box-shadow: inset 0 0 0 2px var(--gold); }
   .vrow { position: relative; }
-  /* заголовок инвентаря с кнопкой «Сортировать» слева от крестика */
   .invhead { display: flex; align-items: center; gap: 10px; padding-right: 48px; }
   .invhead h3 { flex: 1; }
-  /* «Сортировать» — в одну линию с крестиком: та же высота и тот же верх (его правка 2026-11-17: «не в одну линию») */
-  body[data-screen^="farm"] .invhead .btn.sortbtn { position: absolute; top: 10px; right: 54px; z-index: 3; width: auto; height: 34px; min-height: 34px; margin: 0; padding: 0 12px; font-size: 13.5px;
-    box-shadow: 0 0 0 2px var(--ink), inset 0 -3px 0 #6e4425; }
-  /* избранное (его просьба 2026-11-18): звёздочка в карточке семени, фильтр «только избранное» слева от «Сортировать», звёздочка в ячейке слева */
   .invtools { position: absolute; top: 10px; right: 54px; z-index: 3; display: flex; gap: 8px; }
-  body[data-screen^="farm"] .invtools .btn.sortbtn { position: static; }
+  .invsort-wrap { position: relative; color: #f7e3bd; }
+  .invsort-wrap::after { content: ""; position: absolute; top: 50%; right: 9px; width: 6px; height: 6px;
+    border: solid currentColor; border-width: 0 2px 2px 0; transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+  .invsort { appearance: none; width: clamp(103px, 35vw, 154px); height: 34px; padding: 0 23px 0 8px; color: inherit;
+    background: var(--wood3); border: 0; border-radius: 0; box-shadow: 0 0 0 2px var(--ink), inset 0 -3px 0 #6e4425;
+    font: 700 12px var(--sans); cursor: pointer; }
+  @media (max-width: 350px) { .invsort { padding: 0 19px 0 5px; font-size: 10.5px; } }
   body[data-screen^="farm"] .invtools .btn.favbtn, body[data-screen^="farm"] .sheet > .favstar { width: 34px; height: 34px; min-height: 34px; margin: 0; padding: 0; font: 700 18px var(--sans); line-height: 1;
     display: grid; place-items: center; color: #e9d2a6; background: var(--wood3); border: 0; border-radius: 0; box-shadow: 0 0 0 2px var(--ink), inset 0 -3px 0 #6e4425; cursor: pointer; }
   body[data-screen^="farm"] .invtools .btn.favbtn.on, body[data-screen^="farm"] .sheet > .favstar.on { color: #ffd166; background: #6a4426; text-shadow: 0 0 6px rgba(255, 209, 102, .6); }
@@ -5698,21 +5699,31 @@
     var keys = []; gs.forEach(function (g) { keys = keys.concat(g.ids); });          // варианты сорта едут вместе со своей ячейкой
     try { localStorage.setItem("farm-order", JSON.stringify(keys)); } catch (e) {}
   }
-  // «Сортировать» в инвентаре (его просьба 2026-11-17): первые четыре — те, что в полоске под фермой (жёлтая рамка) — не трогаем;
-  // остальные — по форме (мох, ягоды, хрусталь, колосья…), внутри формы — по цвету, станционные раньше гибридов, потом по названию
-  function sortSeeds() {
-    var s = F.state, gs = groupItems(), keep = gs.slice(0, 4), rest = gs.slice(4);
-    var shapeAt = function (sh) { for (var i = 0; i < SHAPES.length; i++) if (SHAPES[i][0] === sh) return i; return 99; };
-    var key = function (g) { var st = s.strains[g.key] || {}; return [shapeAt(st.shape), String(st.color || ""), st.base ? 0 : 1, g.name]; };
-    rest.sort(function (a, b) { var x = key(a), y = key(b); for (var i = 0; i < x.length; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; } return 0; });
-    var keys = []; keep.concat(rest).forEach(function (g) { keys = keys.concat(g.ids); });
-    try { localStorage.setItem("farm-order", JSON.stringify(keys)); } catch (e) {}
+  function orderedInventorySeeds(groups, mode) {
+    if (!mode) return groups;
+    // Первые четыре группы привязаны к слотам под фермой и остаются на своих местах.
+    var fixed = groups.slice(0, 4), rest = groups.slice(4), strains = F.state.strains;
+    if (mode.startsWith("color:")) {
+      var color = mode.slice(6);
+      rest = rest.filter(function (g) { return strains[g.key].color === color; });
+      mode = "newest";
+    }
+    var date = function (st) { return st.created || 0; };
+    var price = function (st) { return st.base ? st.cost : st.price; };
+    rest.sort(function (a, b) {
+      var x = strains[a.key], y = strains[b.key];
+      var newest = date(y) - date(x);
+      if (mode === "newest") return newest;
+      if (mode === "oldest") return Number(!date(x)) - Number(!date(y)) || -newest;
+      return (mode === "price_asc" ? price(x) - price(y) : price(y) - price(x)) || newest;
+    });
+    return fixed.concat(rest);
   }
   // перетаскивание ячеек в большом инвентаре: потянул семя — оно едет за пальцем, отпустил над другой ячейкой — они поменялись местами; туда
   // перетаскивание ячеек в большом инвентаре (его правка 2026-11-17): по ячейкам можно листать пальцем; чтобы поднять ячейку —
   // задержать на ней палец на треть секунды (ячейка чуть сжимается, потом «поднимается» с отдачей), дальше она едет за пальцем;
   // отпустил над другой ячейкой — они поменялись местами, на пустое место — в конец
-  function dragSetup(grid, redraw) {
+  function dragSetup(grid, redraw, canDrag) {
     var d = null, HOLD = 330;
     var slotAt = function (x, y) { var n = document.elementFromPoint(x, y); n = n && n.closest ? n.closest(".slot") : null; return n && grid.contains(n) ? n : null; };
     var lift = function () {
@@ -5727,6 +5738,7 @@
     };
     var drop = function () { if (!d) return; clearTimeout(d.t); d.node.classList.remove("holding"); d = null; };
     grid.onpointerdown = function (e) {
+      if (!canDrag()) return;
       var sl = e.target.closest(".slot"); if (!sl || !sl.dataset.key || sl.dataset.key === "can") return;
       drop();
       d = { key: sl.dataset.key, x: e.clientX, y: e.clientY, on: false, node: sl, ghost: null, id: e.pointerId, over: null };
@@ -5920,6 +5932,24 @@
       sh.appendChild(btn("Гербарий", "", function () { close(); openHerbarium(); }));
     });
   }
+  function fillStrainOrder(mode, manualLabel) {
+    if (manualLabel) {
+      var manual = el("option", "", manualLabel); manual.value = ""; mode.appendChild(manual);
+    }
+    mode.setAttribute("aria-label", "Сортировка или расцветка");
+    var groups = [
+      ["Дата выведения", [["newest", "Сначала новые"], ["oldest", "Сначала старые"]]],
+      ["Цена семени", [["price_asc", "Сначала дешёвые"], ["price_desc", "Сначала дорогие"]]],
+      ["Расцветка", COLORS.map(function (pair) { return ["color:" + pair[0], pair[1][2]]; }).concat([["color:anomaly", "Странная"]])],
+    ];
+    groups.forEach(function (group) {
+      var options = el("optgroup"); options.label = group[0];
+      group[1].forEach(function (pair) {
+        var option = el("option", "", pair[1]); option.value = pair[0]; options.appendChild(option);
+      });
+      mode.appendChild(options);
+    });
+  }
   function openHerbarium() {
     var mutations = { shape: "Мутация формы", color: "Мутация расцветки", both: "Мутация формы и расцветки", none: "Гибрид" };
     var stepBack;
@@ -5953,19 +5983,7 @@
       });
       var filters = el("div", "herbarium-filters"), search = el("input"), mode = el("select");
       search.type = "search"; search.placeholder = "Название или код"; search.setAttribute("aria-label", "Поиск сорта");
-      mode.setAttribute("aria-label", "Сортировка или расцветка");
-      var groups = [
-        ["Дата выведения", [["newest", "Сначала новые"], ["oldest", "Сначала старые"]]],
-        ["Цена семени", [["price_asc", "Сначала дешёвые"], ["price_desc", "Сначала дорогие"]]],
-        ["Расцветка", COLORS.map(function (pair) { return ["color:" + pair[0], pair[1][2]]; }).concat([["color:anomaly", "Странная"]])],
-      ];
-      groups.forEach(function (group) {
-        var options = el("optgroup"); options.label = group[0];
-        group[1].forEach(function (pair) {
-          var option = el("option", "", pair[1]); option.value = pair[0]; options.appendChild(option);
-        });
-        mode.appendChild(options);
-      });
+      fillStrainOrder(mode);
       filters.append(search, mode);
       var list = el("div", "herbarium-list"), detail = el("div"), status = el("p", "bsub"), nav = el("div", "bnav");
       status.setAttribute("role", "status"); detail.hidden = true;
@@ -6776,10 +6794,10 @@
       var note = el("div", "selnote"), grid = el("div", "invgrid");
       var draw = function () {
         grid.innerHTML = "";
-        var seeds = groupItems(), favOnly = !!F.favOnly;         // лейка и лопата — в своих ячейках под фермой, не здесь
+        var s = F.state, groups = groupItems(), seeds = orderedInventorySeeds(groups, F.invSort), favOnly = !!F.favOnly;
         if (favOnly) seeds = seeds.filter(groupFav);             // «только избранное»
         if (fb) fb.classList.toggle("on", favOnly);
-        if (favOnly && !seeds.length) { var e0 = el("div", "sub", "В избранном пока ничего нет. Открой карточку семени и нажми звёздочку слева вверху."); e0.style.gridColumn = "1 / -1"; grid.appendChild(e0); }
+        if (favOnly && !seeds.length && !groups.some(groupFav)) { var e0 = el("div", "sub", "В избранном пока ничего нет. Открой карточку семени и нажми звёздочку слева вверху."); e0.style.gridColumn = "1 / -1"; grid.appendChild(e0); }
         var cells = 0;
         seeds.forEach(function (g) {
           var n = g.key === "anomaly" ? Math.max(1, g.total) : 1;                // странное — каждое семя в своей ячейке
@@ -6807,9 +6825,15 @@
       var tools = el("div", "invtools"), fb = el("button", "btn favbtn", "★"); fb.type = "button"; fb.setAttribute("aria-label", "Только избранное");
       fb.onclick = function () { haptic("light"); F.favOnly = !F.favOnly; if (F.favOnly && !groupItems().some(groupFav)) toast("Отметь семена звёздочкой в их карточке"); draw(); };
       tools.appendChild(fb);
-      if (groupItems().length > 5) tools.appendChild(btn("Сортировать", "ghost sortbtn", function () { haptic("success"); sortSeeds(); draw(); renderFarm(); toast("Отсортировано"); }));
+      var mode = el("select", "invsort");
+      fillStrainOrder(mode, "Свой порядок");
+      mode.value = F.invSort || "";
+      mode.onchange = function () { F.invSort = mode.value; draw(); sh.scrollTop = 0; };
+      var sortWrap = el("div", "invsort-wrap");
+      sortWrap.appendChild(mode);
+      tools.appendChild(sortWrap);
       ihead.appendChild(tools);
-      grid.classList.add("drag"); draw(); dragSetup(grid, draw); sh.appendChild(grid); sh.appendChild(note);
+      grid.classList.add("drag"); draw(); dragSetup(grid, draw, function () { return !F.invSort; }); sh.appendChild(grid); sh.appendChild(note);
       F.invRedraw = function () { if (document.body.contains(grid)) draw(); else F.invRedraw = null; };   // открытый инвентарь — перерисовать после распыления и ответа сервера
       var acts = el("div", "salebtns sheetfoot");
       acts.appendChild(btn("Лавка", "ghost", function () { close(); openShop("buy"); }));
