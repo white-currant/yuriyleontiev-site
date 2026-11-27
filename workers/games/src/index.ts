@@ -302,12 +302,12 @@ async function items(u: any) {
 // ---------- HTTP ----------
 
 export default {
-  async fetch(req: Request, env: any): Promise<Response> {
+  async fetch(req: Request, env: any, ctx?: { waitUntil(task: Promise<unknown>): void }): Promise<Response> {
     RAW = env.DB; ENV = env; PRE.clear();
     DB = { prepare: (sql: string) => RAW.prepare(sql), batch: (st: any[]) => { PRE.clear(); return RAW.batch(st); } };
     farm.setup({ q, DB, now, today, nameOf, prefetch, preClear });
     try {
-      return await handle(req);
+      return await handle(req, env, ctx);
     } catch (e) {
       // упали — отвечаем ошибкой с CORS, иначе браузер покажет «нет связи» вместо причины
       console.error(e);
@@ -464,6 +464,8 @@ async function saveFarmPermit(uid: number, session: string) {
       VALUES (?1, COALESCE((SELECT MAX(id) FROM f_dust_log WHERE user = ?1), 0))
       ON CONFLICT(user) DO UPDATE SET checked_dust_id = MAX(checked_dust_id, excluded.checked_dust_id)`)
       .bind(uid),
+    DB.prepare("INSERT INTO f_farm_action_log (user, at_ms, action, outcome) VALUES (?, ?, 'captcha', 'ok')")
+      .bind(uid, Date.now()),
   ]);
   return permit;
 }
@@ -480,9 +482,20 @@ async function farmNeedsCheck(uid: number) {
         SUM(reason IN ('market_buy_seed', 'market_buy_item'))
           OVER (ORDER BY at RANGE BETWEEN 300 PRECEDING AND CURRENT ROW) AS purchases
       FROM activity
+    ), gaps AS (
+      SELECT id, action, at_ms, at_ms - LAG(at_ms) OVER (PARTITION BY action ORDER BY at_ms, id) AS gap
+      FROM f_farm_action_log
+      WHERE user = ?1 AND at_ms >= ?6 AND action IN ('plant', 'water', 'harvest')
+        AND id > COALESCE((SELECT MAX(id) FROM f_farm_action_log WHERE user = ?1 AND action = 'captcha'), 0)
+    ), cadence AS (
+      SELECT COUNT(gap) OVER recent AS samples, MIN(gap) OVER recent AS shortest, MAX(gap) OVER recent AS longest
+      FROM gaps WINDOW recent AS (PARTITION BY action ORDER BY at_ms, id ROWS BETWEEN 8 PRECEDING AND CURRENT ROW)
     )
-    SELECT 1 FROM windows WHERE income >= ?3 OR sales >= ?4 OR purchases >= ?5 LIMIT 1`,
-    [uid, now() - FARM_RISK_LOOKBACK, FARM_RISK_INCOME, FARM_RISK_SALES, FARM_RISK_PURCHASES]);
+    SELECT 1 FROM windows WHERE income >= ?3 OR sales >= ?4 OR purchases >= ?5
+    UNION ALL
+    SELECT 1 FROM cadence WHERE samples = 9 AND shortest >= 1500 AND longest <= 20000 AND longest - shortest <= 300
+    LIMIT 1`,
+    [uid, now() - FARM_RISK_LOOKBACK, FARM_RISK_INCOME, FARM_RISK_SALES, FARM_RISK_PURCHASES, Date.now() - 10 * 60 * 1000]);
   return rows.length > 0;
 }
 async function allowFarmAction(uid: number) {
@@ -494,7 +507,8 @@ async function allowFarmAction(uid: number) {
   return result.length > 0;
 }
 
-async function handle(req: Request): Promise<Response> {
+async function handle(req: Request, env: any, ctx?: { waitUntil(task: Promise<unknown>): void }): Promise<Response> {
+  const receivedAt = Date.now();
   const url = new URL(req.url);
   const origin = req.headers.get("origin") || "";
   const cors: Record<string, string> = {
@@ -503,8 +517,17 @@ async function handle(req: Request): Promise<Response> {
     "Access-Control-Allow-Headers": "Content-Type, X-Init-Data",
     "Vary": "Origin",
   };
-  const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  let watchedUser: number | null = null;
+  const json = (body: unknown, status = 200) => {
+    if (watchedUser !== null && ctx) {
+      const message = (body as { error?: unknown } | null)?.error;
+      ctx.waitUntil(env.DB.prepare(`INSERT INTO f_farm_watch_log (user, at_ms, route, http_status, error)
+        VALUES (?, ?, ?, ?, ?)`).bind(watchedUser, receivedAt, url.pathname, status,
+          typeof message === "string" ? message.slice(0, 150) : null).run()
+        .catch(() => console.warn("Could not write farm watch event")));
+    }
+    return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  };
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
 
   // отрывок для раунда — по номеру раунда, имя файла наружу не уходит
@@ -623,7 +646,7 @@ async function handle(req: Request): Promise<Response> {
     }
     if (req.method === "POST" && url.pathname === "/bot/forget") {
       const uid = Number((await req.json()).user);
-      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items", "g_refs", "g_daypts", "g_playtime", "g_play_slice", "f_action_rate", "f_play_session", "f_browser_check", "f_farm_check_state"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
+      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items", "g_refs", "g_daypts", "g_playtime", "g_play_slice", "f_action_rate", "f_play_session", "f_browser_check", "f_farm_check_state", "f_farm_action_log", "f_farm_watch_log"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
       await farm.forgetFarm(uid);
       return json({ ok: true });
     }
@@ -637,6 +660,8 @@ async function handle(req: Request): Promise<Response> {
   const initData = req.headers.get("x-init-data") || "";
   const user = browserProof ? null : await verifyInitData(initData);
   if (!browserProof && !user?.id) return json({ error: "Открой игру из Телеграма" }, 401);
+  if (user?.id && user.id === Number(env.FARM_WATCH_USER) && receivedAt < Number(env.FARM_WATCH_UNTIL_MS) &&
+      /^\/api\/farm(?:\/[a-z-]+){0,3}$/.test(url.pathname)) watchedUser = user.id;
   let body: any = {};
   try { body = await req.json(); } catch { /* пустое тело */ }
   if (browserProof) {
@@ -721,8 +746,16 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/gem": return json(await farm.buyGem(user, String(body.kind || "moon").slice(0, 12)));
     case "/api/farm/gemdust": return json(await farm.gemDust(user, Number(body.idx), String(body.kind || "moon").slice(0, 12)));
     case "/api/farm/dig": return json(await farm.dig(user, Number(body.idx)));
-    case "/api/farm/plant": return json(await farm.plant(user, Number(body.idx), String(body.crop || "")));
-    case "/api/farm/harvest": return json(await farm.harvest(user, Number(body.idx)));
+    case "/api/farm/plant":
+    case "/api/farm/water":
+    case "/api/farm/harvest": {
+      const idx = Number(body?.idx);
+      const action = url.pathname.endsWith("/plant") ? "plant" : url.pathname.endsWith("/water") ? "water" : "harvest";
+      const result = action === "plant" ? await farm.plant(user, idx, String(body?.crop || ""), receivedAt)
+        : action === "water" ? await farm.water(user, idx, receivedAt) : await farm.harvest(user, idx, receivedAt);
+      if (typeof result.error === "string") await farm.auditPlotRejection(user.id, receivedAt, action, idx, result.error);
+      return json(result);
+    }
     case "/api/farm/unlock": return json(await farm.unlock(user));
     case "/api/farm/build": return json(await farm.build(user, String(body.kind || "")));
     case "/api/farm/order": return json(await farm.fulfil(user, Number(body.slot), body.pick));
@@ -743,7 +776,6 @@ async function handle(req: Request): Promise<Response> {
     case "/api/farm/shell": return json(await farm.dustShell(user));
     case "/api/farm/decor": return json(await farm.setDecor(user, String(body.slot || ""), String(body.item || ""), body.on !== false));
     case "/api/farm/fertilize": return json(await farm.fertilize(user, Number(body.idx)));
-    case "/api/farm/water": return json(await farm.water(user, Number(body.idx)));
     case "/api/farm/fill": return json(await farm.fill(user));
     case "/api/farm/book": return json(await farm.book(user));
     case "/api/dg": return json(await farm.dgState(user));

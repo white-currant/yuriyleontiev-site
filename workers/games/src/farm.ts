@@ -910,7 +910,17 @@ export async function dig(u: any, idx: number) {
   ]);
   return { crop, wild, points: -back, farm: await farmState(u) };
 }
-export async function plant(u: any, idx: number, crop: string) {
+type PlotAction = "plant" | "water" | "harvest";
+function plotAudit(uid: number, at: number, action: PlotAction, idx: number, strain: string | null,
+                   quantity: number | null, outcome = "ok", detail: string | null = null, afterChange = false) {
+  return DB.prepare(`INSERT INTO f_farm_action_log (user, at_ms, action, bed, strain, quantity, outcome, detail)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ? ${afterChange ? "WHERE changes() = 1" : ""}`)
+    .bind(uid, at, action, Number.isSafeInteger(idx) && idx >= 0 && idx < 9 ? idx : null, strain, quantity, outcome, detail);
+}
+export async function auditPlotRejection(uid: number, at: number, action: PlotAction, idx: number, reason: string) {
+  await plotAudit(uid, at, action, idx, null, null, "rejected", reason).raw();
+}
+export async function plant(u: any, idx: number, crop: string, receivedAt = Date.now()) {
   if (!(idx >= 0 && idx < PLOTS_MAX) || !crop) return { error: "Нет такой грядки или семян" };
   await ensureFarm(u);
   const [[unlocked]] = await q("SELECT unlocked FROM f_farms WHERE user = ?", [u.id]);
@@ -933,6 +943,7 @@ export async function plant(u: any, idx: number, crop: string) {
     mossy ? DB.prepare("INSERT OR REPLACE INTO f_monomark (user, idx, kind, at) VALUES (?, ?, 'wild', ?)").bind(u.id, idx, t)
           : DB.prepare("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind = 'wild'").bind(u.id, idx),
     DB.prepare("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind IN ('g2', 'gseed', 'gcross', 'oddfresh')").bind(u.id, idx),   // старая самоцветная пыль на новую посадку не переходит
+    plotAudit(u.id, receivedAt, "plant", idx, crop, 1),
     DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)").bind(u.id, nameOf(u), POINTS_PLANT, "Лунная ферма", t),
   ]);
   if (crop === "anomaly" && (await q("DELETE FROM f_evlog WHERE rowid = (SELECT rowid FROM f_evlog WHERE user = ? AND kind = 'odd:fresh' LIMIT 1) RETURNING 1", [u.id])).length)
@@ -1054,11 +1065,15 @@ export async function fill(u: any) {
   return { farm: await farmState(u) };
 }
 
-export async function water(u: any, idx: number) {
+export async function water(u: any, idx: number, receivedAt = Date.now()) {
   const EVW = await plotEvents(u.id);
   if (EVW[idx] && EVW[idx].kind === "burning") {                 // потушить горящую грядку: полив из лейки, уголь — сразу
     if (!(await q("UPDATE f_farms SET water = water - 1 WHERE user = ? AND water > 0 RETURNING 1", [u.id])).length) return { error: "Лейка пуста — набери воды в колодце" };
-    if (!(await q("UPDATE f_plotev SET kind = 'coal', until = 0 WHERE user = ? AND idx = ? AND kind = 'burning' RETURNING 1", [u.id, idx])).length) {
+    const [doused] = await DB.batch([
+      DB.prepare("UPDATE f_plotev SET kind = 'coal', until = 0 WHERE user = ? AND idx = ? AND kind = 'burning' RETURNING 1").bind(u.id, idx),
+      plotAudit(u.id, receivedAt, "water", idx, null, 1, "doused", null, true),
+    ]);
+    if (!doused.results?.length) {
       await q("UPDATE f_farms SET water = water + 1 WHERE user = ?", [u.id]); return { error: "Уже потушено" };
     }
     return { doused: true, farm: await farmState(u) };
@@ -1076,16 +1091,25 @@ export async function water(u: any, idx: number) {
     return { error: "Лейка пуста — набери воды в колодце" };
   // накопленный рост фиксируем и открываем новое окно полива
   // окно полива открывает ровно один запрос (условие water_until <= сейчас) — двойное нажатие не даст очки дважды
-  const done = await q("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ? AND water_until <= ? RETURNING 1",
-                       [growth(p, t, boost, rainSlow(s)), t, t + s.thirst * 60 * (weatherOn(t) === "drought" ? 0.5 : 1) * (s.bonus === "hardy" ? 2 : 1), u.id, idx, t]);   // стойкому — вдвое дольше
-  if (!done.length) { await q("UPDATE f_farms SET water = water + 1 WHERE user = ?", [u.id]); return { error: "Грядка ещё влажная" }; }
-  await q("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)", [u.id, nameOf(u), POINTS_WATER, "Лунная ферма", t]);
+  const [done] = await DB.batch([
+    DB.prepare("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ? AND crop = ? AND planted = ? AND water_until <= ? RETURNING 1")
+      .bind(growth(p, t, boost, rainSlow(s)), t, t + s.thirst * 60 * (weatherOn(t) === "drought" ? 0.5 : 1) * (s.bonus === "hardy" ? 2 : 1),
+        u.id, idx, s.id, p[2], t),
+    plotAudit(u.id, receivedAt, "water", idx, s.id, 1, "ok", null, true),
+    DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) SELECT ?, ?, ?, ?, ? WHERE changes() = 1")
+      .bind(u.id, nameOf(u), POINTS_WATER, "Лунная ферма", t),
+  ]);
+  if (!done.results?.length) { await q("UPDATE f_farms SET water = water + 1 WHERE user = ?", [u.id]); return { error: "Грядка ещё влажная" }; }
   return { points: POINTS_WATER, farm: await farmState(u) };
 }
 
-export async function harvest(u: any, idx: number) {
+export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
   const EV = await plotEvents(u.id);
-  if (EV[idx] && EV[idx].kind === "coal") return takeCoal(u, idx);
+  if (EV[idx] && EV[idx].kind === "coal") {
+    const result = await takeCoal(u, idx);
+    if (!result.error) await plotAudit(u.id, receivedAt, "harvest", idx, "p:coal", 1, "coal").raw();
+    return result;
+  }
   if (EV[idx] && EV[idx].kind === "burning") return { error: "Грядка горит — потуши её лейкой или дождись угля" };
   const [p] = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ? AND idx = ?`, [u.id, idx]);
   if (!p) return { error: "Грядка пустая" };
@@ -1104,7 +1128,10 @@ export async function harvest(u: any, idx: number) {
   if (s && s.myth) { await q("DELETE FROM f_monomark WHERE user = ? AND kind IN ('myth', 'mythripe')", [u.id]); await mythEnd(u.id); }
   if (s && s.odd && !all.some((x) => Number(x[0]) !== idx && ss[x[1]]?.odd))                 // странное собрано (или убрано засохшим) — следующая посадка начнёт новые сутки
     await q("DELETE FROM f_evlog WHERE user = ? AND kind = 'odd:win'", [u.id]);
-  if (st.dead) return { withered: true, farm: await farmState(u) };       // засохшее — просто убрали (звезда созвездия на грядке остаётся)
+  if (st.dead) {                                                       // засохшее — просто убрали (звезда созвездия на грядке остаётся)
+    await plotAudit(u.id, receivedAt, "harvest", idx, s.id, 0, "withered").raw();
+    return { withered: true, farm: await farmState(u) };
+  }
   if (s && s.odd) await q("INSERT INTO f_evlog (user, kind, at) SELECT ?, 'odd:reaped', ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = ? AND kind = 'odd:reaped')", [u.id, t, u.id]);   // первое странное собрано — гости дальше видят его как есть
   const marks = (await q("DELETE FROM f_monomark WHERE user = ? AND idx = ? AND kind IN ('star', 'myth', 'wild', 'g2', 'gseed', 'gcross') RETURNING kind", [u.id, idx])).map((r) => String(r[0]));
   const rain = (await rainUntil()) > t;
@@ -1131,6 +1158,7 @@ export async function harvest(u: any, idx: number) {
     ? DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?)
                   ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.odd ? "p:eye" : s.id, crop)
     : DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("harvest_to_dust", { item: s.id, quantity: crop, unitPrice: s.dust }), crop * s.dust, u.id)];
+  writes.push(plotAudit(u.id, receivedAt, "harvest", idx, s.id, crop));
   if (wetGrain) writes.push(DB.prepare("INSERT INTO f_wet (user, strain, n, dry_at) VALUES (?, ?, ?, ?)").bind(u.id, s.id, crop, t + WET_DRY));
   if (cometDust + mythDust) writes.push(DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("harvest_bonus", { item: s.id, cometDust, mythDust }), cometDust + mythDust, u.id));
   if (points > 0) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)")
