@@ -1297,7 +1297,7 @@
     ["home", "game", "nope", "farm", "farm-shop", "farm-neighbors", "farm-visit"].forEach(function (s) { $(s).hidden = s !== id; });
     var was = document.body.dataset.screen; document.body.dataset.screen = id; scrollTo(0, 0);
     playSelect(playGameFor(id));
-    if (farmPermit && id.indexOf("farm") !== 0) leaveFarm();
+    if ((farmSession || farmPermit) && id.indexOf("farm") !== 0) leaveFarm();
     if (id !== "farm") dropGem();
     if (was && was !== id) document.querySelectorAll(".sheet-wrap,.thanks-wrap").forEach(function (w) { w.remove(); });   // ушёл с экрана — его окна закрываются (баг 2026-11-16: окно семени осталось поверх гильдии)
     if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked");
@@ -3940,20 +3940,21 @@
   F.pending = 0;
   var farmWrites = Promise.resolve(), farmRevision = 0, cancelledFarmRevision = 0;
   function loadFarm(entering) {
-    var revision = farmRevision, canApply = !F.pending;
+    var revision = farmRevision, canApply = !F.pending, session = farmSession;
     var request = entering ? sendFarmAction("/api/farm") : farmRequest("/api/farm", {}, farmPermit);
     return request.then(function (st) {
-      if (!entering && canApply && !F.pending && revision === farmRevision) setFarm(st);
+      if (!entering && canApply && !F.pending && revision === farmRevision && session === farmSession) setFarm(st);
       return st;
     });
   }
-  var farmPermit = "", farmOpening = null, farmCheckPending = null, turnstileLoader = null;
+  var farmPermit = "", farmSession = null, farmOpening = null, farmCheckPending = null, turnstileLoader = null;
   function revokeFarmPermit(permit) {
     if (permit) call("/api/farm/leave", { farm_permit: permit }, true).catch(function () {});
   }
   function leaveFarm() {
     var permit = farmPermit;
     farmPermit = "";
+    farmSession = null;
     revokeFarmPermit(permit);
   }
   window.addEventListener("pagehide", leaveFarm);
@@ -4890,7 +4891,10 @@
     shut._close = true;                                          // кнопки «Готово» / «Закрыть» с этой функцией срабатывают с первого касания
     w.appendChild(sh); w.onclick = function (e) { if (e.target === w) shut(); }; build(sh, shut);
     var x = document.createElement("button"); x.type = "button"; x.className = "shx"; x.setAttribute("aria-label", "Закрыть"); x.textContent = "✕";   // крестик — ещё один способ закрыть (его просьба 2026-11-16)
-    x.onclick = function (e) { e.stopPropagation(); haptic("light"); w.click(); }; fastTap(x, function () { haptic("light"); w.click(); });   // как нажатие мимо окна — срабатывают и его обработчики закрытия
+    var dismiss = function () { haptic("light"); w.click(); };   // как нажатие мимо окна — срабатывают и его обработчики закрытия
+    x.onclick = function (e) { e.stopPropagation(); dismiss(); };
+    // Вложенное окно ждёт click: если убрать его на touchend, тот же тап может попасть в крестик окна под ним.
+    if (!document.querySelector(".sheet-wrap")) fastTap(x, dismiss);
     if (!sh.classList.contains("book")) sh.insertBefore(x, sh.firstChild);             // справочнику крестик не нужен (его правка): у него свои «Закрыть» и листание sh.insertBefore(x, sh.firstChild);
     // палец по окну не должен прокручивать страницу под ним: гасим жест, кроме прокрутки самого окна, если оно длинное
     // (прокручиваемые блоки внутри окна — страница справочника — тоже листаются: их жест не гасим)
@@ -5215,6 +5219,14 @@
     if (farmOpening) return farmOpening;
     var screen = document.body.dataset.screen;
     haptic("light");
+    if (farmSession && F.state && (screen === "farm-neighbors" || screen === "farm-shop")) {
+      show("farm");
+      renderFarm();
+      farmLoop(); farmAnim();
+      return loadFarm().then(function (st) {
+        if (F.state === st && document.body.dataset.screen === "farm") { showNotice(); slimeRaid(); }
+      }).catch(function () {});
+    }
     var revision = farmRevision, canApply = !F.pending, loading = $("farm-loading");
     loading.hidden = false;
     farmOpening = loadFarm(true).then(function (st) {
@@ -5222,6 +5234,7 @@
         if (document.body.dataset.screen.indexOf("farm") !== 0) leaveFarm();
         return;
       }
+      farmSession = {};
       show("farm");
       loadReleases();
       if (!F.state || (canApply && !F.pending && revision === farmRevision)) setFarm(st);
@@ -5709,13 +5722,16 @@
       mode = "newest";
     }
     var date = function (st) { return st.created || 0; };
-    var price = function (st) { return st.base ? st.cost : st.price; };
+    var metric = mode.startsWith("growth_") ? function (st) { return st.minutes; }
+      : mode.startsWith("water_") ? thirstOf
+      : function (st) { return st.base ? st.cost : st.price; };
+    var direction = mode.endsWith("_asc") ? 1 : -1;
     rest.sort(function (a, b) {
       var x = strains[a.key], y = strains[b.key];
       var newest = date(y) - date(x);
       if (mode === "newest") return newest;
       if (mode === "oldest") return Number(!date(x)) - Number(!date(y)) || -newest;
-      return (mode === "price_asc" ? price(x) - price(y) : price(y) - price(x)) || newest;
+      return (metric(x) - metric(y)) * direction || newest;
     });
     return fixed.concat(rest);
   }
@@ -5932,16 +5948,22 @@
       sh.appendChild(btn("Гербарий", "", function () { close(); openHerbarium(); }));
     });
   }
-  function fillStrainOrder(mode, manualLabel) {
-    if (manualLabel) {
-      var manual = el("option", "", manualLabel); manual.value = ""; mode.appendChild(manual);
+  function fillStrainOrder(mode, forInventory) {
+    if (forInventory) {
+      var manual = el("option", "", "Свой порядок"); manual.value = ""; mode.appendChild(manual);
     }
     mode.setAttribute("aria-label", "Сортировка или расцветка");
     var groups = [
       ["Дата выведения", [["newest", "Сначала новые"], ["oldest", "Сначала старые"]]],
       ["Цена семени", [["price_asc", "Сначала дешёвые"], ["price_desc", "Сначала дорогие"]]],
-      ["Расцветка", COLORS.map(function (pair) { return ["color:" + pair[0], pair[1][2]]; }).concat([["color:anomaly", "Странная"]])],
     ];
+    if (forInventory) {
+      groups.push(
+        ["Время роста", [["growth_asc", "Рост быстрее"], ["growth_desc", "Рост медленнее"]]],
+        ["Длительность полива", [["water_asc", "Полив короче"], ["water_desc", "Полив дольше"]]]
+      );
+    }
+    groups.push(["Расцветка", COLORS.map(function (pair) { return ["color:" + pair[0], pair[1][2]]; }).concat([["color:anomaly", "Странная"]])]);
     groups.forEach(function (group) {
       var options = el("optgroup"); options.label = group[0];
       group[1].forEach(function (pair) {
@@ -6826,7 +6848,7 @@
       fb.onclick = function () { haptic("light"); F.favOnly = !F.favOnly; if (F.favOnly && !groupItems().some(groupFav)) toast("Отметь семена звёздочкой в их карточке"); draw(); };
       tools.appendChild(fb);
       var mode = el("select", "invsort");
-      fillStrainOrder(mode, "Свой порядок");
+      fillStrainOrder(mode, true);
       mode.value = F.invSort || "";
       mode.onchange = function () { F.invSort = mode.value; draw(); sh.scrollTop = 0; };
       var sortWrap = el("div", "invsort-wrap");
