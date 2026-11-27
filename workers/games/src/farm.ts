@@ -503,7 +503,13 @@ async function plotEvents(uid: number) {
   }
   return out;
 }
-async function seenEvents(uid: number) { return (await q("SELECT DISTINCT kind FROM f_evlog WHERE user = ? AND kind NOT LIKE '%:%'", [uid])).map((r) => String(r[0])); }
+const SEEN_EVENTS_SQL = `SELECT known.column1 FROM (
+  VALUES ('burn'), ('comet'), ('frost'), ('sun'), ('wanderer'), ('myth_lost'),
+    ('mono_comet'), ('mono_constellation'), ('mono_fire'), ('mono_moss'), ('mono_myth'), ('mono_solstice')
+) AS known WHERE EXISTS (
+  SELECT 1 FROM f_evlog WHERE user = ? AND kind = known.column1
+) ORDER BY known.column1`;
+async function seenEvents(uid: number) { return (await q(SEEN_EVENTS_SQL, [uid])).map((r) => String(r[0])); }
 // уголь с грядки — в амбар (без амбара — сразу пылью)
 // звёздочка кометы — в пыль; кратер — восстановить грядку (бесплатно), семя растения, на которое упала комета, возвращается
 export async function takeStar(u: any, id: number) {
@@ -725,7 +731,7 @@ function farmReads(uid: number, t: number): [string, any[]][] {
     ["SELECT kind FROM f_builds WHERE user = ?", [uid]],
     ["SELECT j.kind, j.recipe, j.n, j.started, j.ready, EXISTS(SELECT 1 FROM f_jobtake t WHERE t.user = j.user AND t.slot = j.kind) FROM f_jobs j WHERE j.user = ?", [uid]],
     ["SELECT kind, level FROM f_levels WHERE user = ?", [uid]],
-    ["SELECT DISTINCT kind FROM f_evlog WHERE user = ? AND kind NOT LIKE '%:%'", [uid]],
+    [SEEN_EVENTS_SQL, [uid]],
     ["SELECT id, x, y, dust FROM f_stars WHERE user = ?", [uid]],
     ["SELECT id, x, y, dust FROM f_clumps WHERE user = ?", [uid]],
     ["SELECT item FROM f_decor WHERE user = ? AND kind = 'roof'", [uid]],

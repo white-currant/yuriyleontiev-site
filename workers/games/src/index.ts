@@ -302,12 +302,12 @@ async function items(u: any) {
 // ---------- HTTP ----------
 
 export default {
-  async fetch(req: Request, env: any, ctx?: { waitUntil(task: Promise<unknown>): void }): Promise<Response> {
+  async fetch(req: Request, env: any): Promise<Response> {
     RAW = env.DB; ENV = env; PRE.clear();
     DB = { prepare: (sql: string) => RAW.prepare(sql), batch: (st: any[]) => { PRE.clear(); return RAW.batch(st); } };
     farm.setup({ q, DB, now, today, nameOf, prefetch, preClear });
     try {
-      return await handle(req, env, ctx);
+      return await handle(req, env);
     } catch (e) {
       // упали — отвечаем ошибкой с CORS, иначе браузер покажет «нет связи» вместо причины
       console.error(e);
@@ -334,7 +334,7 @@ async function recordPlay(uid: number, mode: string, seconds: unknown) {
   // Часы сервера и конец последнего интервала не дают двум открытым вкладкам удвоить время.
   await q(`INSERT OR IGNORE INTO g_play_slice (user, at, sec, game)
     SELECT ?1, ?2, credited, ?4 FROM (
-      SELECT MIN(?3, ?2 - COALESCE(MAX(at), 0)) AS credited FROM g_play_slice WHERE user = ?1
+      SELECT MIN(?3, ?2 - COALESCE((SELECT at FROM g_play_slice WHERE user = ?1 ORDER BY at DESC LIMIT 1), 0)) AS credited
     ) WHERE credited > 0`, [uid, now(), Math.min(PLAY_MAX_SECONDS, Math.floor(seconds)), game]);
 }
 async function playCutover() {
@@ -507,7 +507,7 @@ async function allowFarmAction(uid: number) {
   return result.length > 0;
 }
 
-async function handle(req: Request, env: any, ctx?: { waitUntil(task: Promise<unknown>): void }): Promise<Response> {
+async function handle(req: Request, env: any): Promise<Response> {
   const receivedAt = Date.now();
   const url = new URL(req.url);
   const origin = req.headers.get("origin") || "";
@@ -517,17 +517,8 @@ async function handle(req: Request, env: any, ctx?: { waitUntil(task: Promise<un
     "Access-Control-Allow-Headers": "Content-Type, X-Init-Data",
     "Vary": "Origin",
   };
-  let watchedUser: number | null = null;
-  const json = (body: unknown, status = 200) => {
-    if (watchedUser !== null && ctx) {
-      const message = (body as { error?: unknown } | null)?.error;
-      ctx.waitUntil(env.DB.prepare(`INSERT INTO f_farm_watch_log (user, at_ms, route, http_status, error)
-        VALUES (?, ?, ?, ?, ?)`).bind(watchedUser, receivedAt, url.pathname, status,
-          typeof message === "string" ? message.slice(0, 150) : null).run()
-        .catch(() => console.warn("Could not write farm watch event")));
-    }
-    return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
-  };
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
 
   // отрывок для раунда — по номеру раунда, имя файла наружу не уходит
@@ -660,8 +651,6 @@ async function handle(req: Request, env: any, ctx?: { waitUntil(task: Promise<un
   const initData = req.headers.get("x-init-data") || "";
   const user = browserProof ? null : await verifyInitData(initData);
   if (!browserProof && !user?.id) return json({ error: "Открой игру из Телеграма" }, 401);
-  if (user?.id && user.id === Number(env.FARM_WATCH_USER) && receivedAt < Number(env.FARM_WATCH_UNTIL_MS) &&
-      /^\/api\/farm(?:\/[a-z-]+){0,3}$/.test(url.pathname)) watchedUser = user.id;
   let body: any = {};
   try { body = await req.json(); } catch { /* пустое тело */ }
   if (browserProof) {

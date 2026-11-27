@@ -8216,13 +8216,13 @@
       var a = el("div", "invacts"); a.appendChild(btn("Повторить", "", function () { haptic("light"); openFeed(); })); box.appendChild(a);
     });
   }
-  // всплывающие уведомления: пока игра открыта, раз в 20 секунд спрашиваем свежие новости и показываем их сверху
+  // Всплывающие уведомления: опрашиваем ленту не чаще раза в минуту, пока открыта ферма.
   F.pingSince = 0;
   function pingCheck() {
     var scr = document.body.dataset.screen || "";
     if (document.hidden || scr.indexOf("farm") !== 0 || !F.state) return;
     if (!F.pingSince) { F.pingSince = F.state.feed_top || 1; return; }          // старое при входе не показываем — только то, что случится дальше
-    if ((F.state.feed_top || 0) <= F.pingSince && F.pingPoll && Date.now() - F.pingPoll < 20000) return;
+    if (F.pingPoll && Date.now() - F.pingPoll < 60000) return;
     F.pingPoll = Date.now();
     call("/api/farm/feed", { since: F.pingSince }).then(function (r) {
       var fresh = (r.items || []).filter(function (x) { return x.id > F.pingSince; }).reverse();
