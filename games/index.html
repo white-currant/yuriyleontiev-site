@@ -1177,6 +1177,7 @@
       <button class="btn ghost" id="toneighbors">Соседи</button>
       <button class="btn ghost gemcancel" id="gemcancel" hidden>Отменить</button>
     </div>
+    <div class="farm-note" id="farm-pause-countdown" hidden></div>
     <div class="farm-note" id="farmnote"></div>
   </section>
 
@@ -1238,11 +1239,37 @@
   var haptic = function (kind) { if (!hapticOn()) return; try { tg && tg.HapticFeedback && (kind === "light" || kind === "medium" ? tg.HapticFeedback.impactOccurred(kind) : tg.HapticFeedback.notificationOccurred(kind)); } catch (e) {} };
   var $ = function (id) { return document.getElementById(id); };
 
+  var farmPauseUntil = 0, farmPauseTick = null;
+  function farmPauseMessage() {
+    var seconds = Math.max(0, Math.ceil((farmPauseUntil - Date.now()) / 1000));
+    if (!seconds) return "";
+    var parts = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
+    return "Лавка и соседи откроются через " + parts.map(function (n) { return String(n).padStart(2, "0"); }).join(":");
+  }
+  function paintFarmPause() {
+    var message = farmPauseMessage(), badge = $("farm-pause-countdown");
+    badge.textContent = message; badge.hidden = !message;
+    $("toshop").disabled = $("toneighbors").disabled = !!message;
+    if (!message && farmPauseTick !== null) { clearInterval(farmPauseTick); farmPauseTick = null; }
+  }
+  function syncFarmPause(response) {
+    var until = Number(response.headers.get("X-Farm-Pause-Until"));
+    if (!Number.isFinite(until) || until <= Date.now() || until === farmPauseUntil) return;
+    farmPauseUntil = until;
+    paintFarmPause();
+    if (farmPauseTick === null) farmPauseTick = setInterval(paintFarmPause, 1000);
+  }
+  function pauseTrade() {
+    var message = farmPauseMessage();
+    if (message) toast(message);
+    return !!message;
+  }
+
   // ---------- сервер ----------
   function call(path, body, keepalive) {
     return fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json", "X-Init-Data": initData }, body: JSON.stringify(body || {}), keepalive: !!keepalive })
       .catch(function () { throw new Error("нет связи с сервером игр"); })
-      .then(function (r) { return r.json().then(function (j) {
+      .then(function (r) { syncFarmPause(r); return r.json().then(function (j) {
         if (r.ok) return j;
         var error = new Error(j.error || r.status);
         if (j.farm_check) error.farmCheck = j.farm_check;
@@ -7550,6 +7577,7 @@
   F.shopTab = "buy";
   var shopMarketRequest = 0;
   function openShop(tab, strain) {
+    if (pauseTrade()) return;
     var focus = strain || "", active = ++shopMarketRequest;
     if (focus !== (F.shopFocus || "")) { F.market = null; F.shopSel = null; }
     F.shopFocus = focus; F.shopMarketFailed = false;
@@ -8239,6 +8267,7 @@
   }
   document.querySelectorAll("#ntabs button").forEach(function (b) { b.onclick = function () { haptic("light"); neighborsTab(b.dataset.nt); }; });
   function openNeighbors() {
+    if (pauseTrade()) return;
     show("farm-neighbors"); neighborsTab("list"); feedDot();
     var ul = $("nlist"); ul.innerHTML = "<li class='empty' style='display:block'>Загружаю…</li>";
     call("/api/farm/neighbors").then(function (r) {
@@ -8265,6 +8294,7 @@
     });
   }
   function visit(pub) {
+    if (pauseTrade()) return;
     call("/api/farm/visit", { pub: pub }).then(function (v) {
       if (v.error) return toast(v.error);
       F.visiting = { pub: pub, seed: parseInt(pub.slice(0, 6), 16), rain_until: v.rain_until, plots: v.plots, now: v.now, fetched: Date.now(), odd_win: v.odd_win, odd_for: v.odd_for, odd_near: v.odd_near,

@@ -420,6 +420,7 @@ function firstPlayAt(ev: any[][], slices: any[][], from: number, until: number) 
 
 const FARM_ACTIONS = new Set(["plant", "water", "harvest", "dig", "fill", "fertilize", "gemdust", "crater", "coal"]
   .map((action) => "/api/farm/" + action));
+const FARM_PAUSE_ALLOWED = new Set(["/api/farm", ...FARM_ACTIONS, ...["sell", "seed-dust", "chest", "leave"].map((action) => "/api/farm/" + action)]);
 const SHARED_FARM_ROUTES = new Set(["market", "buy", "stall", "price", "visit", "gift", "neighbors", "feed", "tea-prank/start", "tea-prank/finish"]
   .map((route) => "/api/farm/" + route));
 const FARM_CHECK_ACTION = "farm-play";
@@ -484,6 +485,12 @@ async function handle(req: Request, env: any): Promise<Response> {
     "Access-Control-Allow-Headers": "Content-Type, X-Init-Data",
     "Vary": "Origin",
   };
+  const farmPauseUntil = Number(env.FARM_PAUSE_UNTIL_MS);
+  const farmPaused = receivedAt < farmPauseUntil;
+  if (farmPaused) {
+    cors["X-Farm-Pause-Until"] = String(farmPauseUntil);
+    cors["Access-Control-Expose-Headers"] = "X-Farm-Pause-Until";
+  }
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
@@ -618,6 +625,8 @@ async function handle(req: Request, env: any): Promise<Response> {
   const initData = req.headers.get("x-init-data") || "";
   const user = browserProof ? null : await verifyInitData(initData);
   if (!browserProof && !user?.id) return json({ error: "Открой игру из Телеграма" }, 401);
+  if (farmPaused && url.pathname.startsWith("/api/farm/") && !FARM_PAUSE_ALLOWED.has(url.pathname))
+    return json({ error: "Эта функция фермы на паузе до 03:01 по Минску." }, 503);
   let body: any = {};
   try { body = await req.json(); } catch { /* пустое тело */ }
   if (browserProof) {
