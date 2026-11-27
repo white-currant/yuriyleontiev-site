@@ -4242,11 +4242,11 @@
       px(c, x + i, yb - h + 1 + j, 1, 1, col);
     }
   }
-  function itemIcon(cv, id) {
+  function itemIcon(cv, id, glow) {
     var gk = gemOf(id); cv.classList.toggle("gemfx", !!gk);
     if (gk) cv.style.animationDelay = -(Date.now() % 2800) + "ms";                            // ячейки пересоздаются — фаза свечения общая, без рывка                                  // самоцветы и их пыль переливаются и светятся (его просьба 2026-11-16)
     if (gk) cv.style.setProperty("--gem", gk.g.glow.join(",")); else cv.style.removeProperty("--gem");
-    if (id.indexOf("p:") !== 0) return fruitIcon(cv, itemOf(id));
+    if (id.indexOf("p:") !== 0) return fruitIcon(cv, itemOf(id), glow);
     if (gk && !gk.dust && GEMS.complete && GEMS.naturalWidth) {                                // самоцвет — его рисунок как есть
       cv.classList.remove("myth"); cv.width = 15; cv.height = 14; var gc0 = cv.getContext("2d"); gc0.clearRect(0, 0, 15, 14);
       gemDraw(gc0, gk.g.img, 2, 1); return;   // без тени-полоски: свечение делало из неё светлую «полочку» (его правка 2026-11-17)
@@ -4257,10 +4257,11 @@
       pr.forEach(function (row, jj) { for (var ii = 0; ii < row.length; ii++) if (row[ii] !== ".") px(gc1, 1 + ii, 1 + jj, 1, 1, map[row[ii]] || PP[row[ii]]); });
       return;
     }
-    var it0 = F.state && itemOf(id); cv.classList.toggle("myth", !!(it0 && it0.myth));   // еда с мифическим — светится
+    var it0 = F.state && itemOf(id), lit = !!(glow || (it0 && it0.myth));
+    cv.classList.toggle("myth", lit);
     var rows = DISH["p:" + recKey(id)] || DISH["p:bread"], c = cv.getContext("2d"), h = rows.length + 2; cv.width = 16; cv.height = Math.max(12, h); c.clearRect(0, 0, 16, cv.height);
     var it = F.state && itemOf(id), pal = it && it.color && it.color !== "sun" ? PAL[it.color] : null;
-    if (!(it0 && it0.myth)) px(c, 2, cv.height - 1, 12, 1, "rgba(40,25,10,.3)");   // у светящейся еды тени нет — свечение превращало её в «полочку»
+    if (!lit) px(c, 2, cv.height - 1, 12, 1, "rgba(40,25,10,.3)");   // у светящейся еды тени нет — свечение превращало её в «полочку»
     var honT = it && it.color && (recKey(id) === "honey" || ((F.state.recipes || {})[recKey(id)] || { needs: {} }).needs["p:honey"]);
     if (honT) pal = PAL[it.color] || null;                                         // мёд — в цвет растения, и солнечный тоже (у муки солнечная — как пшеница)
     dishDraw(c, 1, cv.height - 2, rows, pal, honT ? HONEY_TINT : null);
@@ -4270,12 +4271,13 @@
       else if (gc) { px(c, 12, top, 3, 3, gc[1]); px(c, 13, top + 1, 1, 1, gc[0]); px(c, 12, top + 1, 3, 1, gc[0]); px(c, 13, top, 1, 3, gc[0]); }   // звёздочка сорта на выпечке
     }
   }
-  function fruitIcon(cv, s) {
-    cv.classList.toggle("myth", !!(s && s.myth));
+  function fruitIcon(cv, s, glow) {
+    var lit = !!(glow || s.myth);
+    cv.classList.toggle("myth", lit);
     var rows = FRUIT[s.shape] || FRUIT.moss, c = cv.getContext("2d");
     var h = Math.max(10, rows.length + 2);
     cv.width = 12; cv.height = h; c.clearRect(0, 0, 12, h);
-    if (!(s && s.myth)) px(c, 2, h - 1, 8, 1, "rgba(40,25,10,.35)");             // тень под плодом; у светящегося — без неё (иначе «полочка»)
+    if (!lit) px(c, 2, h - 1, 8, 1, "rgba(40,25,10,.35)");             // тень под плодом; у светящегося — без неё (иначе «полочка»)
     sprS(c, 2, h - 2, rows, { shape: "_fruit", color: s.color, id: s.id, base: s.base });
   }
   // лейка — его рисунок как есть (art/can-full.png; пустая — та же, без воды: art/can-empty.png): полная, пока есть вода, пустая — когда кончилась
@@ -6934,7 +6936,9 @@
         barn.forEach(function (it) {
           var st = itemOf(it.strain), b = el("button", "slot" + (selSet[it.strain] ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
           if (!gemOf(it.strain) && it.strain !== "p:eye") total += it.count * st.dust;   // самоцветы и странные глаза в «весь урожай в пыль» не входят
-          var cv = el("canvas", "pix"); itemIcon(cv, it.strain); fitIcon(cv, it.strain.indexOf("p:") === 0 ? 84 : 70); b.appendChild(cv);   b.appendChild(el("span", "n", it.count));   // в амбаре — крупно
+          var cv = el("canvas", "pix"), product = it.strain.startsWith("p:");
+          itemIcon(cv, it.strain, it.strain === "p:eye" || (!product && st.color === "anomaly"));
+          fitIcon(cv, product ? 84 : 70); b.appendChild(cv); b.appendChild(el("span", "n", it.count));
           if (wetOf(it.strain) > 0) {                                      // мокрые колосья: ячейка залита синим, уровень опускается по мере высыхания (его просьба 2026-11-19)
             var wl = wetLeft(it.strain), wf = el("i", "wetfill"); wf.style.setProperty("--h", Math.min(100, wl / 36).toFixed(1) + "%"); wf.style.animationDuration = Math.max(1, wl) + "s"; b.insertBefore(wf, b.firstChild);
           }
