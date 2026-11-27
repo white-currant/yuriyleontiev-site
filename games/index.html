@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611261912";
+    var BUILD = "202611271339";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -194,6 +194,7 @@
     background: #17142c; border-top: 1px solid rgba(255, 255, 255, .1); animation: up .22s ease-out; }
   @keyframes up { from { transform: translateY(30px); opacity: 0; } }
   .sheet h3 { font-size: 18px; font-weight: 700; }
+  .farm-check-widget { min-height: 130px; display: grid; place-items: center; margin: 12px 0; }
   .sheet { position: relative; }
   .sheet > .shx { position: absolute; top: 10px; right: 10px; z-index: 3; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%;
                   background: rgba(255, 255, 255, .1); color: var(--white); font-size: 17px; line-height: 1; cursor: pointer; }
@@ -1187,7 +1188,12 @@
   function call(path, body, keepalive) {
     return fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json", "X-Init-Data": initData }, body: JSON.stringify(body || {}), keepalive: !!keepalive })
       .catch(function () { throw new Error("нет связи с сервером игр"); })
-      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
+      .then(function (r) { return r.json().then(function (j) {
+        if (r.ok) return j;
+        var error = new Error(j.error || r.status);
+        if (j.farm_check) error.farmCheck = j.farm_check;
+        throw error;
+      }); });
   }
   var playScreen = "", playAt = null, playCarry = 0;
   function playFlush(keepalive) {
@@ -1231,6 +1237,7 @@
     ["home", "game", "nope", "farm", "farm-shop", "farm-neighbors", "farm-visit"].forEach(function (s) { $(s).hidden = s !== id; });
     var was = document.body.dataset.screen; document.body.dataset.screen = id; scrollTo(0, 0);
     playSelect(playGameFor(id));
+    if (farmPermit && id.indexOf("farm") !== 0) leaveFarm();
     if (id !== "farm") dropGem();
     if (was && was !== id) document.querySelectorAll(".sheet-wrap,.thanks-wrap").forEach(function (w) { w.remove(); });   // ушёл с экрана — его окна закрываются (баг 2026-11-16: окно семени осталось поверх гильдии)
     if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked");
@@ -3873,13 +3880,110 @@
   F.pending = 0;
   // загрузка фермы без действия: если пока она шла, игрок что-то сделал (купил, посадил) — старый ответ не затирает сделанное
   // (баг 2026-11-15: купил крышу сразу после входа на ферму — ответ на вход пришёл позже и вернул старую крышу)
-  function loadFarm() {
+  function loadFarm(entering) {
     var t0 = Date.now();
-    return call("/api/farm").then(function (st) { if (!F.pending && (F.mutAt || 0) <= t0) setFarm(st); return st; });
+    var request = entering ? sendFarmAction("/api/farm") : farmRequest("/api/farm", {}, farmPermit);
+    return request.then(function (st) { if (!entering && !F.pending && (F.mutAt || 0) <= t0) setFarm(st); return st; });
+  }
+  var farmPermit = "", farmOpening = null, farmCheckPending = null, turnstileLoader = null;
+  function revokeFarmPermit(permit) {
+    if (permit) call("/api/farm/leave", { farm_permit: permit }, true).catch(function () {});
+  }
+  function leaveFarm() {
+    var permit = farmPermit;
+    farmPermit = "";
+    revokeFarmPermit(permit);
+  }
+  window.addEventListener("pagehide", leaveFarm);
+  function farmRequest(path, body, permit) {
+    return call(path, permit ? Object.assign({}, body, { farm_permit: permit }) : body);
+  }
+  function loadFarmTurnstile() {
+    if (!turnstileLoader) {
+      turnstileLoader = new Promise(function (resolve, reject) {
+        var script = el("script");
+        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        script.onload = function () {
+          if (window.turnstile) window.turnstile.ready(resolve);
+          else reject(new Error("Проверка не загрузилась"));
+        };
+        script.onerror = function () { script.remove(); reject(new Error("Проверка не загрузилась")); };
+        document.head.appendChild(script);
+      }).catch(function (e) { turnstileLoader = null; throw e; });
+    }
+    return turnstileLoader;
+  }
+  function confirmFarmPlay(check) {
+    if (farmCheckPending) return farmCheckPending;
+    farmCheckPending = new Promise(function (resolve, reject) {
+      var widget, mount, status, closeSheet, watcher, finished = false;
+      function finish(error, permit) {
+        if (finished) return;
+        finished = true;
+        watcher.disconnect();
+        if (widget !== undefined) window.turnstile.remove(widget);
+        closeSheet();
+        if (bb && document.body.dataset.screen === "home" && !document.querySelector(".sheet-wrap")) bb.hide();
+        if (error) reject(error); else resolve(permit);
+      }
+      var bb = tg && tg.BackButton;
+      var wrap = sheet(function (sh, close) {
+        closeSheet = close;
+        sh.appendChild(el("h3", "", "Вход на Лунную ферму"));
+        status = el("p", "sub", "Пройди проверку, чтобы открыть ферму.");
+        status.setAttribute("aria-live", "polite");
+        sh.appendChild(status);
+        mount = el("div", "farm-check-widget"); sh.appendChild(mount);
+        sh.appendChild(btn("Отмена", "ghost", close));
+      }, true);
+      if (bb) bb.show();
+      watcher = new MutationObserver(function () {
+        if (!wrap.isConnected) finish(Object.assign(new Error("Проверка отменена"), { cancelled: true }));
+      });
+      watcher.observe(document.body, { childList: true });
+      loadFarmTurnstile().then(function () {
+        if (finished) return;
+        widget = window.turnstile.render(mount, {
+          sitekey: check.sitekey, cData: check.session, action: "farm-play",
+          theme: "dark", size: "compact", language: "ru", "response-field": false,
+          callback: function (token) {
+            if (finished) return;
+            status.textContent = "Проверяю…";
+            call("/api/farm/verify", { token: token }).then(function (r) {
+              if (finished || !wrap.isConnected) revokeFarmPermit(r.permit);
+              else finish(null, r.permit);
+            })
+              .catch(function (e) {
+                if (finished) return;
+                status.textContent = e.message;
+                window.turnstile.reset(widget);
+              });
+          },
+          "error-callback": function () { status.textContent = "Проверка пока недоступна. Попробуй ещё раз."; },
+        });
+      }).catch(function (e) { status.textContent = e.message + ". Закрой окно и попробуй ещё раз."; });
+    }).finally(function () { farmCheckPending = null; });
+    return farmCheckPending;
+  }
+  function sendFarmAction(path, body) {
+    var sentPermit = farmPermit, screen = document.body.dataset.screen;
+    function onSameScreen() { return document.body.dataset.screen === screen && !document.hidden && (!tg || tg.isActive !== false); }
+    return farmRequest(path, body, sentPermit).catch(function (error) {
+      if (!error.farmCheck || !onSameScreen()) throw error;
+      if (farmPermit && sentPermit !== farmPermit) return farmRequest(path, body, farmPermit);
+      return confirmFarmPlay(error.farmCheck).then(function (permit) {
+        if (!onSameScreen()) {
+          revokeFarmPermit(permit);
+          throw Object.assign(new Error("Проверка отменена"), { cancelled: true });
+        }
+        farmPermit = permit;
+        return farmRequest(path, body, permit);
+      });
+    });
   }
   function farmCall(path, body) {
     F.pending++; F.mutAt = Date.now();
-    var send = function () { return call(path, body); };
+    var send = function () { return sendFarmAction(path, body); };
     // Пока сбор подтверждается, следующие действия уже видны в игре, но на сервер идут после него.
     var request = F.eggCollection ? F.eggCollection.then(send, send) : send();
     return request.then(function (r) {
@@ -3887,7 +3991,7 @@
       if (r.error) { toast(r.error); if (!F.pending) loadFarm(); return r; }
       if (r.farm && !F.pending) setFarm(r.farm);
       return r;
-    }, function (e) { F.pending--; toast("Не получилось: " + e.message); if (!F.pending) loadFarm().catch(function () {}); throw e; });
+    }, function (e) { F.pending--; if (!e.cancelled) toast("Не получилось: " + e.message); if (!F.pending) loadFarm().catch(function () {}); throw e; });
   }
   function cropIcon(cv, s, bare) {                                                // значок сорта: созревшее растение на земле (bare — без земли)
     cv.classList.toggle("myth", !!(s && s.myth));                                 // мифическое — фиолетовое сияние
@@ -4923,11 +5027,24 @@
     F.tick = setInterval(function () { if (F.state && !$("farm").hidden && !(F.bookEl && F.bookEl.isConnected)) renderFarm(); }, 1000);   // подписи «сколько осталось»
   }
   function openFarm() {
-    show("farm"); haptic("light");
-    loadReleases();
-    if (F.state) { renderFarm(); farmAnim(); }
-    loadFarm().then(function () { farmLoop(); farmAnim(); showNotice(); slimeRaid(); })
-      .catch(function (e) { toast("Не получилось: " + e.message); });
+    if (farmOpening) return farmOpening;
+    var screen = document.body.dataset.screen;
+    haptic("light");
+    var started = Date.now();
+    farmOpening = loadFarm(true).then(function (st) {
+      if (document.body.dataset.screen !== screen) {
+        if (document.body.dataset.screen.indexOf("farm") !== 0) leaveFarm();
+        return;
+      }
+      show("farm");
+      loadReleases();
+      if (!F.state || (!F.pending && (F.mutAt || 0) <= started)) setFarm(st);
+      else renderFarm();
+      farmLoop(); farmAnim(); showNotice(); slimeRaid();
+    }).catch(function (e) {
+      if (!e.cancelled) toast("Не получилось: " + e.message);
+    }).finally(function () { farmOpening = null; });
+    return farmOpening;
   }
 
   // нашествие слизней (его промо подземелья, 2026-11-20): разово у каждого. Зашёл на ферму — 30 секунд из-за краёв приползают
@@ -5817,7 +5934,7 @@
       sh.appendChild(page); sh.appendChild(nav);
       var foot = el("div", "salebtns"); foot.appendChild(btn("Инвентарь", "ghost", function () { close(); invSheet(); })); foot.appendChild(btn("Закрыть", "", close)); sh.appendChild(foot);
       draw(0);
-      call("/api/farm/book").then(function (r) { if (r.strains) { data = r; draw(0); } }).catch(function () {});   // полный список — с сервера
+      sendFarmAction("/api/farm/book").then(function (r) { if (r.strains) { data = r; draw(0); } }).catch(function () {});   // полный список — с сервера
     });
     return wrap;
   }
@@ -7535,8 +7652,8 @@
         var a = el("div", "invacts");
         a.appendChild(btn(on ? "Не присылать" : "Присылать мне", on ? "ghost" : "", function () {
           haptic("light");
-          if (on) { drawNote(false); return call("/api/farm/notify", { on: false }).catch(function () {}); }
-          var turnOn = function () { drawNote(true); call("/api/farm/notify", { on: true }).catch(function () {}); };
+          if (on) { drawNote(false); return sendFarmAction("/api/farm/notify", { on: false }).catch(function () {}); }
+          var turnOn = function () { drawNote(true); sendFarmAction("/api/farm/notify", { on: true }).catch(function () {}); };
           if (tg && tg.requestWriteAccess) tg.requestWriteAccess(function (allowed) { if (allowed) turnOn(); else toast("Без разрешения бот не может написать тебе"); });
           else turnOn();
         }));
@@ -7639,7 +7756,7 @@
   // подземелье в рамке зовёт сервер и рисует блюда через главное окно: вход Телеграма и значки еды — одни на всё мини-приложение
   window.dgCall = call; window.dgIcon = function (cv, id) { itemIcon(cv, id); };
   window.dgSeedIcon = function (cv) { cropIcon(cv, (F.state && F.state.strains && F.state.strains.anomaly) || ODD, true); };   // странное семя — как в инвентаре фермы (для бустера подземелья, 2026-11-20)
-  window.dgFarm = function () { if (F.state) loadFarm(); };                         // после похода ферма перечитывает амбар
+  window.dgFarm = function () { if (F.state && farmPermit) loadFarm().catch(function () {}); }; // после похода ферма перечитывает амбар
   function openDungeon() {
     haptic("light");
     var w = el("div", "dgwrap"), f = el("iframe"), x = el("button", "dgx", "✕");

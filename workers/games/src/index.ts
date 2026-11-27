@@ -418,6 +418,55 @@ function firstPlayAt(ev: any[][], slices: any[][], from: number, until: number) 
   return first < until ? first : 0;
 }
 
+const FARM_ACTIONS = new Set(["plant", "water", "harvest", "dig", "fill", "fertilize", "gemdust", "crater", "coal"]
+  .map((action) => "/api/farm/" + action));
+const SHARED_FARM_ROUTES = new Set(["market", "buy", "sell", "stall", "price", "visit", "gift", "neighbors", "feed", "tea-prank/start", "tea-prank/finish"]
+  .map((route) => "/api/farm/" + route));
+const FARM_CHECK_ACTION = "farm-play";
+const FARM_CHECK_TTL = 15 * 60;
+const FARM_ACTION_COST = 400; // Быстрая серия разрешена, постоянный поток ограничен по аккаунту.
+const FARM_ACTION_CAPACITY = 12 * FARM_ACTION_COST;
+function bytesToHex(bytes: ArrayBuffer) {
+  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function farmChallenge(initData: string) {
+  return bytesToHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(initData)));
+}
+async function validFarmPermit(permit: unknown, uid: number, session: string) {
+  if (typeof permit !== "string" || !/^[a-f0-9-]{36}$/.test(permit)) return false;
+  const rows = await q("SELECT 1 FROM f_play_session WHERE user = ? AND telegram = ? AND permit = ? AND expires > ?",
+    [uid, session, await farmChallenge(permit), now()]);
+  return rows.length > 0;
+}
+async function issueFarmPermit(token: unknown, uid: number, session: string, secret: string) {
+  if (typeof token !== "string" || !token || token.length > 2048) return null;
+  let proof: any;
+  try {
+    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret, response: token }), signal: AbortSignal.timeout(7000),
+    });
+    if (!response.ok) return null;
+    proof = await response.json();
+  } catch { return null; }
+  if (proof?.success !== true || proof.hostname !== new URL(SITE).hostname ||
+      proof.action !== FARM_CHECK_ACTION || proof.cdata !== session) return null;
+  const at = now(), permit = crypto.randomUUID();
+  await q("DELETE FROM f_play_session WHERE user = ? AND expires <= ?", [uid, at]);
+  await q(`INSERT INTO f_play_session (user, telegram, permit, expires) VALUES (?, ?, ?, ?)
+    ON CONFLICT(user, telegram) DO UPDATE SET permit = excluded.permit, expires = excluded.expires`,
+    [uid, session, await farmChallenge(permit), at + FARM_CHECK_TTL]);
+  return permit;
+}
+async function allowFarmAction(uid: number) {
+  const replenished = "MIN(?4, f_action_rate.credit_ms + MAX(0, excluded.updated_ms - f_action_rate.updated_ms))";
+  const result = await q(`INSERT INTO f_action_rate (user, updated_ms, credit_ms) VALUES (?1, ?2, ?4 - ?3)
+    ON CONFLICT(user) DO UPDATE SET updated_ms = MAX(f_action_rate.updated_ms, excluded.updated_ms),
+      credit_ms = ${replenished} - ?3
+    WHERE ${replenished} >= ?3 RETURNING 1`, [uid, Date.now(), FARM_ACTION_COST, FARM_ACTION_CAPACITY]);
+  return result.length > 0;
+}
+
 async function handle(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const origin = req.headers.get("origin") || "";
@@ -547,7 +596,7 @@ async function handle(req: Request): Promise<Response> {
     }
     if (req.method === "POST" && url.pathname === "/bot/forget") {
       const uid = Number((await req.json()).user);
-      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items", "g_refs", "g_daypts", "g_playtime", "g_play_slice"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
+      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items", "g_refs", "g_daypts", "g_playtime", "g_play_slice", "f_action_rate", "f_play_session"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
       await farm.forgetFarm(uid);
       return json({ ok: true });
     }
@@ -557,10 +606,33 @@ async function handle(req: Request): Promise<Response> {
   // игрок
   if (req.method !== "POST" || !url.pathname.startsWith("/api/")) return json({ error: "method" }, 405);
   if (origin && !ORIGINS.includes(origin)) return json({ error: "origin" }, 403);
-  const user = await verifyInitData(req.headers.get("x-init-data") || "");
+  const initData = req.headers.get("x-init-data") || "";
+  const user = await verifyInitData(initData);
   if (!user?.id) return json({ error: "Открой игру из Телеграма" }, 401);
   let body: any = {};
   try { body = await req.json(); } catch { /* пустое тело */ }
+  const farmRoute = url.pathname === "/api/farm" ||
+    (url.pathname.startsWith("/api/farm/") && !SHARED_FARM_ROUTES.has(url.pathname));
+  if (farmRoute) {
+    if (url.pathname === "/api/farm/leave") {
+      if (typeof body?.farm_permit === "string" && /^[a-f0-9-]{36}$/.test(body.farm_permit)) {
+        await q("DELETE FROM f_play_session WHERE user = ? AND telegram = ? AND permit = ?",
+          [user.id, await farmChallenge(initData), await farmChallenge(body.farm_permit)]);
+      }
+      return json({ ok: true });
+    }
+    const sitekey = ENV.FARM_TURNSTILE_SITE_KEY, secret = ENV.FARM_TURNSTILE_SECRET_KEY;
+    if (!sitekey || !secret) return json({ error: "Проверка фермы временно недоступна" }, 503);
+    const session = await farmChallenge(initData);
+    if (url.pathname === "/api/farm/verify") {
+      const permit = await issueFarmPermit(body?.token, user.id, session, secret);
+      return permit ? json({ permit }) : json({ error: "Проверка не прошла. Попробуй ещё раз." }, 403);
+    }
+    if (!(await validFarmPermit(body?.farm_permit, user.id, session)))
+      return json({ error: "Открой мини-приложение заново для проверки входа на ферму", farm_check: { sitekey, session } }, 403);
+    if (FARM_ACTIONS.has(url.pathname) && !(await allowFarmAction(user.id)))
+      return json({ error: "Слишком много действий подряд. Подожди немного." }, 429);
+  }
   switch (url.pathname) {
     case "/api/playtime": await recordPlay(user.id, String(body.game || ""), body.seconds); return json({ ok: true });
     case "/api/me": return json(await profile(user));

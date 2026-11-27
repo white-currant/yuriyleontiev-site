@@ -17,6 +17,13 @@ CREATE TABLE IF NOT EXISTS g_refs (ref TEXT PRIMARY KEY, user INTEGER NOT NULL);
 -- (колонки water, grown, wet_from, water_until добавлены 2026-11-13 разовым ALTER на рабочей базе)
 CREATE TABLE IF NOT EXISTS f_farms (user INTEGER PRIMARY KEY, pub TEXT UNIQUE NOT NULL, dust INTEGER NOT NULL DEFAULT 10,
   unlocked INTEGER NOT NULL DEFAULT 3, created INTEGER NOT NULL, water INTEGER NOT NULL DEFAULT 5, dust_context TEXT);
+CREATE TABLE IF NOT EXISTS f_action_rate (
+  user INTEGER PRIMARY KEY, updated_ms INTEGER NOT NULL, credit_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS f_play_session (
+  user INTEGER NOT NULL, telegram TEXT NOT NULL, permit TEXT NOT NULL, expires INTEGER NOT NULL,
+  PRIMARY KEY (user, telegram)
+);
 -- Контекст передаётся в том же UPDATE, что и пыль. Триггер пишет журнал и сразу очищает контекст.
 CREATE TABLE IF NOT EXISTS f_dust_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER NOT NULL, at INTEGER NOT NULL,
