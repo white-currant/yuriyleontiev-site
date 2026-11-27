@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611271609";
+    var BUILD = "202611272244";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -19,7 +19,7 @@
           // обновляемся только на главном экране игр (его жалоба 2026-11-20: при каждой выкладке закрывалась ферма, а посреди похода — подземелье);
           // на ферме, в «Угадай трек» и в подземелье ждём — проверка повторится при возврате на главный экран (show("home"))
           var scr = document.body && document.body.dataset.screen;
-          if (document.querySelector(".dgwrap") || (scr && scr !== "home")) return;
+          if (document.querySelector(".dgwrap") || (scr && scr !== "home" && scr !== "nope")) return;
           if (v && v !== BUILD && sessionStorage.getItem("games-reload") !== v) {
             sessionStorage.setItem("games-reload", v);                       // не больше одной перезагрузки на версию
             var q = new URLSearchParams(location.search); q.set("v", v);
@@ -1240,11 +1240,15 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var farmPauseUntil = 0, farmPauseTick = null;
-  function farmPauseMessage() {
-    var seconds = Math.max(0, Math.ceil((farmPauseUntil - Date.now()) / 1000));
+  function remainingTime(until) {
+    var seconds = Math.max(0, Math.ceil((until - Date.now()) / 1000));
     if (!seconds) return "";
     var parts = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
-    return "Откроется через " + parts.map(function (n) { return String(n).padStart(2, "0"); }).join(":");
+    return parts.map(function (n) { return String(n).padStart(2, "0"); }).join(":");
+  }
+  function farmPauseMessage() {
+    var remaining = remainingTime(farmPauseUntil);
+    return remaining ? "Откроется через " + remaining : "";
   }
   function paintFarmPause() {
     var message = farmPauseMessage(), badge = $("farm-pause-countdown");
@@ -8431,11 +8435,28 @@
   $("farmart").onclick = function () { $("tofarm").click(); };
 
   // ---------- старт ----------
-  setTab(tabNow);                                            // последняя открытая вкладка гильдии
-  drawGameArt(); addEventListener("resize", function () { drawGuessArt(); });
-  if (!API) nope("Сервер игр ещё не подключён.");
-  else if (!initData) nope("Открой игру из Телеграма — через бота StarGuardian.");
-  else home().catch(function (e) { nope(e.message === "Открой игру из Телеграма" ? "Открой игру из Телеграма — через бота StarGuardian." : "Не получилось связаться с сервером игр."); });
+  function startGames() {
+    setTab(tabNow);                                            // последняя открытая вкладка гильдии
+    drawGameArt(); addEventListener("resize", function () { drawGuessArt(); });
+    if (!API) nope("Сервер игр ещё не подключён.");
+    else if (!initData) nope("Открой игру из Телеграма — через бота StarGuardian.");
+    else home().catch(function (e) { nope(e.message === "Открой игру из Телеграма" ? "Открой игру из Телеграма — через бота StarGuardian." : "Не получилось связаться с сервером игр."); });
+  }
+  var gamesPauseUntil = Date.UTC(2026, 10, 28, 0, 1); // Одна минута после суточного сброса D1.
+  function gamesPauseMessage() {
+    var remaining = remainingTime(gamesPauseUntil);
+    return remaining ? "Игры временно закрыты. Откроются через " + remaining : "";
+  }
+  var initialPause = gamesPauseMessage();
+  if (!initialPause) startGames();
+  else {
+    nope(initialPause);
+    var pauseTimer = setInterval(function () {
+      var message = gamesPauseMessage();
+      if (message) $("nopetext").textContent = message;
+      else { clearInterval(pauseTimer); startGames(); }
+    }, 1000);
+  }
 })();
 </script>
 <script src="../sparks.js?v=5"></script>
