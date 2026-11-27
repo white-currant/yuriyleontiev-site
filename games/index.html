@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611271532";
+    var BUILD = "202611271547";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1026,6 +1026,19 @@
   .herbarium-specimen canvas { width: 90px; height: 78px; image-rendering: pixelated; }
   .herbarium-specimen + .bsub { white-space: normal; }
   .herbarium-foot button[hidden] + button { grid-column: 1 / -1; }
+  .herbarium-lineage { margin-top: 12px; padding: 8px 10px; border: 1px solid #d7bd87; background: rgba(120,80,30,.07); }
+  .herbarium-lineage summary { cursor: pointer; padding: 6px 0; font-weight: 700; }
+  .herbarium-lineage-branch { margin: 4px 0 4px 12px; padding-left: 9px; border-left: 1px solid #b79359; }
+  .herbarium-lineage-branch.deep { margin-left: 0; padding-left: 0; border-left: 0; }
+  .herbarium-lineage-node { margin: 4px 0; padding: 3px 0; }
+  .herbarium-ancestor-row { display: flex; align-items: start; gap: 4px; }
+  .herbarium-ancestor-name { flex: 1; min-width: 0; min-height: 36px; padding: 3px 2px; background: transparent;
+    color: #3b2614; font: 700 14px var(--pix); text-align: left; text-decoration: underline; text-underline-offset: 3px; }
+  .herbarium-ancestor-expand { flex: 0 0 34px; min-height: 34px; border-radius: 4px; color: #3b2614;
+    background: rgba(120,80,30,.15); font-size: 16px; }
+  .herbarium-ancestor-label { margin: 0 2px; }
+  .herbarium-lineage small, .herbarium-lineage-message { display: block; color: #765533; font-size: 12px; font-weight: 500; }
+  .herbarium-lineage-message { margin: 4px 0; }
   .herbarium-facts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 7px 12px; margin-top: 12px; font-size: 14px; }
   .herbarium-facts div { border-top: 1px solid #d7bd87; padding: 5px 0; }
   .herbarium-facts dt { font-size: 12px; color: #765533; }
@@ -5929,8 +5942,20 @@
       prev.type = next.type = "button";
       prev.setAttribute("aria-label", "Предыдущая страница"); next.setAttribute("aria-label", "Следующая страница");
       nav.append(prev, num, next);
+      var cardHistory = [], cardRequest = 0;
       var back = btn("К списку", "ghost", function () {
+        cardRequest++;
+        var previous = cardHistory.pop();
+        if (previous) {
+          title.textContent = previous.title;
+          detail.replaceChildren.apply(detail, previous.content);
+          back.textContent = cardHistory.length ? "К прошлому сорту" : "К списку";
+          previous.button.focus({ preventScroll: true });
+          page.scrollTop = previous.scroll;
+          return;
+        }
         title.textContent = "Гербарий";
+        detail.replaceChildren();
         detail.hidden = back.hidden = true; tabs.hidden = filters.hidden = list.hidden = status.hidden = nav.hidden = false;
         page.scrollTop = listScroll;
       });
@@ -5940,23 +5965,105 @@
       page.append(title, tabs, filters, status, list, detail);
       sh.append(page, nav, foot);
       var current = 1, request = 0, typing, listScroll = 0;
+      function lineageOf(st) {
+        var tree = el("details", "herbarium-lineage"), content = el("div");
+        tree.append(el("summary", "", "Родословная"), content);
+        var loading = false, loaded = false;
+        function loadTree() {
+          if (!tree.open || loaded || loading) return;
+          loading = true;
+          content.replaceChildren(el("p", "herbarium-lineage-message", "Загружаю родословную…"));
+          sendFarmAction("/api/farm/herbarium/lineage", { id: st.id }).then(function (r) {
+            if (!tree.isConnected) return;
+            var nodes = new Map(r.nodes.map(function (node) { return [node.id, node]; }));
+            var root = nodes.get(r.root);
+            function branch(parent, depth, trail) {
+              var node = nodes.get(parent.id);
+              if (!node || trail.indexOf(node.id) >= 0) {
+                var unknown = el("div", "herbarium-lineage-node");
+                unknown.append(el("b", "", parent.name), el("small", "", "Точный сорт не записан"));
+                return unknown;
+              }
+              var label = node.base ? "Исходное растение" : strainCode(node) + " · поколение " + node.gen;
+              if (!node.base && node.mutation && node.mutation !== "none") label += " · " + mutations[node.mutation];
+              var item = el("div", "herbarium-lineage-node"), row = el("div", "herbarium-ancestor-row");
+              var name = el("button", "herbarium-ancestor-name", node.name);
+              name.type = "button";
+              name.onclick = function () { openAncestor(node.id, name); };
+              row.appendChild(name);
+              if (node.parents.length) {
+                var more = el("button", "herbarium-ancestor-expand", "▸"), children;
+                more.type = "button";
+                more.setAttribute("aria-label", "Предки: " + node.name);
+                more.setAttribute("aria-expanded", "false");
+                more.onclick = function () {
+                  var expanding = more.getAttribute("aria-expanded") === "false";
+                  if (!children) {
+                    children = branches(node, depth + 1, trail.concat(node.id));
+                    item.appendChild(children);
+                  }
+                  children.hidden = !expanding;
+                  more.setAttribute("aria-expanded", String(expanding));
+                  more.textContent = expanding ? "▾" : "▸";
+                };
+                row.appendChild(more);
+              } else if (!node.base) label += " · родители не записаны";
+              item.append(row, el("small", "herbarium-ancestor-label", label));
+              return item;
+            }
+            function branches(node, depth, trail) {
+              var list = el("div", "herbarium-lineage-branch" + (depth > 2 ? " deep" : ""));
+              node.parents.forEach(function (parent) { list.appendChild(branch(parent, depth, trail)); });
+              return list;
+            }
+            content.replaceChildren(root && root.parents.length ? branches(root, 0, [root.id])
+              : el("p", "herbarium-lineage-message", "Родители этого сорта не записаны."));
+            loaded = true;
+          }).catch(function () {
+            if (!tree.isConnected) return;
+            content.replaceChildren(el("p", "herbarium-lineage-message", "Не удалось загрузить родословную."),
+              btn("Повторить", "ghost", loadTree));
+          }).finally(function () { loading = false; });
+        }
+        tree.ontoggle = loadTree;
+        return tree;
+      }
+      function openAncestor(id, button) {
+        var active = ++cardRequest;
+        button.disabled = true;
+        sendFarmAction("/api/farm/herbarium/strain", { id: id }).then(function (st) {
+          if (!button.isConnected || active !== cardRequest) return;
+          cardHistory.push({ title: title.textContent, content: Array.from(detail.childNodes), scroll: page.scrollTop, button: button });
+          back.textContent = "К прошлому сорту";
+          drawCard(st);
+        }).catch(function (error) {
+          if (button.isConnected && active === cardRequest && !error.cancelled) toast("Не удалось открыть сорт: " + error.message);
+        }).finally(function () { button.disabled = false; });
+      }
       function select(st) {
         listScroll = page.scrollTop;
         tabs.hidden = filters.hidden = list.hidden = status.hidden = nav.hidden = true;
         detail.hidden = back.hidden = false;
+        drawCard(st);
+      }
+      function drawCard(st) {
         title.textContent = st.name;
         detail.replaceChildren();
         var specimen = el("div", "herbarium-specimen"), icon = el("canvas", "pix");
         bookIcon(icon, st); specimen.appendChild(icon);
-        detail.append(specimen, el("p", "bsub", strainCode(st) + " · поколение " + st.gen + " · " + (SEEDTIER[st.tier] || SEEDTIER.common)[0]));
+        var caption = st.base ? "Исходное растение" : strainCode(st) + " · поколение " + st.gen + " · " + (SEEDTIER[st.tier] || SEEDTIER.common)[0];
+        detail.append(specimen, el("p", "bsub", caption));
+        if (st.odd) { page.scrollTop = 0; return; }
         var facts = el("dl", "herbarium-facts");
         var shape = SHAPES.find(function (x) { return x[0] === st.shape; });
         var color = COLORS.find(function (x) { return x[0] === st.color; });
-        var data = [
+        var origins = st.base ? [] : [
           ["Автор", st.breeder || "Неизвестен"],
           ["Дата вывода", new Intl.DateTimeFormat("ru", { timeZone: "Europe/Minsk" }).format(st.created * 1000)],
           ["Происхождение", mutations[st.mutation] || "Гибрид · мутация неизвестна"],
           ["Родители", st.parents ? st.parents.join(" × ") : "Не записаны"],
+        ];
+        var data = origins.concat([
           ["Вид", shape ? shape[1] : "Неизвестен"],
           ["Расцветка", color ? color[1][2] : "Странная"],
           ["Время роста", fmtLeft(st.minutes * 60)],
@@ -5966,14 +6073,15 @@
           ["Шанс пластинки", Math.round(st.vinyl * 100) + "%"],
           ["Базовый шанс карты", Math.round(st.vinyl * 500) / 10 + "%"],
           ["Семян за сбор", st.bonus === "seedy" ? "3–4" : "2–3"],
-          ["Цена семени в лавке", st.price + " пыли"],
+          [st.base ? "Цена у станции" : "Цена семени в лавке", (st.base ? st.cost : st.price) + " пыли"],
           ["Пыль за семя", seedDustOf(st)],
           ["Особое свойство", st.bonus ? BONUS_SHORT[st.bonus] : "Обычные свойства"],
-        ];
+        ]);
         data.forEach(function (pair) {
           var row = el("div"); row.append(el("dt", "", pair[0]), el("dd", "", pair[1])); facts.appendChild(row);
         });
         detail.appendChild(facts);
+        if (!st.base) detail.appendChild(lineageOf(st));
         page.scrollTop = 0;
       }
       function load(target) {

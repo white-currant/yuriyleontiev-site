@@ -1196,8 +1196,8 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
     const foundAt = now();
     const [, , discovery] = await DB.batch([
       DB.prepare("INSERT OR IGNORE INTO f_strains (id, name, genes, created) VALUES (?, ?, ?, ?)").bind(h.id, h.name, genes, foundAt),
-      DB.prepare(`INSERT INTO f_strain_origin (strain, breeder, mutation, parent_a, parent_b)
-        SELECT ?, ?, ?, ?, ? WHERE changes() = 1`).bind(h.id, u.id, mutation || "none", s.name, other.name),
+      DB.prepare(`INSERT INTO f_strain_origin (strain, breeder, mutation, parent_a, parent_b, parent_a_id, parent_b_id)
+        SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`).bind(h.id, u.id, mutation || "none", s.name, other.name, s.id, other.id),
       DB.prepare(`INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ?
                   WHERE NOT EXISTS (SELECT 1 FROM f_inv WHERE user = ? AND strain = ?) RETURNING 1`)
         .bind(u.id, SEED_DROP_KEY + h.id, foundAt, u.id, h.id),
@@ -2165,6 +2165,15 @@ export async function book(u: any) {
   return { strains: Object.values(ss), bonuses: BONUSES };
 }
 
+const HERBARIUM_COLUMNS = "s.id, s.name, s.genes, s.created, o.breeder, p.name AS breeder_name, o.mutation, o.parent_a, o.parent_b";
+function herbariumEntry([id, title, genes, created, uid, breeder, mutation, a, b]: any[], hidden: number[]) {
+  return {
+    ...view({ id, name: title, ...JSON.parse(genes) }),
+    created, breeder: !hidden.includes(Number(uid)) ? breeder || null : null,
+    mutation: mutation || null, parents: a && b ? [a, b] : null,
+  };
+}
+
 // Гербарий: все выведенные сорта, включая те, которых у игрока никогда не было.
 export async function herbarium(options: { search?: unknown; mode?: unknown; page?: unknown; shape?: unknown }, hidden: number[]) {
   const { search, mode, page, shape } = options;
@@ -2200,14 +2209,42 @@ export async function herbarium(options: { search?: unknown; mode?: unknown; pag
   const [[total]] = await q(`SELECT COUNT(*) ${from} WHERE ${where}`, args);
   const pages = Math.max(1, Math.ceil(total / size));
   const current = Math.min(pages, Math.max(1, Math.trunc(Number(page)) || 1));
-  const rows = await q(`SELECT s.id, s.name, s.genes, s.created, o.breeder, p.name AS breeder_name, o.mutation, o.parent_a, o.parent_b
+  const rows = await q(`SELECT ${HERBARIUM_COLUMNS}
     ${from} LEFT JOIN g_profiles p ON p.user = o.breeder WHERE ${where}
     ORDER BY ${order} LIMIT ? OFFSET ?`, [...args, size, (current - 1) * size]);
-  return { total, pages, page: current, entries: rows.map(([id, title, genes, created, uid, breeder, mutation, a, b]) => ({
-    ...view({ id, name: title, ...JSON.parse(genes) }),
-    created, breeder: !hidden.includes(Number(uid)) ? breeder || null : null,
-    mutation: mutation || null, parents: a && b ? [a, b] : null,
-  })) };
+  return { total, pages, page: current, entries: rows.map((row) => herbariumEntry(row, hidden)) };
+}
+
+export async function herbariumStrain(id: unknown, hidden: number[]) {
+  if (typeof id !== "string") return null;
+  if (Object.hasOwn(CROPS, id)) return { ...view(CROPS[id]), created: null, breeder: null, mutation: null, parents: null };
+  if (!/^h[0-9a-f]{10}$/.test(id)) return null;
+  const [row] = await q(`SELECT ${HERBARIUM_COLUMNS}
+    FROM f_strains s LEFT JOIN f_strain_origin o ON o.strain = s.id LEFT JOIN g_profiles p ON p.user = o.breeder
+    WHERE s.id = ? AND COALESCE(json_extract(s.genes, '$.myth'), 0) = 0`, [id]);
+  return row ? herbariumEntry(row, hidden) : null;
+}
+
+export async function herbariumLineage(id: unknown) {
+  if (typeof id !== "string" || !/^h[0-9a-f]{10}$/.test(id)) return null;
+  const rows = await q(`WITH RECURSIVE lineage(id) AS (
+    SELECT id FROM f_strains WHERE id = ? AND COALESCE(json_extract(genes, '$.myth'), 0) = 0
+    UNION
+    SELECT o.parent_a_id FROM lineage l JOIN f_strain_origin o ON o.strain = l.id WHERE o.parent_a_id IS NOT NULL
+    UNION
+    SELECT o.parent_b_id FROM lineage l JOIN f_strain_origin o ON o.strain = l.id WHERE o.parent_b_id IS NOT NULL
+  )
+  SELECT l.id, s.name, json_extract(s.genes, '$.gen'), o.mutation, o.parent_a, o.parent_a_id, o.parent_b, o.parent_b_id
+  FROM lineage l LEFT JOIN f_strains s ON s.id = l.id LEFT JOIN f_strain_origin o ON o.strain = l.id`, [id]);
+  if (!rows.length) return null;
+  return { root: id, nodes: rows.flatMap(([key, name, gen, mutation, parentA, parentAId, parentB, parentBId]) => {
+    const base = CROPS[key];
+    if (base) return [{ id: base.id, name: base.name, gen: base.gen, base: true, mutation: null, parents: [] }];
+    if (!name) return [];
+    return [{ id: key, name, gen, base: false, mutation, parents: [
+      { id: parentAId, name: parentA }, { id: parentBId, name: parentB },
+    ].filter((parent) => parent.name) }];
+  }) };
 }
 
 // рынок: все семена, выставленные игроками (кроме своих). Наружу — публичное имя продавца и номер участка (pub), не аккаунт.

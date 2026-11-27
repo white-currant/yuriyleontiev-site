@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS f_plots (user INTEGER NOT NULL, idx INTEGER NOT NULL,
 -- сорта (общие для всех: гибрид, выведенный одним, может купить другой), семена в мешке и в лавке, продажи
 CREATE TABLE IF NOT EXISTS f_strains (id TEXT PRIMARY KEY, name TEXT NOT NULL, genes TEXT NOT NULL, created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS f_strain_origin (
-  strain TEXT PRIMARY KEY, breeder INTEGER, mutation TEXT, parent_a TEXT, parent_b TEXT
+  strain TEXT PRIMARY KEY, breeder INTEGER, mutation TEXT, parent_a TEXT, parent_b TEXT,
+  parent_a_id TEXT, parent_b_id TEXT
 );
 CREATE INDEX IF NOT EXISTS f_strains_created ON f_strains (created DESC, id DESC);
 CREATE TABLE IF NOT EXISTS f_inv (user INTEGER NOT NULL, strain TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
