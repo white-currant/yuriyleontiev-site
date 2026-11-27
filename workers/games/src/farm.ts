@@ -4,7 +4,7 @@
 // сколько оно уже выросло (grown), и окно полива [wet_from, water_until). Не полил — рост на паузе;
 // сухое дольше DRY_LIMIT — засыхает (кроме сортов со свойством «стойкий»). Лейку наполняют в колодце.
 // Очки в звание: за посадку и за полив — по 1, за урожай — по культуре (дневного предела нет — решение 2026-11-13).
-// Скрещивание: если при сборе рядом (слева/справа/сверху/снизу) созрел другой сорт — иногда выпадает семя-гибрид:
+// Скрещивание: если при сборе рядом, по стороне или по диагонали, созрел другой сорт — иногда выпадает семя-гибрид:
 // форма от собираемого, цвет от соседа, свойства — среднее родителей с мутацией, иногда особое свойство.
 // Урожай кладётся в амбар (f_barn): превратить в звёздную пыль или (дальше) пустить на кухню.
 // Сорта хранятся в f_strains (общие для всех), семена — в инвентаре f_inv; часть можно выставить в свою лавку,
@@ -1177,17 +1177,16 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
   if (seeds) writes.push(DB.prepare(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)
                                      ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.id, seeds));
   await DB.batch(writes);
-  // скрещивание с созревшим соседом другого сорта
+  // Скрещивание учитывает грядки, соприкасающиеся стороной или углом.
   let hybrid: any = null;
-  const r0 = Math.floor(idx / 3), c0 = idx % 3;
-  const near = all.filter((x) => {
-    const i = Number(x[0]), r = Math.floor(i / 3), c = i % 3;
-    return i !== idx && Math.abs(r - r0) + Math.abs(c - c0) === 1 && x[1] !== p[1] && ss[x[1]] && !ss[x[1]].myth && stateOf(x, ss[x[1]], t, boost, fastAt(all, ss, i, win)).ripe;
-  });
+  const row = Math.floor(idx / 3), col = idx % 3;
+  const neighbors = all.filter(([i, crop]) => crop !== p[1] && ss[crop] && !ss[crop].myth &&
+    Math.max(Math.abs(Math.floor(Number(i) / 3) - row), Math.abs(Number(i) % 3 - col)) === 1);
+  const near = neighbors.filter((x) => stateOf(x, ss[x[1]], t, boost, fastAt(all, ss, Number(x[0]), win)).ripe);
   // розовая самоцветная пыль: гибрид наверняка — с соседом другого сорта (зрелость не нужна), а нет соседа — с базовым растением станции;
   // новая форма и новый цвет выпадают втрое чаще
   const gcross = !s.myth && !s.odd && marks.includes("gcross");
-  const nearAny = gcross ? all.filter((x) => near4(idx).includes(Number(x[0])) && x[1] !== p[1] && ss[x[1]] && !ss[x[1]].myth && !ss[x[1]].odd) : [];
+  const nearAny = gcross ? neighbors.filter((x) => !ss[x[1]].odd) : [];
   // сосед выбирается заранее: со странным (или если собираемое странное) шанс вчетверо меньше — гибриды с ним остаются редкостью
   const pick0 = !gcross && !s.myth && near.length ? ss[near[Math.floor(Math.random() * near.length)][1]] : null;
   const crossP = CROSS_CHANCE * (weatherOn(t) === "wind" ? 2 : 1) * (oddish(s) || oddish(pick0) ? ODD_CROSS : 1);
