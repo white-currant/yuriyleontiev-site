@@ -758,7 +758,10 @@ async function handle(req: Request, env: any): Promise<Response> {
     case "/api/farm/sell": return json(await farm.sellCrop(user, String(body.strain || ""), Number(body.n || 1)));
     case "/api/farm/gifts": return json(await farm.openGifts(user));
     case "/api/farm/neighbors": return json(await farm.neighbors(user, await hiddenIds()));
-    case "/api/farm/feed": return json(await farm.feed(user, await hiddenIds(), Number(body.since) || 0));
+    case "/api/farm/feed":
+      // Старые клиенты ещё запрашивают всплывающие новости с курсором.
+      if (Number(body.since) > 0) return json({ items: [] });
+      return json(await farm.feed(user, await hiddenIds()));
     case "/api/farm/notify": return json(await farm.setNotify(user, !!body.on));
     case "/api/farm/visit": return json(await farm.visit(user, String(body.pub || "")));
     case "/api/farm/roof": return json(await farm.setRoof(user, String(body.color || "")));

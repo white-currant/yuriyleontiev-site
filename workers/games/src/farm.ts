@@ -720,7 +720,6 @@ function farmReads(uid: number, t: number): [string, any[]][] {
     ["SELECT started FROM f_mono WHERE user = ? AND kind = 'moss' AND until <= ?", [uid, t]],
     ["SELECT idx, kind, at, until FROM f_plotev WHERE user = ?", [uid]],
     ["SELECT dust, unlocked, pub, water FROM f_farms WHERE user = ?", [uid]],
-    ["SELECT item, tier, finish, count FROM g_items WHERE user = ? AND game = 'farm' AND kind = 'vinyl'", [uid]],
     ["SELECT strain, count, listed FROM f_inv WHERE user = ? AND count > 0", [uid]],
     [SEED_DROP_READ, [uid, t - SEED_DROP_SECONDS]],
     ["SELECT from_name, dust FROM f_gifts WHERE to_user = ? AND opened = 0 ORDER BY id LIMIT 20", [uid]],
@@ -854,8 +853,6 @@ async function farmState1(u: any, t: number) {
   const [[dust, unlocked, pub, water]] = await q("SELECT dust, unlocked, pub, water FROM f_farms WHERE user = ?", [u.id]);
   const plots = await q(`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [u.id]);
   const by = new Map(plots.map((p) => [Number(p[0]), p]));
-  const vinyls = (await q("SELECT item, tier, finish, count FROM g_items WHERE user = ? AND game = 'farm' AND kind = 'vinyl'", [u.id]))
-    .map((v) => ({ id: v[0], tier: v[1], finish: v[2], count: Number(v[3]) }));
   const inv = (await q("SELECT strain, count, listed FROM f_inv WHERE user = ? AND count > 0", [u.id]))
     .map(([strain, count, listed]) => ({ strain, count: Number(count), listed: Number(listed) }));
   const recentDrops = new Map<string, number>((await q(SEED_DROP_READ, [u.id, t - SEED_DROP_SECONDS]))
@@ -888,7 +885,7 @@ async function farmState1(u: any, t: number) {
     ...kit, ...(await decorView(u.id)), recipes: RECIPES, satmap: satMap(), products: (await productsFor([...bs, ...kit.jobs.map((j: any) => "p:" + j.recipe)])).products, build_list: BUILDS,
     bonuses: BONUSES, rain_until: await rainUntil(), now: now(), weather: weatherView(now()), wanderer: await metWanderer(u.id, await wandererView(u.id)), notice: await noticeFor(u.id), showers: showersIn(now() - 3 * DAY, now() + DAY),
     slimes: !dgOpen() && (await q("SELECT 1 FROM f_evlog WHERE user = ? AND kind = 'promo:slimes'", [u.id])).length > 0,   // только до открытия подземелья (его решение: после 00:00 не запускать)   // нашествие слизней (промо подземелья, 2026-11-20)
-    vinyls, inv, seed_drops: seedDrops, barn, stall, chest, hive, shells: Number((await q("SELECT count FROM f_shell WHERE user = ?", [u.id]))[0]?.[0] || 0), shell_dust: SHELL_DUST, wet: await wetOf(u.id), seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
+    inv, seed_drops: seedDrops, barn, stall, chest, hive, shells: Number((await q("SELECT count FROM f_shell WHERE user = ?", [u.id]))[0]?.[0] || 0), shell_dust: SHELL_DUST, wet: await wetOf(u.id), seed_dust: SEED_DUST, stall_markup: STALL_MARKUP, prices: await ownPrices(u.id), price_range: [PRICE_LO, PRICE_HI], gifts: gifts.map((g) => ({ from: g[0], dust: Number(g[1]) })),
     sales: sales.map(([buyer, strain, price]) => ({ buyer, strain, price: Number(price) })), ...(await monoView(u.id)), feed_top: await feedTop(u.id),
     orders: await ordersOf(u.id, kit.builds),
   };
@@ -1236,7 +1233,11 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
                       DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'sun', ?)").bind(u.id, t)]);
     }
   }
-  return { card, crop, dust, wet: wetGrain ? t + WET_DRY : 0, honey_lost: honeyLost, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm: await farmState(u) };
+  const state = await farmState(u);
+  const farm = vinyl ? { ...state, vinyls: (await q(`SELECT item, tier, finish, count FROM g_items
+    WHERE user = ? AND game = 'farm' AND kind = 'vinyl' AND item = ?`, [u.id, vinyl.id]))
+    .map(([id, tier, finish, count]) => ({ id, tier, finish, count: Number(count) })) } : state;
+  return { card, crop, dust, wet: wetGrain ? t + WET_DRY : 0, honey_lost: honeyLost, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm };
 }
 
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
@@ -2315,9 +2316,9 @@ export async function logFeed(kind: string, actor: number, target: number | null
                       [n, t, kind, actor, target, item, t - 600]);
   if (!upd.length) await q("INSERT INTO f_feed (at, kind, actor, target, item, n) VALUES (?, ?, ?, ?, ?, ?)", [t, kind, actor, target, item, n]);
 }
-export async function feed(u: any, hidden: number[], since = 0) {      // since — только новее этого номера (для всплывающих уведомлений в игре)
+export async function feed(u: any, hidden: number[]) {
   await ensureFarm(u);
-  const rows = await q("SELECT id, at, kind, actor, target, item, n FROM f_feed WHERE at > ? AND id > ? ORDER BY id DESC LIMIT 60", [now() - 3 * DAY, since]);
+  const rows = await q("SELECT id, at, kind, actor, target, item, n FROM f_feed WHERE at > ? ORDER BY id DESC LIMIT 60", [now() - 3 * DAY]);
   const users = [...new Set(rows.flatMap((r) => [Number(r[3]), Number(r[4])]).filter((x) => x && !hidden.includes(x)))];
   const prof: Record<number, [string, string]> = {};
   if (users.length) for (const [id, name, pub] of await q(`SELECT f.user, p.name, f.pub FROM f_farms f LEFT JOIN g_profiles p ON p.user = f.user WHERE f.user IN (${users.map(() => "?").join(",")})`, users))

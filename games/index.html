@@ -322,12 +322,6 @@
   .feed b.who { display: inline; cursor: pointer; text-decoration: underline; text-decoration-color: rgba(255, 231, 168, .4); text-underline-offset: 3px; }
   .feed .ev { color: #b9f58a; }
   /* всплывающие уведомления в игре: новость выезжает сверху и сама уходит */
-  .pings { position: fixed; left: 12px; right: 12px; top: calc(var(--top) + 58px); z-index: 45; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-  .ping { pointer-events: auto; padding: 8px 12px; background: var(--cream); color: var(--ink); font-size: 13.5px; line-height: 1.3;
-    box-shadow: var(--frame), 0 6px 0 rgba(0, 0, 0, .25); animation: pingin .25s ease-out; transition: opacity .3s, transform .3s; }
-  .ping.out { opacity: 0; transform: translateY(-8px); }
-  .ping b, .ping b.who { display: inline; color: #7a3b12; } .ping .ev { color: #2f7a3a; font-weight: 700; } .ping small { display: none; }
-  .ping.mine { background: #ffe7a8; }
   @keyframes pingin { from { transform: translateY(-14px) scale(.97); } }   /* без прозрачности: если анимации стоят, плашку всё равно видно */
   .pcell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .ovtop { display: flex; gap: 14px; align-items: center; margin: 4px 0 10px; }
@@ -1515,7 +1509,7 @@
     show("home"); if (window.checkGamesVersion) window.checkGamesVersion();
     if (tg && tg.BackButton) tg.BackButton.hide();
     round = null; busy = false; clearInterval(timer); stopAudio(false);
-    loadItems();                                             // коллекция не задерживает гильдию
+    if (tabNow === "coll") loadItems();
     return Promise.all([call("/api/me").then(renderMe), call("/api/top").then(function (t) { topData = t; renderTop(); })]);
   }
 
@@ -5418,7 +5412,7 @@
         if (inf.s.odd) setTimeout(function () { if (r.seeds) flySeeds(pl.idx, inf.s); setTimeout(function () { floatText(pl.idx, !r.seeds ? "…семени не осталось" : "…осталось странное семя", "big"); }, 450); }, Math.max(0, 1900 - (Date.now() - tH)));
         else if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в инвентарь", "seedf"); }, 450);
         if (r.vinyl || r.card) F.items = null;
-        var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl); };
+        var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl, r.farm && r.farm.vinyls); };
         var next2 = r.card ? function () { showCardFound(r.card, next); } : next;   // тайная карта при сборе (его решение 2026-11-20)
         if (r.hybrid) setTimeout(function () { showHybrid(r.hybrid, next2); }, 500); else if (r.vinyl || r.card) setTimeout(next2, 500);
       }).catch(function () {});
@@ -7870,10 +7864,10 @@
     TIERS.forEach(function (t) { var d = el("i"); if (have[t]) d.style.background = TIER[t][1]; p.appendChild(d); });
     return p;
   }
-  function showVinyl(id, found) {
+  function showVinyl(id, found, variants) {
     loadReleases().then(function () {
       var t = F.trackById[id]; if (!t) return;
-      var rel = F.albumById[t.release] || {}, vs = ownedMap(document.body.dataset.screen === "home" ? myVinyls() : null)[id] || [];
+      var rel = F.albumById[t.release] || {}, vs = ownedMap(variants || (document.body.dataset.screen === "home" ? myVinyls() : null))[id] || [];
       var show1 = found || bestOf(vs) || { tier: "common", finish: "plain" }, tier = TIER[show1.tier] || TIER.common;
       sheet(function (sh) {
         sh.classList.add("vdetail");
@@ -8216,33 +8210,6 @@
       var a = el("div", "invacts"); a.appendChild(btn("Повторить", "", function () { haptic("light"); openFeed(); })); box.appendChild(a);
     });
   }
-  // Всплывающие уведомления: опрашиваем ленту не чаще раза в минуту, пока открыта ферма.
-  F.pingSince = 0;
-  function pingCheck() {
-    var scr = document.body.dataset.screen || "";
-    if (document.hidden || scr.indexOf("farm") !== 0 || !F.state) return;
-    if (!F.pingSince) { F.pingSince = F.state.feed_top || 1; return; }          // старое при входе не показываем — только то, что случится дальше
-    if (F.pingPoll && Date.now() - F.pingPoll < 60000) return;
-    F.pingPoll = Date.now();
-    call("/api/farm/feed", { since: F.pingSince }).then(function (r) {
-      var fresh = (r.items || []).filter(function (x) { return x.id > F.pingSince; }).reverse();
-      if (!fresh.length) return;
-      F.pingSince = fresh[fresh.length - 1].id;
-      var touchesMe = false;
-      fresh.forEach(function (x) { if (x.actor && x.actor.me) return; if (x.target && x.target.me) touchesMe = true; showPing(x); });
-      if (touchesMe && !F.pending) loadFarm().catch(function () {});   // у тебя купили / тебе подарили — сразу видно пыль и подарок
-    }).catch(function () {});
-  }
-  function showPing(x) {
-    var box = document.querySelector(".pings"); if (!box) { box = el("div", "pings"); document.body.appendChild(box); }
-    while (box.children.length >= 3) box.removeChild(box.firstChild);
-    var li = feedLine(x), p = el("div", "ping" + (x.target && x.target.me ? " mine" : ""));
-    while (li.firstChild) p.appendChild(li.firstChild);
-    p.onclick = function (e) { if (e.target.closest && e.target.closest("b.who")) return; haptic("light"); p.remove(); openNeighbors(); neighborsTab("feed"); };
-    box.appendChild(p);
-    setTimeout(function () { p.classList.add("out"); setTimeout(function () { p.remove(); }, 320); }, 5000);
-  }
-  setInterval(pingCheck, 5000);
   function neighborsTab(k) {
     document.querySelectorAll("#ntabs button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.nt === k)); });
     $("feedbox").hidden = k !== "feed"; $("nlist").hidden = k === "feed"; $("giftnote").hidden = k === "feed";
