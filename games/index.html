@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611271339";
+    var BUILD = "202611271345";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3902,12 +3902,23 @@
     if (!turnstileLoader) {
       turnstileLoader = new Promise(function (resolve, reject) {
         var script = el("script");
-        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-        script.onload = function () {
-          if (window.turnstile) window.turnstile.ready(resolve);
-          else reject(new Error("Проверка не загрузилась"));
+        var timer = setTimeout(failed, 10000);
+        function cleanup() {
+          clearTimeout(timer);
+          delete window.onFarmTurnstileLoad;
+        }
+        function failed() {
+          cleanup();
+          script.remove();
+          reject(new Error("Не удалось загрузить капчу. Проверь подключение и попробуй ещё раз."));
+        }
+        window.onFarmTurnstileLoad = function () {
+          if (!window.turnstile || typeof window.turnstile.render !== "function") return failed();
+          cleanup();
+          resolve();
         };
-        script.onerror = function () { script.remove(); reject(new Error("Проверка не загрузилась")); };
+        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onFarmTurnstileLoad";
+        script.onerror = failed;
         document.head.appendChild(script);
       }).catch(function (e) { turnstileLoader = null; throw e; });
     }
@@ -3916,24 +3927,79 @@
   function confirmFarmPlay(check) {
     if (farmCheckPending) return farmCheckPending;
     farmCheckPending = new Promise(function (resolve, reject) {
-      var widget, mount, status, closeSheet, watcher, finished = false;
+      var widget, mount, status, retry, closeSheet, watcher, timer, attempt = 0;
+      var finished = false, verifying = false;
+      function clearWidget() {
+        clearTimeout(timer);
+        if (widget !== undefined) {
+          window.turnstile.remove(widget);
+          widget = undefined;
+        }
+      }
       function finish(error, permit) {
         if (finished) return;
         finished = true;
         watcher.disconnect();
-        if (widget !== undefined) window.turnstile.remove(widget);
+        clearWidget();
         closeSheet();
         if (bb && document.body.dataset.screen === "home" && !document.querySelector(".sheet-wrap")) bb.hide();
         if (error) reject(error); else resolve(permit);
+      }
+      function startCheck() {
+        var current = ++attempt;
+        clearWidget();
+        retry.hidden = true;
+        mount.hidden = false;
+        verifying = false;
+        status.textContent = "Загружаю проверку…";
+        function active() { return !finished && wrap.isConnected && current === attempt; }
+        function fail(message) {
+          if (!active()) return;
+          attempt++;
+          status.textContent = message;
+          retry.hidden = false;
+          mount.hidden = true;
+          clearWidget();
+        }
+        loadFarmTurnstile().then(function () {
+          if (!active()) return;
+          timer = setTimeout(function () {
+            fail("Капча не загрузилась. Попробуй ещё раз.");
+          }, 12000);
+          widget = window.turnstile.render(mount, {
+            sitekey: check.sitekey, cData: check.session, action: "farm-play",
+            theme: "dark", size: "compact", language: "ru", appearance: "always", "response-field": false,
+            "before-interactive-callback": function () {
+              if (!active()) return;
+              clearTimeout(timer);
+              status.textContent = "Поставь галочку, чтобы открыть ферму.";
+            },
+            callback: function (token) {
+              if (!active() || verifying) return;
+              clearTimeout(timer);
+              verifying = true;
+              status.textContent = "Проверяю…";
+              call("/api/farm/verify", { token: token }).then(function (r) {
+                if (!active()) revokeFarmPermit(r.permit);
+                else finish(null, r.permit);
+              }).catch(function (e) { fail(e.message); });
+            },
+            "error-callback": function () { fail("Капча не запустилась. Попробуй ещё раз."); },
+            "unsupported-callback": function () { fail("Эта версия Telegram не поддерживает проверку. Обнови приложение и попробуй ещё раз."); },
+            "timeout-callback": function () { fail("Время проверки истекло. Попробуй ещё раз."); },
+          });
+          if (!active()) clearWidget();
+        }).catch(function (e) { fail(e.message); });
       }
       var bb = tg && tg.BackButton;
       var wrap = sheet(function (sh, close) {
         closeSheet = close;
         sh.appendChild(el("h3", "", "Вход на Лунную ферму"));
-        status = el("p", "sub", "Пройди проверку, чтобы открыть ферму.");
-        status.setAttribute("aria-live", "polite");
+        status = el("p", "sub");
+        status.setAttribute("role", "status");
         sh.appendChild(status);
         mount = el("div", "farm-check-widget"); sh.appendChild(mount);
+        retry = btn("Повторить проверку", "", startCheck); sh.appendChild(retry);
         sh.appendChild(btn("Отмена", "ghost", close));
       }, true);
       if (bb) bb.show();
@@ -3941,27 +4007,7 @@
         if (!wrap.isConnected) finish(Object.assign(new Error("Проверка отменена"), { cancelled: true }));
       });
       watcher.observe(document.body, { childList: true });
-      loadFarmTurnstile().then(function () {
-        if (finished) return;
-        widget = window.turnstile.render(mount, {
-          sitekey: check.sitekey, cData: check.session, action: "farm-play",
-          theme: "dark", size: "compact", language: "ru", "response-field": false,
-          callback: function (token) {
-            if (finished) return;
-            status.textContent = "Проверяю…";
-            call("/api/farm/verify", { token: token }).then(function (r) {
-              if (finished || !wrap.isConnected) revokeFarmPermit(r.permit);
-              else finish(null, r.permit);
-            })
-              .catch(function (e) {
-                if (finished) return;
-                status.textContent = e.message;
-                window.turnstile.reset(widget);
-              });
-          },
-          "error-callback": function () { status.textContent = "Проверка пока недоступна. Попробуй ещё раз."; },
-        });
-      }).catch(function (e) { status.textContent = e.message + ". Закрой окно и попробуй ещё раз."; });
+      startCheck();
     }).finally(function () { farmCheckPending = null; });
     return farmCheckPending;
   }
