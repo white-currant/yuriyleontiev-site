@@ -763,19 +763,30 @@ const MEDAL_EVENTS = ["solstice", "constellation", "moss", "fire", "comet"];
 export async function achievementsOf(uid: number) {
   const [tea, events, farms] = await Promise.all([
     Number(uid) === TEA_PRANK_PLAYER ? teaPrank(uid) : null,
-    q("SELECT kind, MIN(started) FROM f_mono WHERE user = ? AND started <= ? GROUP BY kind ORDER BY MIN(started) DESC, kind", [uid, now()]),
+    q("SELECT kind, started FROM f_mono WHERE user = ? AND started <= ? ORDER BY started DESC, kind", [uid, now()]),
     q(`SELECT created, EXISTS (SELECT 1 FROM f_evlog WHERE user = ?1 AND kind = 'promo:slimes')
        FROM f_farms WHERE user = ?1`, [uid]),
   ]);
-  const medals: { id: string; event_at: number }[] = [];
-  if (tea && tea.awarded != null) medals.push({ id: "tea", event_at: Math.floor(tea.deadline / 1000) - 60 });
-  for (const [kind, firstStart] of events) {
-    if (MEDAL_EVENTS.includes(String(kind))) medals.push({ id: String(kind), event_at: Number(firstStart) });
+  const datesByEvent = new Map<string, number[]>();
+  for (const [kind, started] of events) {
+    const id = String(kind);
+    if (!MEDAL_EVENTS.includes(id)) continue;
+    const dates = datesByEvent.get(id);
+    if (dates) dates.push(Number(started));
+    else datesByEvent.set(id, [Number(started)]);
+  }
+  const medals = Array.from(datesByEvent, ([id, event_dates]) => ({
+    id, event_at: event_dates[event_dates.length - 1], event_dates,
+  })).sort((a, b) => b.event_at - a.event_at);
+  if (tea && tea.awarded != null) {
+    const eventAt = Math.floor(tea.deadline / 1000) - 60;
+    medals.unshift({ id: "tea", event_at: eventAt, event_dates: [eventAt] });
   }
   if (farms.length) {
     const [created, slimePending] = farms[0];
     // При завершении старого промо флаг удалялся.
-    if (Number(created) <= SLIME_EVENT_AT && !Number(slimePending)) medals.push({ id: "slimes", event_at: SLIME_EVENT_AT });
+    if (Number(created) <= SLIME_EVENT_AT && !Number(slimePending))
+      medals.push({ id: "slimes", event_at: SLIME_EVENT_AT, event_dates: [SLIME_EVENT_AT] });
   }
   return medals;
 }

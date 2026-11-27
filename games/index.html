@@ -249,7 +249,11 @@
   .colltabs button { height: 38px; padding: 0 3px; border: 0; border-radius: 10px; background: rgba(255, 255, 255, .07); color: rgba(246, 239, 227, .75); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
   .colltabs button.on { background: linear-gradient(180deg, #ffe0a3, var(--gold)); color: #2a1406; box-shadow: 0 4px 16px rgba(242, 169, 59, .3); }   /* как вкладки гильдии */
   .achievement-grid { gap: 18px 10px; padding-bottom: 10px; }
-  .achievement-date { display: block; margin-top: 8px; font: 600 11px var(--mono, monospace); color: #d9cfef; }
+  .achievement-grid .vrec { cursor: pointer; }
+  .achievement-date, .vrec .achievement-count { display: block; margin-top: 8px; font: 600 11px var(--mono, monospace); color: #d9cfef; }
+  .vrec .achievement-count { color: #ffe0a1; }
+  .achievement-dates { list-style: none; max-height: min(55vh, 24rem); overflow-y: auto; padding: 0; margin: 12px 0 16px; }
+  .achievement-dates li { padding: 9px 0; border-bottom: 1px solid #f6efe31a; }
   .event-medal-art { display: grid; place-items: center; aspect-ratio: 1; }
   .event-medal { position: relative; overflow: hidden; isolation: isolate; display: grid; place-items: center;
     width: 91%; aspect-ratio: 1; border: 1px solid var(--medal-light); border-radius: 50%;
@@ -7274,6 +7278,25 @@
   var medalDate = new Intl.DateTimeFormat("ru-RU", {
     timeZone: "Europe/Minsk", day: "2-digit", month: "2-digit", year: "numeric"
   });
+  function eventDate(at, className) {
+    var happened = new Date(at * 1000);
+    var date = el("time", className, medalDate.format(happened));
+    date.dateTime = happened.toISOString();
+    return date;
+  }
+  function achievementHistory(name, dates) {
+    sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", name));
+      var list = el("ul", "achievement-dates");
+      dates.forEach(function (at) {
+        var row = el("li");
+        row.appendChild(eventDate(at));
+        list.appendChild(row);
+      });
+      sh.appendChild(list);
+      sh.appendChild(btn("Закрыть", "", close));
+    });
+  }
   function drawMedalIcon(canvas, icon, colors) {
     if (icon.indexOf("p:") === 0) { itemIcon(canvas, icon); return; }
     if (icon === "moss") { bookIcon(canvas, { shape: "moss", color: "moss" }); return; }
@@ -7297,7 +7320,8 @@
     var grid = el("div", "vgrid achievement-grid");
     medals.forEach(function (entry) {
       var data = EVENT_MEDALS[entry.id], colors = data[3], pathId = "event-medal-" + (++medalCount);
-      var medal = el("div", "vrec"), art = el("div", "event-medal-art"), badge = el("div", "event-medal");
+      var dates = entry.event_dates || [entry.event_at];
+      var medal = el("button", "vrec"), art = el("div", "event-medal-art"), badge = el("div", "event-medal");
       var canvas = el("canvas", "pix");
       ["light", "edge", "dark", "tone"].forEach(function (name, i) { badge.style.setProperty("--medal-" + name, colors[i]); });
       badge.style.setProperty("--medal-label", colors[0]);
@@ -7317,11 +7341,12 @@
         </svg>`);
       art.appendChild(badge);
       medal.appendChild(art);
-      var happened = new Date(entry.event_at * 1000);
-      var date = el("time", "achievement-date", medalDate.format(happened));
-      date.dateTime = happened.toISOString();
-      medal.setAttribute("aria-label", "Медаль «" + data[0] + "», дата события " + date.textContent);
-      medal.appendChild(date);
+      medal.type = "button";
+      medal.setAttribute("aria-haspopup", "dialog");
+      var caption = dates.length > 1 ? el("span", "achievement-count", "×" + dates.length) : eventDate(dates[0], "achievement-date");
+      medal.setAttribute("aria-label", "Медаль «" + data[0] + "», " + caption.textContent + ". Открыть даты");
+      medal.appendChild(caption);
+      medal.onclick = function () { haptic("light"); achievementHistory(data[0], dates); };
       grid.appendChild(medal);
     });
     box.appendChild(grid);
