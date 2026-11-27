@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611271345";
+    var BUILD = "202611271358";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -189,6 +189,14 @@
   .farm-actions { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .farm-actions .btn { margin-top: 0; min-height: 46px; font-size: 14.5px; }
   .farm-note { margin-top: 14px; font-size: 12.5px; color: var(--dim); text-align: center; }
+  .farm-loading { position: fixed; inset: 0; z-index: 29; display: grid; place-items: center; padding: 16px;
+                  background: rgba(9, 6, 18, .6); touch-action: none; }
+  .farm-loading-card { display: grid; justify-items: center; gap: 14px; padding: 24px 30px; border-radius: 18px;
+                       background: #17142c; border: 1px solid rgba(255, 255, 255, .12); color: var(--white); font-weight: 700; }
+  .farm-loading-spinner { width: 32px; height: 32px; border: 3px solid rgba(255, 213, 138, .25);
+                          border-top-color: var(--gold); border-radius: 50%; animation: farm-loading-spin .85s linear infinite; }
+  @keyframes farm-loading-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .farm-loading-spinner { animation: none; } }
   .sheet-wrap { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .45); display: flex; align-items: flex-end; }
   .sheet { width: 100%; max-width: 520px; margin: 0 auto; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0;
     background: #17142c; border-top: 1px solid rgba(255, 255, 255, .1); animation: up .22s ease-out; }
@@ -1162,6 +1170,12 @@
     <div class="notice" id="nopetext">Открой игру из Телеграма — через бота StarGuardian.</div>
   </section>
 </main>
+<div class="farm-loading" id="farm-loading" role="status" hidden>
+  <div class="farm-loading-card">
+    <span class="farm-loading-spinner" aria-hidden="true"></span>
+    <span>Загружаю ферму…</span>
+  </div>
+</div>
 
 <script>
 (function () {
@@ -3902,7 +3916,7 @@
     if (!turnstileLoader) {
       turnstileLoader = new Promise(function (resolve, reject) {
         var script = el("script");
-        var timer = setTimeout(failed, 10000);
+        var timer = setTimeout(failed, 20000);
         function cleanup() {
           clearTimeout(timer);
           delete window.onFarmTurnstileLoad;
@@ -3943,7 +3957,11 @@
         clearWidget();
         closeSheet();
         if (bb && document.body.dataset.screen === "home" && !document.querySelector(".sheet-wrap")) bb.hide();
-        if (error) reject(error); else resolve(permit);
+        if (error) reject(error);
+        else {
+          if (farmOpening) $("farm-loading").hidden = false;
+          resolve(permit);
+        }
       }
       function startCheck() {
         var current = ++attempt;
@@ -3964,7 +3982,9 @@
         loadFarmTurnstile().then(function () {
           if (!active()) return;
           timer = setTimeout(function () {
-            fail("Капча не загрузилась. Попробуй ещё раз.");
+            if (!active()) return;
+            status.textContent = "Проверка занимает больше времени. Можно подождать или повторить.";
+            retry.hidden = false;
           }, 12000);
           widget = window.turnstile.render(mount, {
             sitekey: check.sitekey, cData: check.session, action: "farm-play",
@@ -3972,11 +3992,13 @@
             "before-interactive-callback": function () {
               if (!active()) return;
               clearTimeout(timer);
+              retry.hidden = true;
               status.textContent = "Поставь галочку, чтобы открыть ферму.";
             },
             callback: function (token) {
               if (!active() || verifying) return;
               clearTimeout(timer);
+              retry.hidden = true;
               verifying = true;
               status.textContent = "Проверяю…";
               call("/api/farm/verify", { token: token }).then(function (r) {
@@ -4002,6 +4024,7 @@
         retry = btn("Повторить проверку", "", startCheck); sh.appendChild(retry);
         sh.appendChild(btn("Отмена", "ghost", close));
       }, true);
+      if (farmOpening) $("farm-loading").hidden = true;
       if (bb) bb.show();
       watcher = new MutationObserver(function () {
         if (!wrap.isConnected) finish(Object.assign(new Error("Проверка отменена"), { cancelled: true }));
@@ -5076,7 +5099,8 @@
     if (farmOpening) return farmOpening;
     var screen = document.body.dataset.screen;
     haptic("light");
-    var started = Date.now();
+    var started = Date.now(), loading = $("farm-loading");
+    loading.hidden = false;
     farmOpening = loadFarm(true).then(function (st) {
       if (document.body.dataset.screen !== screen) {
         if (document.body.dataset.screen.indexOf("farm") !== 0) leaveFarm();
@@ -5089,7 +5113,10 @@
       farmLoop(); farmAnim(); showNotice(); slimeRaid();
     }).catch(function (e) {
       if (!e.cancelled) toast("Не получилось: " + e.message);
-    }).finally(function () { farmOpening = null; });
+    }).finally(function () {
+      loading.hidden = true;
+      farmOpening = null;
+    });
     return farmOpening;
   }
 
