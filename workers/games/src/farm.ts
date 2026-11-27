@@ -2248,14 +2248,17 @@ export async function herbariumLineage(id: unknown) {
 }
 
 // рынок: все семена, выставленные игроками (кроме своих). Наружу — публичное имя продавца и номер участка (pub), не аккаунт.
-export async function market(u: any, hidden: number[]) {
+export async function market(u: any, hidden: number[], exact?: unknown) {
+  const strain = typeof exact === "string" && /^h[0-9a-f]{10}$/.test(exact) ? exact : "";
+  if (exact != null && !strain) return { offers: [], items: [], strains: {}, products: {}, bonuses: BONUSES };
   const rows = await q(`SELECT i.user, f.pub, i.strain, i.listed, p.name, pr.price FROM f_inv i JOIN f_farms f ON f.user = i.user
                         LEFT JOIN g_profiles p ON p.user = i.user LEFT JOIN f_prices pr ON pr.user = i.user AND pr.item = 's:' || i.strain
-                        WHERE i.listed > 0 AND i.user != ? LIMIT 200`, [u.id]);
+                        WHERE i.listed > 0 AND i.user != ? ${strain ? "AND i.strain = ?" : ""} LIMIT 200`, strain ? [u.id, strain] : [u.id]);
   const ss = await strains(rows.map((r) => r[2]));
   const offers = rows.map(([uid, pub, strain, n, name, own]) => ({ pub, strain, count: Number(n), price: ss[strain] ? sellerPrice(ss[strain].price!, own) : 0,
                                                                seller: hidden.includes(Number(uid)) ? "Сосед" : name || "Сосед" }))
     .filter((o) => ss[o.strain]).sort((a, b) => b.price - a.price);
+  if (strain) return { offers, items: [], strains: ss, products: {}, bonuses: BONUSES };
   const an = await anomalyLive();                                // ночная аномалия — среди семян игроков, на случайном месте
   if (an) { ss.anomaly = view(CROPS.anomaly); offers.splice(fnv(an.key) % (offers.length + 1), 0, { pub: ANOM_PUB, strain: "anomaly", count: 1, price: an.price, seller: an.seller }); }
   const st = await q(`SELECT s.user, f.pub, s.item, s.listed, p.name, pr.price FROM f_stall s JOIN f_farms f ON f.user = s.user

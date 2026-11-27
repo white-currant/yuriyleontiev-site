@@ -796,7 +796,7 @@ async function handle(req: Request, env: any, ctx?: { waitUntil(task: Promise<un
     case "/api/dg/altar": return json(await farm.dgAltar(user, String(body.run || "").slice(0, 32)));
     case "/api/dg/drink": return json(await farm.dgDrink(user, String(body.item || "").slice(0, 80)));
     case "/api/dg/brew": return json(await farm.dgBrew(user, Number(body.n) || 1));
-    case "/api/farm/market": return json(await farm.market(user, await hiddenIds()));
+    case "/api/farm/market": return json(await farm.market(user, await hiddenIds(), body?.strain));
     case "/api/farm/seeds": return json(await farm.buySeeds(user, String(body.crop || ""), Number(body.n || 1)));
     case "/api/farm/list": return json(await farm.list(user, String(body.strain || ""), Number(body.delta || 0)));
     case "/api/farm/price": return json(await farm.setPrice(user, String(body.item || "").slice(0, 80), Number(body.price || 0), body.kind === "seed" ? "seed" : "item"));

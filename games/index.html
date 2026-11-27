@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611271547";
+    var BUILD = "202611271609";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1006,6 +1006,14 @@
   .book .bpage.fwd.in, .book .bpage.back.in { transform: none; }
   body[data-screen^="farm"] .book h3 { color: #3b2614; font-size: 21px; text-align: center; padding-bottom: 8px; border-bottom: 2px solid rgba(90, 56, 32, .35); }
   body[data-screen^="farm"] .book .bpage > h3:first-child { padding-left: 40px; padding-right: 40px; }   /* заголовок страницы не заходит под крестик */
+  .herbarium-heading { position: relative; }
+  .herbarium-heading h3 { padding-inline: 45px; }
+  .herbarium-back { position: absolute; left: 0; top: 0; min-width: 38px; min-height: 36px; border: 1px solid #be9a61;
+    border-radius: 4px; background: #ead3a3; color: #3b2614; font: 700 21px var(--pix); }
+  .herbarium-stock { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 7px 10px; margin-top: 10px; border: 1px solid #d7bd87; font-size: 13px; color: #624526; }
+  .herbarium-stock button { min-height: 32px; flex: none; padding: 3px 9px; border: 1px solid #be9a61;
+    border-radius: 4px; color: #3b2614; background: #eacb8a; font: 700 13px var(--pix); }
   .herbarium-tabs { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; margin-top: 10px; }
   .herbarium-tab { display: grid; place-items: center; min-width: 0; min-height: 40px; padding: 1px; border: 1px solid #be9a61;
     border-radius: 4px; color: #3b2614; background: transparent; font: 650 12px var(--pix); }
@@ -3927,14 +3935,16 @@
     f.style.left = bx / FW * 100 + "%"; f.style.top = cv.offsetTop + by / FH * cv.offsetHeight + "px";
     cv.parentNode.appendChild(f); setTimeout(function () { f.remove(); }, 1300);
   }
-  // ответы сервера приходят по очереди; применяем состояние только когда ответов больше не ждём — иначе старый ответ затрёт новое нажатие
+  // На экране действия видны сразу, на сервер отправляем их в порядке нажатий.
   F.pending = 0;
-  // загрузка фермы без действия: если пока она шла, игрок что-то сделал (купил, посадил) — старый ответ не затирает сделанное
-  // (баг 2026-11-15: купил крышу сразу после входа на ферму — ответ на вход пришёл позже и вернул старую крышу)
+  var farmWrites = Promise.resolve(), farmRevision = 0, cancelledFarmRevision = 0;
   function loadFarm(entering) {
-    var t0 = Date.now();
+    var revision = farmRevision, canApply = !F.pending;
     var request = entering ? sendFarmAction("/api/farm") : farmRequest("/api/farm", {}, farmPermit);
-    return request.then(function (st) { if (!entering && !F.pending && (F.mutAt || 0) <= t0) setFarm(st); return st; });
+    return request.then(function (st) {
+      if (!entering && canApply && !F.pending && revision === farmRevision) setFarm(st);
+      return st;
+    });
   }
   var farmPermit = "", farmOpening = null, farmCheckPending = null, turnstileLoader = null;
   function revokeFarmPermit(permit) {
@@ -4139,16 +4149,33 @@
     });
   }
   function farmCall(path, body) {
-    F.pending++; F.mutAt = Date.now();
-    var send = function () { return sendFarmAction(path, body); };
-    // Пока сбор подтверждается, следующие действия уже видны в игре, но на сервер идут после него.
-    var request = F.eggCollection ? F.eggCollection.then(send, send) : send();
+    F.pending++;
+    var revision = ++farmRevision, eggCollection = F.eggCollection;
+    var send = function () {
+      if (revision <= cancelledFarmRevision)
+        throw Object.assign(new Error("Проверка отменена"), { cancelled: true });
+      return sendFarmAction(path, body).catch(function (e) {
+        if (e.cancelled) cancelledFarmRevision = farmRevision;
+        throw e;
+      });
+    };
+    var request = farmWrites.then(function () { return eggCollection ? eggCollection.then(send, send) : send(); });
+    farmWrites = request.then(function () {}, function () {});
     return request.then(function (r) {
       F.pending--;
-      if (r.error) { toast(r.error); if (!F.pending) loadFarm(); return r; }
+      if (r.error) {
+        toast(r.error);
+        if (!F.pending) loadFarm().catch(function () {});
+        return r;
+      }
       if (r.farm && !F.pending) setFarm(r.farm);
       return r;
-    }, function (e) { F.pending--; if (!e.cancelled) toast("Не получилось: " + e.message); if (!F.pending) loadFarm().catch(function () {}); throw e; });
+    }, function (e) {
+      F.pending--;
+      if (!e.cancelled) toast("Не получилось: " + e.message);
+      if (!F.pending) loadFarm().catch(function () {});
+      throw e;
+    });
   }
   function cropIcon(cv, s, bare) {                                                // значок сорта: созревшее растение на земле (bare — без земли)
     cv.classList.toggle("myth", !!(s && s.myth));                                 // мифическое — фиолетовое сияние
@@ -5187,7 +5214,7 @@
     if (farmOpening) return farmOpening;
     var screen = document.body.dataset.screen;
     haptic("light");
-    var started = Date.now(), loading = $("farm-loading");
+    var revision = farmRevision, canApply = !F.pending, loading = $("farm-loading");
     loading.hidden = false;
     farmOpening = loadFarm(true).then(function (st) {
       if (document.body.dataset.screen !== screen) {
@@ -5196,7 +5223,7 @@
       }
       show("farm");
       loadReleases();
-      if (!F.state || (!F.pending && (F.mutAt || 0) <= started)) setFarm(st);
+      if (!F.state || (canApply && !F.pending && revision === farmRevision)) setFarm(st);
       else renderFarm();
       farmLoop(); farmAnim(); showNotice(); slimeRaid();
     }).catch(function (e) {
@@ -5895,9 +5922,13 @@
   }
   function openHerbarium() {
     var mutations = { shape: "Мутация формы", color: "Мутация расцветки", both: "Мутация формы и расцветки", none: "Гибрид" };
-    return sheet(function (sh, close) {
+    var stepBack;
+    var wrap = sheet(function (sh, close) {
       sh.classList.add("book"); F.bookEl = sh;
       var page = el("div", "bpage in"), title = el("h3", "", "Гербарий");
+      var heading = el("div", "herbarium-heading"), arrow = el("button", "herbarium-back", "←");
+      arrow.type = "button"; arrow.hidden = true; arrow.setAttribute("aria-label", "На шаг назад");
+      heading.append(arrow, title);
       var tabs = el("div", "herbarium-tabs"), activeShape = "";
       tabs.setAttribute("role", "group"); tabs.setAttribute("aria-label", "Виды растений");
       var standardColors = { moss: "moss", berry: "berry", crystal: "crystal", grain: "sun",
@@ -5943,8 +5974,10 @@
       prev.setAttribute("aria-label", "Предыдущая страница"); next.setAttribute("aria-label", "Следующая страница");
       nav.append(prev, num, next);
       var cardHistory = [], cardRequest = 0;
-      var back = btn("К списку", "ghost", function () {
+      stepBack = function () {
+        if (detail.hidden) return false;
         cardRequest++;
+        haptic("light");
         var previous = cardHistory.pop();
         if (previous) {
           title.textContent = previous.title;
@@ -5952,17 +5985,22 @@
           back.textContent = cardHistory.length ? "К прошлому сорту" : "К списку";
           previous.button.focus({ preventScroll: true });
           page.scrollTop = previous.scroll;
-          return;
+          var stock = detail.querySelector(".herbarium-stock");
+          if (stock) refreshStock(stock);
+          return true;
         }
         title.textContent = "Гербарий";
         detail.replaceChildren();
-        detail.hidden = back.hidden = true; tabs.hidden = filters.hidden = list.hidden = status.hidden = nav.hidden = false;
+        detail.hidden = back.hidden = arrow.hidden = true; tabs.hidden = filters.hidden = list.hidden = status.hidden = nav.hidden = false;
         page.scrollTop = listScroll;
-      });
+        return true;
+      };
+      arrow.onclick = stepBack;
+      var back = btn("К списку", "ghost", stepBack);
       back.hidden = true;
       var foot = el("div", "salebtns herbarium-foot");
       foot.append(back, btn("Закрыть", "", close));
-      page.append(title, tabs, filters, status, list, detail);
+      page.append(heading, tabs, filters, status, list, detail);
       sh.append(page, nav, foot);
       var current = 1, request = 0, typing, listScroll = 0;
       function lineageOf(st) {
@@ -6043,8 +6081,23 @@
       function select(st) {
         listScroll = page.scrollTop;
         tabs.hidden = filters.hidden = list.hidden = status.hidden = nav.hidden = true;
-        detail.hidden = back.hidden = false;
+        detail.hidden = back.hidden = arrow.hidden = false;
         drawCard(st);
+      }
+      function refreshStock(stock) {
+        var strain = stock.dataset.strain, check = stock._check = (stock._check || 0) + 1;
+        stock.textContent = "Проверяю наличие в лавке…";
+        call("/api/farm/market", { strain: strain }).then(function (market) {
+          if (!stock.isConnected || stock._check !== check) return;
+          var count = market.offers.reduce(function (sum, offer) { return sum + (offer.strain === strain ? offer.count : 0); }, 0);
+          stock.textContent = count ? "В лавке " + count + " " + plural(count, "семя", "семени", "семян") : "Сейчас в лавке нет";
+          if (!count) return;
+          var go = el("button", "", "В лавку"); go.type = "button";
+          go.onclick = function () { haptic("light"); openShop("buy", strain); };
+          stock.appendChild(go);
+        }).catch(function () {
+          if (stock.isConnected && stock._check === check) stock.textContent = "Не удалось проверить наличие";
+        });
       }
       function drawCard(st) {
         title.textContent = st.name;
@@ -6053,6 +6106,12 @@
         bookIcon(icon, st); specimen.appendChild(icon);
         var caption = st.base ? "Исходное растение" : strainCode(st) + " · поколение " + st.gen + " · " + (SEEDTIER[st.tier] || SEEDTIER.common)[0];
         detail.append(specimen, el("p", "bsub", caption));
+        if (!st.base) {
+          var stock = el("div", "herbarium-stock");
+          stock.dataset.strain = st.id; stock.setAttribute("aria-live", "polite");
+          detail.appendChild(stock);
+          refreshStock(stock);
+        }
         if (st.odd) { page.scrollTop = 0; return; }
         var facts = el("dl", "herbarium-facts");
         var shape = SHAPES.find(function (x) { return x[0] === st.shape; });
@@ -6124,6 +6183,8 @@
       next.onclick = function () { load(current + 1); };
       load(1);
     });
+    wrap._stepBack = stepBack;
+    return wrap;
   }
   function openBook() {
     var s = F.state; if (!s) return;
@@ -7421,11 +7482,30 @@
 
   // ---------- лавка: купить (станция и игроки) / продать (свои выведенные сорта) ----------
   F.shopTab = "buy";
-  function openShop(tab) {
+  var shopMarketRequest = 0;
+  function openShop(tab, strain) {
+    var focus = strain || "", active = ++shopMarketRequest;
+    if (focus !== (F.shopFocus || "")) { F.market = null; F.shopSel = null; }
+    F.shopFocus = focus; F.shopMarketFailed = false;
+    if (focus) F.shopCat = "seed";
     F.shopTab = tab || F.shopTab; show("farm-shop");
     document.querySelectorAll("#shoptabs button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.st === F.shopTab)); });
     renderShopTab();
-    if (F.shopTab === "buy" || F.shopCat !== "seed") call("/api/farm/market").then(function (m) { F.market = m; extend(m); if (F.shopTab === "buy" && !$("farm-shop").hidden) renderShopTab(); }).catch(function () {});
+    if (F.shopTab === "buy" || F.shopCat !== "seed") {
+      return call("/api/farm/market", focus ? { strain: focus } : {}).then(function (m) {
+        if (active !== shopMarketRequest) return;
+        if (focus) {
+          m.offers = m.offers.filter(function (offer) { return offer.strain === focus; });
+          var i = m.offers.length - 1, offer = m.offers[i];
+          F.shopSel = offer ? "of:" + i + ":" + offer.pub + ":" + offer.strain : null;
+        }
+        F.market = m; extend(m);
+        if (F.shopTab === "buy" && !$("farm-shop").hidden) renderShopTab();
+      }).catch(function () {
+        if (!focus || active !== shopMarketRequest || $("farm-shop").hidden) return;
+        F.shopMarketFailed = true; renderShopTab();
+      });
+    }
   }
   // Разделы: семена · урожай · продукты (мука и еда). Цена урожая и продуктов у игроков — в 1,5 раза выше, чем дать пыль в амбаре.
   F.shopCat = "seed";
@@ -7433,7 +7513,7 @@
   function fertTab(on) {                                                  // вкладка «Удобрение» создаётся только у хозяина
     var b = $("fertcat"); if (!on) { if (b) b.remove(); if (F.shopCat === "fert") F.shopCat = "seed"; return; } if (b) return;
     b = document.createElement("button"); b.type = "button"; b.id = "fertcat"; b.dataset.cat = "fert"; b.setAttribute("aria-pressed", "false"); b.textContent = "Удобрение";
-    b.onclick = function () { haptic("light"); F.shopCat = "fert"; F.shopSel = null; renderShopTab(); }; $("shopcats").appendChild(b);
+    b.onclick = function () { selectShopCategory("fert"); }; $("shopcats").appendChild(b);
   }
   function catOf(id) { return id === "p:fert" ? "fert" : id.indexOf("p:") === 0 && id !== "p:eye" ? "food" : "crop"; }   // глаз — урожай, хоть и хранится как продукт; удобрение — свой раздел   // глаз — урожай, хоть и хранится как продукт
   function extend(r) {                                         // чужие сорта и продукты — чтобы рисовать и называть их товары
@@ -7499,6 +7579,11 @@
   function ownItems(id) { var a = barnOf(id), c = chestOf(id); return (a ? a.count : 0) + (c ? c.count : 0); }   // в амбаре и сундуке
   function seedIconOf(st) { return function (cv) { cropIcon(cv, st, true); }; }
   function itemIconOf(id) { return function (cv) { itemIcon(cv, id); }; }
+  function selectShopCategory(category) {
+    haptic("light"); F.shopCat = category; F.shopSel = null;
+    if (F.shopFocus) openShop("buy");
+    else renderShopTab();
+  }
   function renderShopTab() {
     var s = F.state, box = $("shopview"); if (!s) return;
     box.innerHTML = ""; setText($("shopdust"), "✦ " + s.dust);
@@ -7514,9 +7599,19 @@
     var cat = F.shopCat, sel = F.shopSel, pick = function (k) { F.shopSel = k; renderShopTab(); };
     var note = function (t) { box.appendChild(el("div", "farm-note left", t)); };
     if (F.shopTab === "buy") {
-      var m = F.market, wares = [], act = {};
+      var m = F.market, wares = [], act = {}, focus = F.shopFocus;
+      if (focus) {
+        box.appendChild(btn("Все семена", "ghost", function () { openShop("buy"); }));
+        if (F.shopMarketFailed) {
+          note("Не удалось обновить предложения.");
+          box.appendChild(btn("Повторить", "", function () { openShop("buy", focus); }));
+          return;
+        }
+        if (!m) { note("Загружаю предложения…"); return; }
+        if (!m.offers.length) { note("Этот сорт сейчас не продаётся."); return; }
+      }
       if (cat === "seed") {
-        ["moss", "berry", "crystal", "wheat"].forEach(function (k) {
+        (focus ? [] : ["moss", "berry", "crystal", "wheat"]).forEach(function (k) {
           var st = s.strains[k]; if (!st) return;
           wares.push({ key: "st:" + k, icon: seedIconOf(st), tag: "✦ " + st.cost, seller: "станция", have: ownSeeds(k) });
           act["st:" + k] = function () {
@@ -7649,8 +7744,8 @@
     cur.dust -= price; setText($("shopdust"), "✦ " + cur.dust);
     b.disabled = true; b.textContent = "Покупаю…";
     call("/api/farm/buy", { pub: pub, strain: id, kind: kind }).then(function (r) {
-      if (r.error) { toast(r.error); loadFarm(); return openShop("buy"); }
-      toast(r.odd_evicted ? "Куплено. Одно старое странное семя пропало" : done); F.shopSel = null; setFarm(r.farm); openShop("buy");
+      if (r.error) { toast(r.error); loadFarm().catch(function () {}); return openShop("buy", F.shopFocus); }
+      toast(r.odd_evicted ? "Куплено. Одно старое странное семя пропало" : done); F.shopSel = null; setFarm(r.farm); openShop("buy", F.shopFocus);
     }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; });
   }
 
@@ -8189,14 +8284,18 @@
   $("toshop").onclick = function () { openShop("buy"); };
   $("decorbtn").onclick = function () { haptic("light"); decorSheet(); };
   document.querySelectorAll("#shoptabs button").forEach(function (b) { b.onclick = function () { haptic("light"); F.shopSel = null; openShop(b.dataset.st); }; });
-  document.querySelectorAll("#shopcats button").forEach(function (b) { b.onclick = function () { haptic("light"); F.shopCat = b.dataset.cat; F.shopSel = null; renderShopTab(); }; });
+  document.querySelectorAll("#shopcats button").forEach(function (b) { b.onclick = function () { selectShopCategory(b.dataset.cat); }; });
   document.querySelectorAll("[data-go]").forEach(function (b) {
     b.onclick = function () { var to = b.dataset.go; if (to === "home") home(); else if (to === "farm") openFarm(); else if (to === "farm-neighbors") openNeighbors(); };
   });
   function back() {
     var dw = document.querySelector(".dgwrap"); if (dw && dw._close) { dw._close(); return; }   // открыто подземелье — «Назад» закрывает его
     var cur = document.body.dataset.screen, ws = document.querySelectorAll(".sheet-wrap");
-    if (ws.length) { ws[ws.length - 1].click(); return; }      // «Назад» Телеграма сначала закрывает открытое окно, а не уходит с экрана
+    if (ws.length) {
+      var topSheet = ws[ws.length - 1];
+      if (!topSheet._stepBack || !topSheet._stepBack()) topSheet.click();
+      return;
+    }      // «Назад» Телеграма сначала закрывает открытое окно, а не уходит с экрана
     if (cur === "farm-visit") openNeighbors(); else if (cur === "farm-neighbors" || cur === "farm-shop") openFarm(); else home();
   }
 
