@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Вход на Лунную ферму · StarGuardian</title>
+<style>
+  :root { color-scheme: dark; font: 16px system-ui, sans-serif; background: #120f24; color: #fff8ed; }
+  [hidden] { display: none !important; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+  main { width: min(360px, calc(100% - 32px)); box-sizing: border-box; padding: 24px;
+         border: 1px solid #3a3156; border-radius: 18px; background: #201a38; text-align: center; }
+  h1 { margin: 0; font-size: 21px; }
+  p { color: #d0c6e0; }
+  #widget { display: grid; justify-content: center; }
+  button { width: 100%; padding: 12px; border: 0; border-radius: 10px; background: #ffd58a;
+           color: #201a38; font: inherit; font-weight: 700; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Вход на Лунную ферму</h1>
+  <p id="status" role="status">Загружаю проверку…</p>
+  <div id="widget"></div>
+  <button id="retry" type="button" hidden>Повторить проверку</button>
+</main>
+<script>
+  const params = new URLSearchParams(location.hash.slice(1));
+  const id = params.get("check"), sitekey = params.get("sitekey");
+  const statusLine = document.getElementById("status"), retry = document.getElementById("retry");
+  const widget = document.getElementById("widget");
+  let timer, verifying = false, widgetId;
+  function fail(message) {
+    clearTimeout(timer);
+    statusLine.textContent = message;
+    retry.hidden = false;
+  }
+  function render() {
+    clearTimeout(timer);
+    if (widgetId !== undefined) turnstile.remove(widgetId);
+    retry.hidden = true;
+    statusLine.textContent = "Пройди проверку, чтобы открыть ферму.";
+    widgetId = turnstile.render(widget, {
+      sitekey, cData: id, action: "farm-browser", theme: "dark", size: "compact", language: "ru", "response-field": false,
+      callback: async (token) => {
+        if (verifying) return;
+        verifying = true;
+        retry.hidden = true;
+        statusLine.textContent = "Проверяю…";
+        try {
+          const response = await fetch("https://starguardian-games.whitecurrant.workers.dev/api/farm/browser/verify", {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, token }),
+          });
+          const result = await response.json();
+          if (response.status === 410) {
+            widget.hidden = true;
+            statusLine.textContent = result.error;
+          } else {
+            if (!response.ok) throw new Error(result.error);
+            widget.hidden = true;
+            statusLine.textContent = "Проверка пройдена. Вернись в Telegram и нажми «Продолжить на ферму».";
+          }
+        } catch (error) {
+          fail(error.message);
+        } finally {
+          verifying = false;
+        }
+      },
+      "error-callback": () => fail("Капча не запустилась. Попробуй ещё раз."),
+      "unsupported-callback": () => fail("Этот браузер не поддерживает проверку. Открой ссылку в другом браузере."),
+      "timeout-callback": () => fail("Время проверки истекло. Попробуй ещё раз."),
+    });
+  }
+  retry.onclick = () => typeof turnstile === "undefined" ? location.reload() : render();
+  if (!id || !/^[a-f0-9]{64}$/.test(id) || !sitekey || !/^[a-zA-Z0-9_-]{8,80}$/.test(sitekey)) {
+    statusLine.textContent = "Открой ссылку на проверку из StarGuardian в Telegram.";
+  } else {
+    window.onFarmBrowserTurnstileLoad = render;
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onFarmBrowserTurnstileLoad";
+    script.onerror = () => fail("Капча не загрузилась. Проверь подключение и попробуй ещё раз.");
+    timer = setTimeout(script.onerror, 20000);
+    document.head.append(script);
+  }
+</script>
+</body>
+</html>

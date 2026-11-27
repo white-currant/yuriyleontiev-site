@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS f_browser_check (
+  user INTEGER NOT NULL, telegram TEXT NOT NULL, id TEXT UNIQUE NOT NULL, expires INTEGER NOT NULL,
+  approved INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, telegram)
+);

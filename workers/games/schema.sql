@@ -24,12 +24,18 @@ CREATE TABLE IF NOT EXISTS f_play_session (
   user INTEGER NOT NULL, telegram TEXT NOT NULL, permit TEXT NOT NULL, expires INTEGER NOT NULL,
   PRIMARY KEY (user, telegram)
 );
+CREATE TABLE IF NOT EXISTS f_browser_check (
+  user INTEGER NOT NULL, telegram TEXT NOT NULL, id TEXT UNIQUE NOT NULL, expires INTEGER NOT NULL,
+  approved INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, telegram)
+);
 -- Контекст передаётся в том же UPDATE, что и пыль. Триггер пишет журнал и сразу очищает контекст.
 CREATE TABLE IF NOT EXISTS f_dust_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER NOT NULL, at INTEGER NOT NULL,
   before INTEGER NOT NULL, after INTEGER NOT NULL, reason TEXT NOT NULL, details TEXT
 );
 CREATE INDEX IF NOT EXISTS f_dust_log_user ON f_dust_log (user, id);
+CREATE INDEX IF NOT EXISTS f_dust_log_user_at ON f_dust_log (user, at);
+CREATE TABLE IF NOT EXISTS f_farm_check_state (user INTEGER PRIMARY KEY, checked_dust_id INTEGER NOT NULL);
 CREATE TRIGGER IF NOT EXISTS f_dust_log_create AFTER INSERT ON f_farms
 BEGIN
   INSERT INTO f_dust_log (user, at, before, after, reason)

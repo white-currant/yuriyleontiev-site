@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611271358";
+    var BUILD = "202611271411";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -3941,8 +3941,8 @@
   function confirmFarmPlay(check) {
     if (farmCheckPending) return farmCheckPending;
     farmCheckPending = new Promise(function (resolve, reject) {
-      var widget, mount, status, retry, closeSheet, watcher, timer, attempt = 0;
-      var finished = false, verifying = false;
+      var widget, mount, status, retry, browser, claim, closeSheet, watcher, timer, attempt = 0;
+      var finished = false, verifying = false, browserId = "";
       function clearWidget() {
         clearTimeout(timer);
         if (widget !== undefined) {
@@ -3963,10 +3963,55 @@
           resolve(permit);
         }
       }
+      function offerBrowserCheck() {
+        if (!check.browser || !browser.hidden) return;
+        var current = attempt;
+        browser.hidden = false;
+        browser.disabled = true;
+        call("/api/farm/browser/start").then(function (r) {
+          if (finished || current !== attempt) return;
+          browserId = r.id;
+          browser.disabled = false;
+        }).catch(function () {
+          if (!finished && current === attempt) browser.hidden = true;
+        });
+      }
+      function openBrowserCheck() {
+        if (!browserId) return;
+        attempt++;
+        clearWidget();
+        browser.hidden = true;
+        claim.hidden = false;
+        claim.disabled = false;
+        mount.hidden = true;
+        status.textContent = "Пройди проверку в браузере, вернись сюда и нажми «Продолжить на ферму».";
+        var link = new URL("farm-check.html", location.href);
+        link.hash = new URLSearchParams({ check: browserId, sitekey: check.sitekey }).toString();
+        if (tg && tg.openLink) tg.openLink(link.href);
+        else window.open(link.href, "_blank", "noopener,noreferrer");
+      }
+      function claimBrowserCheck() {
+        var current = attempt;
+        claim.disabled = true;
+        call("/api/farm/browser/claim", { id: browserId }).then(function (r) {
+          if (finished || !wrap.isConnected || current !== attempt) revokeFarmPermit(r.permit);
+          else if (r.permit) finish(null, r.permit);
+          else status.textContent = "Проверка в браузере пока не завершена. Закончи её и вернись сюда.";
+        }).catch(function (e) {
+          if (finished || current !== attempt) return;
+          status.textContent = e.message;
+          offerBrowserCheck();
+        }).finally(function () {
+          if (!finished && current === attempt) claim.disabled = false;
+        });
+      }
       function startCheck() {
         var current = ++attempt;
         clearWidget();
         retry.hidden = true;
+        browser.hidden = true;
+        claim.hidden = true;
+        browserId = "";
         mount.hidden = false;
         verifying = false;
         status.textContent = "Загружаю проверку…";
@@ -3978,6 +4023,8 @@
           retry.hidden = false;
           mount.hidden = true;
           clearWidget();
+          browser.hidden = true;
+          offerBrowserCheck();
         }
         loadFarmTurnstile().then(function () {
           if (!active()) return;
@@ -3985,6 +4032,7 @@
             if (!active()) return;
             status.textContent = "Проверка занимает больше времени. Можно подождать или повторить.";
             retry.hidden = false;
+            offerBrowserCheck();
           }, 12000);
           widget = window.turnstile.render(mount, {
             sitekey: check.sitekey, cData: check.session, action: "farm-play",
@@ -3999,6 +4047,7 @@
               if (!active() || verifying) return;
               clearTimeout(timer);
               retry.hidden = true;
+              browser.hidden = true;
               verifying = true;
               status.textContent = "Проверяю…";
               call("/api/farm/verify", { token: token }).then(function (r) {
@@ -4022,6 +4071,8 @@
         sh.appendChild(status);
         mount = el("div", "farm-check-widget"); sh.appendChild(mount);
         retry = btn("Повторить проверку", "", startCheck); sh.appendChild(retry);
+        browser = btn("Открыть капчу в браузере", "ghost", openBrowserCheck); sh.appendChild(browser);
+        claim = btn("Продолжить на ферму", "", claimBrowserCheck); sh.appendChild(claim);
         sh.appendChild(btn("Отмена", "ghost", close));
       }, true);
       if (farmOpening) $("farm-loading").hidden = true;

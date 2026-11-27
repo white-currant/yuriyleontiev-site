@@ -420,10 +420,17 @@ function firstPlayAt(ev: any[][], slices: any[][], from: number, until: number) 
 
 const FARM_ACTIONS = new Set(["plant", "water", "harvest", "dig", "fill", "fertilize", "gemdust", "crater", "coal"]
   .map((action) => "/api/farm/" + action));
-const SHARED_FARM_ROUTES = new Set(["market", "buy", "sell", "stall", "price", "visit", "gift", "neighbors", "feed", "tea-prank/start", "tea-prank/finish"]
+const SHARED_FARM_ROUTES = new Set(["market", "buy", "stall", "price", "visit", "gift", "neighbors", "feed", "tea-prank/start", "tea-prank/finish"]
   .map((route) => "/api/farm/" + route));
 const FARM_CHECK_ACTION = "farm-play";
+const FARM_BROWSER_ACTION = "farm-browser";
+const FARM_BROWSER_TTL = 5 * 60;
+const FARM_BROWSER_ID = /^[a-f0-9]{64}$/;
 const FARM_CHECK_TTL = 15 * 60;
+const FARM_RISK_LOOKBACK = 24 * 3600;
+const FARM_RISK_INCOME = 4000;
+const FARM_RISK_SALES = 10;
+const FARM_RISK_PURCHASES = 15;
 const FARM_ACTION_COST = 400; // Быстрая серия разрешена, постоянный поток ограничен по аккаунту.
 const FARM_ACTION_CAPACITY = 12 * FARM_ACTION_COST;
 function bytesToHex(bytes: ArrayBuffer) {
@@ -432,31 +439,51 @@ function bytesToHex(bytes: ArrayBuffer) {
 async function farmChallenge(initData: string) {
   return bytesToHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(initData)));
 }
-async function validFarmPermit(permit: unknown, uid: number, session: string) {
-  if (typeof permit !== "string" || !/^[a-f0-9-]{36}$/.test(permit)) return false;
-  const rows = await q("SELECT 1 FROM f_play_session WHERE user = ? AND telegram = ? AND permit = ? AND expires > ?",
-    [uid, session, await farmChallenge(permit), now()]);
-  return rows.length > 0;
-}
-async function issueFarmPermit(token: unknown, uid: number, session: string, secret: string) {
-  if (typeof token !== "string" || !token || token.length > 2048) return null;
+async function verifyFarmProof(token: unknown, binding: string, secret: string, action: string) {
+  if (typeof token !== "string" || !token || token.length > 2048) return false;
   let proof: any;
   try {
     const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ secret, response: token }), signal: AbortSignal.timeout(7000),
     });
-    if (!response.ok) return null;
+    if (!response.ok) return false;
     proof = await response.json();
-  } catch { return null; }
-  if (proof?.success !== true || proof.hostname !== new URL(SITE).hostname ||
-      proof.action !== FARM_CHECK_ACTION || proof.cdata !== session) return null;
+  } catch { return false; }
+  return proof?.success === true && proof.hostname === new URL(SITE).hostname &&
+    proof.action === action && proof.cdata === binding;
+}
+async function saveFarmPermit(uid: number, session: string) {
   const at = now(), permit = crypto.randomUUID();
   await q("DELETE FROM f_play_session WHERE user = ? AND expires <= ?", [uid, at]);
-  await q(`INSERT INTO f_play_session (user, telegram, permit, expires) VALUES (?, ?, ?, ?)
-    ON CONFLICT(user, telegram) DO UPDATE SET permit = excluded.permit, expires = excluded.expires`,
-    [uid, session, await farmChallenge(permit), at + FARM_CHECK_TTL]);
+  await DB.batch([
+    DB.prepare(`INSERT INTO f_play_session (user, telegram, permit, expires) VALUES (?, ?, ?, ?)
+      ON CONFLICT(user, telegram) DO UPDATE SET permit = excluded.permit, expires = excluded.expires`)
+      .bind(uid, session, await farmChallenge(permit), at + FARM_CHECK_TTL),
+    DB.prepare(`INSERT INTO f_farm_check_state (user, checked_dust_id)
+      VALUES (?1, COALESCE((SELECT MAX(id) FROM f_dust_log WHERE user = ?1), 0))
+      ON CONFLICT(user) DO UPDATE SET checked_dust_id = MAX(checked_dust_id, excluded.checked_dust_id)`)
+      .bind(uid),
+  ]);
   return permit;
+}
+async function farmNeedsCheck(uid: number) {
+  const rows = await q(`WITH activity AS (
+      SELECT at, after - before AS delta, reason FROM f_dust_log
+      WHERE user = ?1 AND at >= ?2 AND id > COALESCE((SELECT checked_dust_id FROM f_farm_check_state WHERE user = ?1), 0)
+        AND reason IN ('barn_to_dust', 'seeds_to_dust', 'station_order', 'harvest_to_dust', 'harvest_bonus',
+          'market_sell_item', 'market_sell_seed', 'market_buy_seed', 'market_buy_item', 'collect_moss_clump', 'collect_star', 'coal_to_dust')
+    ), windows AS (
+      SELECT SUM(MAX(delta, 0)) OVER (ORDER BY at RANGE BETWEEN 900 PRECEDING AND CURRENT ROW) AS income,
+        SUM(reason IN ('market_sell_item', 'market_sell_seed', 'barn_to_dust', 'seeds_to_dust', 'station_order'))
+          OVER (ORDER BY at RANGE BETWEEN 300 PRECEDING AND CURRENT ROW) AS sales,
+        SUM(reason IN ('market_buy_seed', 'market_buy_item'))
+          OVER (ORDER BY at RANGE BETWEEN 300 PRECEDING AND CURRENT ROW) AS purchases
+      FROM activity
+    )
+    SELECT 1 FROM windows WHERE income >= ?3 OR sales >= ?4 OR purchases >= ?5 LIMIT 1`,
+    [uid, now() - FARM_RISK_LOOKBACK, FARM_RISK_INCOME, FARM_RISK_SALES, FARM_RISK_PURCHASES]);
+  return rows.length > 0;
 }
 async function allowFarmAction(uid: number) {
   const replenished = "MIN(?4, f_action_rate.credit_ms + MAX(0, excluded.updated_ms - f_action_rate.updated_ms))";
@@ -596,7 +623,7 @@ async function handle(req: Request): Promise<Response> {
     }
     if (req.method === "POST" && url.pathname === "/bot/forget") {
       const uid = Number((await req.json()).user);
-      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items", "g_refs", "g_daypts", "g_playtime", "g_play_slice", "f_action_rate", "f_play_session"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
+      for (const t of ["g_users", "g_profiles", "g_links", "g_events", "g_rounds", "g_items", "g_refs", "g_daypts", "g_playtime", "g_play_slice", "f_action_rate", "f_play_session", "f_browser_check", "f_farm_check_state"]) await q(`DELETE FROM ${t} WHERE user = ?`, [uid]);
       await farm.forgetFarm(uid);
       return json({ ok: true });
     }
@@ -606,13 +633,29 @@ async function handle(req: Request): Promise<Response> {
   // игрок
   if (req.method !== "POST" || !url.pathname.startsWith("/api/")) return json({ error: "method" }, 405);
   if (origin && !ORIGINS.includes(origin)) return json({ error: "origin" }, 403);
+  const browserProof = url.pathname === "/api/farm/browser/verify";
   const initData = req.headers.get("x-init-data") || "";
-  const user = await verifyInitData(initData);
-  if (!user?.id) return json({ error: "Открой игру из Телеграма" }, 401);
+  const user = browserProof ? null : await verifyInitData(initData);
+  if (!browserProof && !user?.id) return json({ error: "Открой игру из Телеграма" }, 401);
   let body: any = {};
   try { body = await req.json(); } catch { /* пустое тело */ }
+  if (browserProof) {
+    const id = typeof body?.id === "string" && FARM_BROWSER_ID.test(body.id) ? body.id : "";
+    if (!id) return json({ error: "Ссылка на проверку недействительна" }, 400);
+    const [ticket] = await q("SELECT approved FROM f_browser_check WHERE id = ? AND expires > ?", [id, now()]);
+    if (!ticket) return json({ error: "Ссылка истекла. Открой новую проверку из Telegram." }, 410);
+    if (ticket[0]) return json({ ok: true });
+    const secret = ENV.FARM_TURNSTILE_SECRET_KEY;
+    if (!secret) return json({ error: "Проверка фермы временно недоступна" }, 503);
+    if (!(await verifyFarmProof(body?.token, id, secret, FARM_BROWSER_ACTION)))
+      return json({ error: "Проверка не прошла. Попробуй ещё раз." }, 403);
+    const approved = await q("UPDATE f_browser_check SET approved = 1 WHERE id = ? AND expires > ? RETURNING 1", [id, now()]);
+    return approved.length ? json({ ok: true }) : json({ error: "Ссылка истекла. Открой новую проверку из Telegram." }, 410);
+  }
+  // Удобрение можно распылять из убежища подземелья. Эта операция всё равно учитывается в журнале доходов.
+  const dungeonFertilizer = url.pathname === "/api/farm/sell" && body?.strain === "p:fert";
   const farmRoute = url.pathname === "/api/farm" ||
-    (url.pathname.startsWith("/api/farm/") && !SHARED_FARM_ROUTES.has(url.pathname));
+    (url.pathname.startsWith("/api/farm/") && !SHARED_FARM_ROUTES.has(url.pathname) && !dungeonFertilizer);
   if (farmRoute) {
     if (url.pathname === "/api/farm/leave") {
       if (typeof body?.farm_permit === "string" && /^[a-f0-9-]{36}$/.test(body.farm_permit)) {
@@ -622,14 +665,36 @@ async function handle(req: Request): Promise<Response> {
       return json({ ok: true });
     }
     const sitekey = ENV.FARM_TURNSTILE_SITE_KEY, secret = ENV.FARM_TURNSTILE_SECRET_KEY;
-    if (!sitekey || !secret) return json({ error: "Проверка фермы временно недоступна" }, 503);
-    const session = await farmChallenge(initData);
+    const isCheck = url.pathname === "/api/farm/verify" || url.pathname.startsWith("/api/farm/browser/");
+    const needsCheck = isCheck || await farmNeedsCheck(user.id);
+    if (needsCheck && (!sitekey || !secret)) return json({ error: "Проверка фермы временно недоступна" }, 503);
+    const session = needsCheck ? await farmChallenge(initData) : "";
     if (url.pathname === "/api/farm/verify") {
-      const permit = await issueFarmPermit(body?.token, user.id, session, secret);
-      return permit ? json({ permit }) : json({ error: "Проверка не прошла. Попробуй ещё раз." }, 403);
+      if (!(await verifyFarmProof(body?.token, session, secret, FARM_CHECK_ACTION)))
+        return json({ error: "Проверка не прошла. Попробуй ещё раз." }, 403);
+      return json({ permit: await saveFarmPermit(user.id, session) });
     }
-    if (!(await validFarmPermit(body?.farm_permit, user.id, session)))
-      return json({ error: "Открой мини-приложение заново для проверки входа на ферму", farm_check: { sitekey, session } }, 403);
+    if (url.pathname === "/api/farm/browser/start") {
+      const at = now();
+      const id = bytesToHex(crypto.getRandomValues(new Uint8Array(32)).buffer);
+      await q("DELETE FROM f_browser_check WHERE user = ? AND expires <= ?", [user.id, at]);
+      await q(`INSERT INTO f_browser_check (user, telegram, id, expires, approved) VALUES (?, ?, ?, ?, 0)
+        ON CONFLICT(user, telegram) DO UPDATE SET id = excluded.id, expires = excluded.expires, approved = 0`,
+        [user.id, session, id, at + FARM_BROWSER_TTL]);
+      return json({ id, expires_in: FARM_BROWSER_TTL });
+    }
+    if (url.pathname === "/api/farm/browser/claim") {
+      const id = typeof body?.id === "string" && FARM_BROWSER_ID.test(body.id) ? body.id : "";
+      const at = now();
+      const claimed = await q(`DELETE FROM f_browser_check WHERE user = ? AND telegram = ? AND id = ?
+        AND expires > ? AND approved = 1 RETURNING 1`, [user.id, session, id, at]);
+      if (claimed.length) return json({ permit: await saveFarmPermit(user.id, session) });
+      const [pending] = await q("SELECT 1 FROM f_browser_check WHERE user = ? AND telegram = ? AND id = ? AND expires > ?",
+        [user.id, session, id, at]);
+      return pending ? json({ pending: true }) : json({ error: "Ссылка истекла. Открой проверку ещё раз." }, 410);
+    }
+    if (needsCheck)
+      return json({ error: "Пройди проверку, чтобы продолжить на ферме", farm_check: { sitekey, session, browser: true } }, 403);
     if (FARM_ACTIONS.has(url.pathname) && !(await allowFarmAction(user.id)))
       return json({ error: "Слишком много действий подряд. Подожди немного." }, 429);
   }
