@@ -1242,24 +1242,43 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
 export async function sellCrop(u: any, strain: string, n: number) {
   await ensureFarm(u);
-  const rows = await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id]);
-  // «весь урожай в пыль» не трогает самоцветы и их пыль — они куплены у странника (2026-11-17); их — только по одному, явно
-  const GEMS = new Set([...Object.values(GEM_KINDS).flatMap((g) => [g.gem, g.dust]), "p:eye"]);   // и странные глаза — редкость, только явно
-  const pick = strain === "*" ? rows.filter((r) => !GEMS.has(String(r[0]))) : rows.filter((r) => r[0] === strain);
+  const all = strain === "*";
+  const rows = all
+    ? await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])
+    : await q("SELECT strain, count FROM f_barn WHERE user = ? AND strain = ? AND count > 0", [u.id, strain]);
+  // «Весь урожай» сохраняет самоцветы, самоцветную пыль и странные глаза.
+  const protectedItems = new Set([...Object.values(GEM_KINDS).flatMap((g) => [g.gem, g.dust]), "p:eye"]);
+  const pick = all ? rows.filter(([id]) => !protectedItems.has(String(id))) : rows;
   if (!pick.length) return { error: "В амбаре этого нет" };
-  const ss: Record<string, { dust: number }> = { ...(await strains(pick.map((r) => r[0]).filter((x) => !String(x).startsWith("p:")))), ...(await productsFor(pick.map((r) => String(r[0])))).products };
+  const ids = pick.map(([id]) => String(id));
+  const prices: Record<string, { dust: number }> = {
+    ...await strains(ids.filter((id) => !id.startsWith("p:"))),
+    ...(await productsFor(ids)).products,
+  };
   let got = 0, sold = 0;
   const converted: { item: string; quantity: number; unitPrice: number }[] = [];
   for (const [id, have] of pick) {
-    const s = ss[id]; if (!s) continue;
-    const k = strain === "*" ? Number(have) : Math.max(1, Math.min(Number(have), Math.round(n) || 1));
-    // списывает ровно один запрос: двойное нажатие не продаст лишнего
-    if (!(await q("UPDATE f_barn SET count = count - ? WHERE user = ? AND strain = ? AND count >= ? RETURNING 1", [k, u.id, id, k])).length) continue;
-    converted.push({ item: String(id), quantity: k, unitPrice: s.dust });
-    got += k * s.dust; sold += k;
+    const item = String(id), price = prices[item];
+    if (!price) continue;
+    const quantity = all ? Number(have) : Math.max(1, Math.min(Number(have), Math.round(n) || 1));
+    converted.push({ item, quantity, unitPrice: price.dust });
+    got += quantity * price.dust; sold += quantity;
   }
   if (!sold) return { error: "В амбаре этого нет" };
-  await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("barn_to_dust", { items: converted }), got, u.id]);
+  const selection = JSON.stringify(converted);
+  const [credit] = await DB.batch([
+    DB.prepare(`UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?
+      AND NOT EXISTS (
+        SELECT 1 FROM json_each(?) AS selected
+        LEFT JOIN f_barn AS b ON b.user = f_farms.user AND b.strain = json_extract(selected.value, '$.item')
+        WHERE COALESCE(b.count, 0) < json_extract(selected.value, '$.quantity')
+      ) RETURNING 1`).bind(dustContext("barn_to_dust", { items: converted }), got, u.id, selection),
+    DB.prepare(`UPDATE f_barn SET count = f_barn.count - json_extract(selected.value, '$.quantity')
+      FROM json_each(?) AS selected
+      WHERE f_barn.user = ? AND f_barn.strain = json_extract(selected.value, '$.item') AND changes() = 1`)
+      .bind(selection, u.id),
+  ]);
+  if (!credit.results?.length) return { error: "Содержимое амбара изменилось. Попробуй ещё раз." };
   return { sold, dust: got, farm: await farmState(u) };
 }
 
@@ -1877,13 +1896,25 @@ export async function collect(u: any, kind: string) {
   return { recipe: j[0], n, points: pts, farm: await farmState(u) };
 }
 
-export async function unlock(u: any) {
+export async function unlock(u: any, requested?: unknown) {
+  if (requested !== undefined && (typeof requested !== "number" || !Number.isInteger(requested) || requested < 3 || requested >= PLOTS_MAX))
+    return { error: "Грядка не найдена" };
   await ensureFarm(u);
   const [[dust, unlocked]] = await q("SELECT dust, unlocked FROM f_farms WHERE user = ?", [u.id]);
-  const n = Number(unlocked);
+  const n = typeof requested === "number" ? requested : Number(unlocked);
+  if (n < unlocked) return { already: true, farm: await farmState(u) };
   if (n >= PLOTS_MAX) return { error: "Все грядки открыты" };
-  if (Number(dust) < PLOT_PRICE[n]) return { error: "Не хватает звёздной пыли" };
-  await q("UPDATE f_farms SET dust_context = ?, dust = dust - ?, unlocked = unlocked + 1 WHERE user = ?", [dustContext("unlock_bed", { bed: n + 1 }), PLOT_PRICE[n], u.id]);
+  if (n > unlocked) return { error: "Сначала открой предыдущую грядку" };
+  const price = PLOT_PRICE[n];
+  if (Number(dust) < price) return { error: "Не хватает звёздной пыли", dust: Number(dust) };
+  const [done] = await q(`UPDATE f_farms SET dust_context = ?, dust = dust - ?, unlocked = unlocked + 1
+    WHERE user = ? AND unlocked = ? AND dust >= ? RETURNING unlocked`,
+    [dustContext("unlock_bed", { bed: n + 1 }), price, u.id, n, price]);
+  if (!done) {
+    const [[balance, opened]] = await q("SELECT dust, unlocked FROM f_farms WHERE user = ?", [u.id]);
+    if (Number(opened) > n) return { already: true, farm: await farmState(u) };
+    return { error: "Не хватает звёздной пыли", dust: Number(balance) };
+  }
   return { farm: await farmState(u) };
 }
 

@@ -5204,6 +5204,7 @@
     var wasW = F.state && F.state.wanderer && F.state.wanderer.left > 0 && F.wanderIn;       // стоял странник, а полнолуние кончилось — уходит
     evSpot(st);
     F.state = st; F.fetched = Date.now(); if (wasW && !st.wanderer) { F.wanderIn = 0; wanderLeave(); } renderFarm(); if (F.invRedraw) F.invRedraw();
+    if (F.barnRedraw) F.barnRedraw();
     if (st.tea_prank) updateTeaPrank(st.tea_prank);
     if (!$("farm-shop").hidden) { setText($("shopdust"), "✦ " + st.dust); if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
   }
@@ -5322,15 +5323,32 @@
   function plotTap(pl) {
     var s = F.state, now = farmNow();
     if (pl.locked) {
+      if (F.unlocking) return;
       if (pl.idx !== s.unlocked) return toast("Сначала открой предыдущую грядку");
       return sheet(function (sh, close) {
-        sh.appendChild(el("h3", "", "Новая грядка")); sh.appendChild(el("div", "sub", "Открыть за " + pl.price + " звёздной пыли. У тебя: " + s.dust));
-        var b = btn("Открыть за ✦ " + pl.price, "", function () {
-          close(); var cur = F.state;
-          if (cur.dust < pl.price || pl.idx !== cur.unlocked) return toast("Не хватает звёздной пыли");
-          haptic("success"); addFx("plant", pl.idx, cur.strains.moss); floatText(pl.idx, "−✦ " + pl.price + " · новая грядка!");
-          cur.dust -= pl.price; cur.unlocked++; cur.plots[pl.idx] = { idx: pl.idx, crop: null }; renderFarm();   // сразу, не дожидаясь сервера
-          farmCall("/api/farm/unlock").catch(function () {});
+        var label = "Открыть за ✦ " + pl.price;
+        var info = el("div", "sub", "Открыть за " + pl.price + " звёздной пыли. У тебя: " + s.dust);
+        sh.appendChild(el("h3", "", "Новая грядка")); sh.appendChild(info);
+        var b = btn(label, "", function () {
+          if (F.unlocking) return;
+          haptic("light"); F.unlocking = true; b.disabled = true; b.textContent = "Открываю…";
+          farmCall("/api/farm/unlock", { idx: pl.idx }).then(function (r) {
+            if (r.error) {
+              var dust = typeof r.dust === "number" ? r.dust : F.state.dust;
+              info.textContent = "Открыть за " + pl.price + " звёздной пыли. У тебя: " + dust;
+              b.disabled = dust < pl.price;
+              return;
+            }
+            close();
+            if (!r.already && document.body.dataset.screen === "farm") {
+              haptic("success"); addFx("plant", pl.idx, F.state.strains.moss);
+              floatText(pl.idx, "−✦ " + pl.price + " · новая грядка!");
+            }
+          }).catch(function () {
+            b.disabled = false;
+          }).finally(function () {
+            F.unlocking = false; b.textContent = label;
+          });
         });
         if (s.dust < pl.price) b.disabled = true; sh.appendChild(b);
       });
@@ -5480,11 +5498,18 @@
   }
   function barnOf(id) { var r = null; (F.state.barn || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
   function barnAdd(id, n) { F.state.barn = F.state.barn || []; var it = barnOf(id); if (it) it.count += n; else F.state.barn.push({ strain: id, count: n }); }
-  function toDust(strain, n, gain) {                           // урожай из амбара → звёздная пыль (сразу, сервер подтвердит)
-    var cur = F.state; haptic("success");
-    if (strain === "*") cur.barn = (cur.barn || []).filter(function (it) { return gemOf(it.strain) || it.strain === "p:eye"; }); else barnOf(strain).count -= n;   // самоцветы и их пыль «весь урожай» не трогает
-    cur.dust += gain; renderFarm(); toast("+✦ " + gain + " звёздной пыли");
-    farmCall("/api/farm/sell", { strain: strain, n: n || 0 }).catch(function () {});
+  function toDust(items, redraw) {
+    if (F.barnSelling) return;
+    F.barnSelling = true;
+    haptic("light"); redraw();
+    return Promise.all(items.map(function (item) {
+      return farmCall("/api/farm/sell", item).catch(function () { return null; });
+    })).then(function (results) {
+      var confirmed = results.filter(function (r) { return r && !r.error; });
+      if (!confirmed.length) return;
+      var gain = confirmed.reduce(function (sum, r) { return sum + r.dust; }, 0);
+      haptic("success"); toast("+✦ " + gain + " звёздной пыли");
+    }).finally(function () { F.barnSelling = false; redraw(); });
   }
   // мука помнит сорт колосьев, выпечка — сорт муки: «p:bread@<сорт>» (цена и цвет — от сорта, как на сервере)
   function recKey(id) { var r = id.indexOf("p:") === 0 ? id.slice(2) : id, i = r.indexOf("@"); return i < 0 ? r : r.slice(0, i); }
@@ -6957,6 +6982,7 @@
           barnBox.appendChild(mode);
         }
         barnBox.appendChild(bgrid);
+        if (F.barnSelling) { footInfo.appendChild(el("div", "sub", "Распыление…")); return; }
         if (!barn.length) { footInfo.appendChild(el("div", "sub", "Пока пусто. Сюда попадает всё, что ты собираешь с грядок.")); return; }
         var picked = Object.keys(selSet).map(barnOf), acts = el("div", "invacts");
         var toStall = function (list) {                             // сразу: из амбара на прилавок; сервер подтвердит
@@ -6973,24 +6999,23 @@
           var wn = wetOf(sel.strain); if (wn > 0) footInfo.appendChild(el("div", "sub", "Мокрые после ливня: " + wn + " " + plural(wn, "сноп", "снопа", "снопов") + ". Смолоть их можно, когда просохнут, — через " + fmtLeft(wetLeft(sel.strain)) + ". Продать можно и мокрыми."));
           var bsel = sel;
           qtyBox(footInfo, { key: "barn:" + bsel.strain, max: function () { return (barnOf(bsel.strain) || { count: 0 }).count; },
-            acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + st.dust * n; }, run: function (n) { toDust(bsel.strain, n, st.dust * n); drawBarn(); } },
+            acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + st.dust * n; }, run: function (n) { toDust([{ strain: bsel.strain, n: n }], drawBarn); } },
                    { t: function (n) { return "В лавку " + n; }, cls: "sell", run: function (n) { toStall([{ strain: bsel.strain, count: n }]); } }] });
         } else if (picked.length > 1) {
           var cnt = 0, sum = 0; picked.forEach(function (x) { cnt += x.count; sum += x.count * itemOf(x.strain).dust; });
           footInfo.appendChild(el("div", "sub", "Выделено ячеек: " + picked.length + " — " + cnt + " " + plural(cnt, "штука", "штуки", "штук") + ", в пыль это ✦ " + sum + "."));
           acts.appendChild(btn("В пыль · ✦ " + sum, "", function () {
-            var cur2 = F.state; haptic("success");
-            picked.forEach(function (x) { var k3 = x.count; if (k3 <= 0) return; x.count = 0; farmCall("/api/farm/sell", { strain: x.strain, n: k3 }).catch(function () {}); });
-            cur2.dust += sum; F.barnSet = {}; renderFarm(); drawBarn(); toast("+✦ " + sum + " звёздной пыли");
+            toDust(picked.map(function (x) { return { strain: x.strain, n: x.count }; }), drawBarn);
           }));
           acts.appendChild(btn("В лавку", "sell", function () { toStall(picked); }));
           acts.appendChild(btn("Отменить", "ghost", function () { F.barnSet = {}; drawBarn(); }));
         } else {
           footInfo.appendChild(el("div", "sub", "Нажми на ячейку, чтобы превратить урожай в звёздную пыль или выставить в лавку." + (BARN_MULTI ? " Можно выделить несколько." : "")));
-          acts.appendChild(btn("Весь урожай в пыль · ✦ " + total, "", function () { toDust("*", 0, total); drawBarn(); }));
+          acts.appendChild(btn("Весь урожай в пыль · ✦ " + total, "", function () { toDust([{ strain: "*", n: 0 }], drawBarn); }));
         }
         footInfo.appendChild(acts);
       };
+      F.barnRedraw = function () { if (sh.isConnected) drawBarn(); else F.barnRedraw = null; };
       drawBarn();
       if (teaProgress && !teaAwarded) teaBarnRedraw = function () { if (sh.isConnected) drawBarn(); };
       var acts2 = el("div", "salebtns"); acts2.appendChild(btn("Готово", "", close)); foot.appendChild(acts2); sh.appendChild(foot);

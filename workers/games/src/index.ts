@@ -745,7 +745,7 @@ async function handle(req: Request, env: any): Promise<Response> {
       if (typeof result.error === "string") await farm.auditPlotRejection(user.id, receivedAt, action, idx, result.error);
       return json(result);
     }
-    case "/api/farm/unlock": return json(await farm.unlock(user));
+    case "/api/farm/unlock": return json(await farm.unlock(user, body?.idx));
     case "/api/farm/build": return json(await farm.build(user, String(body.kind || "")));
     case "/api/farm/order": return json(await farm.fulfil(user, Number(body.slot), body.pick));
     case "/api/farm/order/skip": return json(await farm.skipOrder(user, Number(body.slot)));
