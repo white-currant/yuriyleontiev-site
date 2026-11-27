@@ -427,10 +427,6 @@ const FARM_BROWSER_ACTION = "farm-browser";
 const FARM_BROWSER_TTL = 5 * 60;
 const FARM_BROWSER_ID = /^[a-f0-9]{64}$/;
 const FARM_CHECK_TTL = 15 * 60;
-const FARM_RISK_LOOKBACK = 24 * 3600;
-const FARM_RISK_INCOME = 4000;
-const FARM_RISK_SALES = 10;
-const FARM_RISK_PURCHASES = 15;
 const FARM_ACTION_COST = 400; // Быстрая серия разрешена, постоянный поток ограничен по аккаунту.
 const FARM_ACTION_CAPACITY = 12 * FARM_ACTION_COST;
 function bytesToHex(bytes: ArrayBuffer) {
@@ -468,35 +464,6 @@ async function saveFarmPermit(uid: number, session: string) {
       .bind(uid, Date.now()),
   ]);
   return permit;
-}
-async function farmNeedsCheck(uid: number) {
-  const rows = await q(`WITH activity AS (
-      SELECT at, after - before AS delta, reason FROM f_dust_log
-      WHERE user = ?1 AND at >= ?2 AND id > COALESCE((SELECT checked_dust_id FROM f_farm_check_state WHERE user = ?1), 0)
-        AND reason IN ('barn_to_dust', 'seeds_to_dust', 'station_order', 'harvest_to_dust', 'harvest_bonus',
-          'market_sell_item', 'market_sell_seed', 'market_buy_seed', 'market_buy_item', 'collect_moss_clump', 'collect_star', 'coal_to_dust')
-    ), windows AS (
-      SELECT SUM(MAX(delta, 0)) OVER (ORDER BY at RANGE BETWEEN 900 PRECEDING AND CURRENT ROW) AS income,
-        SUM(reason IN ('market_sell_item', 'market_sell_seed', 'barn_to_dust', 'seeds_to_dust', 'station_order'))
-          OVER (ORDER BY at RANGE BETWEEN 300 PRECEDING AND CURRENT ROW) AS sales,
-        SUM(reason IN ('market_buy_seed', 'market_buy_item'))
-          OVER (ORDER BY at RANGE BETWEEN 300 PRECEDING AND CURRENT ROW) AS purchases
-      FROM activity
-    ), gaps AS (
-      SELECT id, action, at_ms, at_ms - LAG(at_ms) OVER (PARTITION BY action ORDER BY at_ms, id) AS gap
-      FROM f_farm_action_log
-      WHERE user = ?1 AND at_ms >= ?6 AND action IN ('plant', 'water', 'harvest')
-        AND id > COALESCE((SELECT MAX(id) FROM f_farm_action_log WHERE user = ?1 AND action = 'captcha'), 0)
-    ), cadence AS (
-      SELECT COUNT(gap) OVER recent AS samples, MIN(gap) OVER recent AS shortest, MAX(gap) OVER recent AS longest
-      FROM gaps WINDOW recent AS (PARTITION BY action ORDER BY at_ms, id ROWS BETWEEN 8 PRECEDING AND CURRENT ROW)
-    )
-    SELECT 1 FROM windows WHERE income >= ?3 OR sales >= ?4 OR purchases >= ?5
-    UNION ALL
-    SELECT 1 FROM cadence WHERE samples = 9 AND shortest >= 1500 AND longest <= 20000 AND longest - shortest <= 300
-    LIMIT 1`,
-    [uid, now() - FARM_RISK_LOOKBACK, FARM_RISK_INCOME, FARM_RISK_SALES, FARM_RISK_PURCHASES, Date.now() - 10 * 60 * 1000]);
-  return rows.length > 0;
 }
 async function allowFarmAction(uid: number) {
   const replenished = "MIN(?4, f_action_rate.credit_ms + MAX(0, excluded.updated_ms - f_action_rate.updated_ms))";
@@ -680,9 +647,8 @@ async function handle(req: Request, env: any): Promise<Response> {
     }
     const sitekey = ENV.FARM_TURNSTILE_SITE_KEY, secret = ENV.FARM_TURNSTILE_SECRET_KEY;
     const isCheck = url.pathname === "/api/farm/verify" || url.pathname.startsWith("/api/farm/browser/");
-    const needsCheck = isCheck || await farmNeedsCheck(user.id);
-    if (needsCheck && (!sitekey || !secret)) return json({ error: "Проверка фермы временно недоступна" }, 503);
-    const session = needsCheck ? await farmChallenge(initData) : "";
+    if (isCheck && (!sitekey || !secret)) return json({ error: "Проверка фермы временно недоступна" }, 503);
+    const session = isCheck ? await farmChallenge(initData) : "";
     if (url.pathname === "/api/farm/verify") {
       if (!(await verifyFarmProof(body?.token, session, secret, FARM_CHECK_ACTION)))
         return json({ error: "Проверка не прошла. Попробуй ещё раз." }, 403);
@@ -707,8 +673,6 @@ async function handle(req: Request, env: any): Promise<Response> {
         [user.id, session, id, at]);
       return pending ? json({ pending: true }) : json({ error: "Ссылка истекла. Открой проверку ещё раз." }, 410);
     }
-    if (needsCheck)
-      return json({ error: "Пройди проверку, чтобы продолжить на ферме", farm_check: { sitekey, session, browser: true } }, 403);
     if (FARM_ACTIONS.has(url.pathname) && !(await allowFarmAction(user.id)))
       return json({ error: "Слишком много действий подряд. Подожди немного." }, 429);
   }
