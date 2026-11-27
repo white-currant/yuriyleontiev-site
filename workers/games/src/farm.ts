@@ -741,7 +741,11 @@ function farmReads(uid: number, t: number): [string, any[]][] {
 }
 // нашествие слизней (его промо подземелья, 2026-11-20): разовое событие у каждого — зашёл на ферму, 30 секунд приходят слизни,
 // тап — исчез; без наказаний. Флаг «promo:slimes» в f_evlog (с двоеточием — не считается погодным событием), снимается, когда прогнал всех
-export async function slimesDone(u: any) { await q("DELETE FROM f_evlog WHERE user = ? AND kind = 'promo:slimes'", [u.id]); return { ok: true }; }
+export async function slimesDone(u: any) {
+  // После открытия подземелья оставляем старые флаги как отметку незавершённого события.
+  if (!dgOpen()) await q("DELETE FROM f_evlog WHERE user = ? AND kind = 'promo:slimes'", [u.id]);
+  return { ok: true };
+}
 
 const TEA_PRANK_PLAYER = 8808980009;
 
@@ -753,8 +757,27 @@ async function teaPrank(uid: number) {
     remaining: Math.max(0, Number(deadline) - Date.now()) };
 }
 
-export async function completedTeaEvent(uid: number) {
-  return Number(uid) === TEA_PRANK_PLAYER && (await teaPrank(uid)).awarded != null;
+const SLIME_EVENT_AT = Date.UTC(2026, 10, 20, 17, 1, 59) / 1000;
+const MEDAL_EVENTS = ["solstice", "constellation", "moss", "fire", "comet"];
+
+export async function achievementsOf(uid: number) {
+  const [tea, events, farms] = await Promise.all([
+    Number(uid) === TEA_PRANK_PLAYER ? teaPrank(uid) : null,
+    q("SELECT kind, MIN(started) FROM f_mono WHERE user = ? AND started <= ? GROUP BY kind ORDER BY MIN(started) DESC, kind", [uid, now()]),
+    q(`SELECT created, EXISTS (SELECT 1 FROM f_evlog WHERE user = ?1 AND kind = 'promo:slimes')
+       FROM f_farms WHERE user = ?1`, [uid]),
+  ]);
+  const medals: { id: string; event_at: number }[] = [];
+  if (tea && tea.awarded != null) medals.push({ id: "tea", event_at: Math.floor(tea.deadline / 1000) - 60 });
+  for (const [kind, firstStart] of events) {
+    if (MEDAL_EVENTS.includes(String(kind))) medals.push({ id: String(kind), event_at: Number(firstStart) });
+  }
+  if (farms.length) {
+    const [created, slimePending] = farms[0];
+    // При завершении старого промо флаг удалялся.
+    if (Number(created) <= SLIME_EVENT_AT && !Number(slimePending)) medals.push({ id: "slimes", event_at: SLIME_EVENT_AT });
+  }
+  return medals;
 }
 
 export async function startTeaPrank(uid: number) {

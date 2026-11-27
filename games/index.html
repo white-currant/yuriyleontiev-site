@@ -248,18 +248,25 @@
   .colltabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
   .colltabs button { height: 38px; padding: 0 3px; border: 0; border-radius: 10px; background: rgba(255, 255, 255, .07); color: rgba(246, 239, 227, .75); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
   .colltabs button.on { background: linear-gradient(180deg, #ffe0a3, var(--gold)); color: #2a1406; box-shadow: 0 4px 16px rgba(242, 169, 59, .3); }   /* как вкладки гильдии */
-  .tea-medal-art { display: grid; place-items: center; aspect-ratio: 1; }
-  .tea-event-badge { position: relative; overflow: hidden; isolation: isolate; display: grid; place-items: center; width: 86%; aspect-ratio: 1;
-    border: 3px solid #e2a74e; border-radius: 50%; background: radial-gradient(circle at 38% 28%, #905a2a, #542934 64%, #351b29);
-    box-shadow: inset 0 0 0 2px #6b361c, inset 0 0 0 4px #ba7839, 0 2px 8px #08040c; }
-  .tea-event-badge::after { content: ""; position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(110deg, transparent 30%, rgba(255, 212, 143, .08) 43%, rgba(255, 239, 196, .38) 50%, rgba(255, 212, 143, .08) 57%, transparent 70%);
-    animation: tea-badge-shine 3.8s ease-in-out infinite; }
-  @keyframes tea-badge-shine { 0%, 20% { transform: translateX(-100%); } 65%, 100% { transform: translateX(100%); } }
-  @media (prefers-reduced-motion: reduce) { .tea-event-badge::after { animation: none; } }
-  .tea-event-badge canvas { width: 62%; }
-  .tea-medal-lettering { position: absolute; inset: 0; width: 100%; height: 100%; fill: #ffe0a1;
-    font-family: system-ui, sans-serif; font-size: 10px; font-weight: 750; letter-spacing: .85px; }
+  .achievement-grid { gap: 18px 10px; padding-bottom: 10px; }
+  .achievement-date { display: block; margin-top: 8px; font: 600 11px var(--mono, monospace); color: #d9cfef; }
+  .event-medal-art { display: grid; place-items: center; aspect-ratio: 1; }
+  .event-medal { position: relative; overflow: hidden; isolation: isolate; display: grid; place-items: center;
+    width: 91%; aspect-ratio: 1; border: 1px solid var(--medal-light); border-radius: 50%;
+    background: conic-gradient(from 30deg, var(--medal-light), var(--medal-edge) 17%, var(--medal-dark) 35%, var(--medal-edge) 57%, var(--medal-light) 76%, var(--medal-edge) 90%, var(--medal-light));
+    box-shadow: 0 3px 0 var(--medal-dark), 0 5px 0 #090614, 0 8px 10px #050311b0, inset 0 1px 2px #fff9; }
+  .event-medal::before { content: ""; position: absolute; inset: 4.8%; z-index: -1; border-radius: 50%;
+    background: radial-gradient(circle at 34% 27%, var(--medal-tone), var(--medal-dark) 78%);
+    border: 1px solid var(--medal-edge); box-shadow: 0 1px 1px #ffedac70, inset 0 2px 5px #100916c9, inset 0 -1px 3px #fff4; }
+  .event-medal::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(110deg, transparent 31%, #fff5 47%, #fff8 50%, #fff2 55%, transparent 67%);
+    animation: medal-shine 5s ease-in-out infinite; }
+  @keyframes medal-shine { 0%, 21% { transform: translateX(-113%); } 61%, 100% { transform: translateX(113%); } }
+  @media (prefers-reduced-motion: reduce) { .event-medal::after { animation: none; opacity: .1; } }
+  .event-medal canvas { width: 51%; filter: drop-shadow(0 2px 0 var(--medal-dark)) drop-shadow(0 3px 3px #0a0519b3); }
+  .event-medal-lettering { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--medal-label);
+    font: 800 9px system-ui, sans-serif; letter-spacing: .38px; filter: drop-shadow(0 1px 1px #140b13); }
+  .event-medal-lettering .long-title { font-size: 7.3px; letter-spacing: .12px; }
   .vrec span { display: block; margin-top: 4px; font-size: 11.5px; line-height: 1.25; color: rgba(246, 239, 227, .85); }
   .vrec.locked span { color: var(--dim); }
   /* фольга (2026-11-15): по конверту пластинки бежит радужный блик, как у голографической карточки */
@@ -1403,7 +1410,7 @@
     function draw() {
       box.innerHTML = "";
       box.appendChild(collectionTabs(tab, function (next) { tab = next; draw(); }));
-      if (tab === "achievements") return renderAchievements(box, p.tea_event_completed);
+      if (tab === "achievements") return renderAchievements(box, p.achievements);
       var list = tab === "cards" ? cs : vs, h = el("div", "mono", (tab === "cards" ? "Карты" : "Пластинки") + " · " + list.length); h.style.marginTop = "18px"; box.appendChild(h);
       if (!list.length) { box.appendChild(el("div", "sub", tab === "cards" ? "Карт пока нет." : "Пластинок пока нет.")); return; }
       var g = el("div", "vgrid" + (tab === "cards" ? " cgrid" : ""));
@@ -7233,7 +7240,7 @@
   function loadItems() {
     return Promise.all([call("/api/items"), loadReleases()]).then(function (r) {
       F.items = r[0].items || []; F.cards = r[0].cards || [];
-      F.teaEventCompleted = r[0].tea_event_completed === true;
+      F.achievements = r[0].achievements;
       renderColl();
     }).catch(function () {});
   }
@@ -7249,37 +7256,75 @@
     return tabs;
   }
 
-  var teaMedalCount = 0;
-  function renderAchievements(box, teaEventCompleted) {
-    if (!teaEventCompleted) {
+  var EVENT_MEDALS = {
+    tea: ["Чайное событие", "ЧАЙНОЕ", "СОБЫТИЕ", ["#ffe8ae", "#bd7a37", "#351719", "#a16131"], "p:tea"],
+    solstice: ["Солнцестояние", "СОБЫТИЕ", "СОЛНЦЕСТОЯНИЕ", ["#fff6b0", "#d38c27", "#592307", "#d78331"],
+      "M32 14a18 18 0 1 1 0 36a18 18 0 1 1 0-36M33 1 36 11H28ZM33 63 28 53H36ZM1 31 11 28V36ZM63 32 53 36V28ZM10 11 20 14 14 20ZM54 10 50 20 44 14ZM11 54 14 44 20 50ZM54 54 44 50 50 44Z"],
+    constellation: ["Созвездие", "СОБЫТИЕ", "СОЗВЕЗДИЕ", ["#d9e8ff", "#7297df", "#15254c", "#4269b4"],
+      "M7 37 18 15 41 21 53 7 58 10 43 25 21 20 11 39ZM8 30l3 6 6 2-6 3-3 7-2-7-6-3 6-2ZM19 6l3 8 8 3-8 3-3 8-3-8-8-3 8-3ZM42 14l2 6 6 2-6 2-2 7-2-7-6-2 6-2ZM55 1l2 5 6 2-6 2-2 6-2-6-5-2 5-2ZM46 38l3 8 9 3-9 3-3 9-3-9-9-3 9-3Z"],
+    moss: ["Мох захватил ферму", "СОБЫТИЕ", "МОХ ЗАХВАТИЛ ФЕРМУ", ["#e1ffa6", "#7da052", "#192d19", "#4c783c"], "moss"],
+    fire: ["Огненная ночь", "СОБЫТИЕ", "ОГНЕННАЯ НОЧЬ", ["#ffe0a3", "#d56d41", "#431514", "#9d3d24"],
+      "M36 3c1 16-9 20-9 31-4-2-7-7-6-13C9 30 8 43 15 53c9 12 29 12 37-2 7-12 1-26-7-31 1 7-1 11-4 13 2-10 3-19-5-30ZM32 58c-8-2-10-9-6-14 2 4 4 4 6 5 0-6 3-9 5-12 9 7 8 20-5 21Z"],
+    comet: ["Кометный дождь", "СОБЫТИЕ", "КОМЕТНЫЙ ДОЖДЬ", ["#caffff", "#579eab", "#122d42", "#346d8c"],
+      "M51 24a13 13 0 1 1-14 20L5 57l21-20-11 2 19-13-12 2 24-10ZM47 26l-5 8 4 8 9-1 4-8-5-7Z"],
+    slimes: ["Нашествие слизней", "СОБЫТИЕ", "НАШЕСТВИЕ СЛИЗНЕЙ", ["#e5ffd0", "#80ad63", "#172b36", "#40785c"],
+      "M32 11c10 0 21 11 21 23 0 5 9 8 8 16-2 8-53 10-58 1-2-5 5-10 6-17 2-11 12-23 23-23ZM22 31a4 5 0 1 0 0 10a4 5 0 1 0 0-10ZM42 31a4 5 0 1 0 0 10a4 5 0 1 0 0-10Z"],
+  };
+  var medalCount = 0;
+  var medalDate = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Minsk", day: "2-digit", month: "2-digit", year: "numeric"
+  });
+  function drawMedalIcon(canvas, icon, colors) {
+    if (icon.indexOf("p:") === 0) { itemIcon(canvas, icon); return; }
+    if (icon === "moss") { bookIcon(canvas, { shape: "moss", color: "moss" }); return; }
+    canvas.width = canvas.height = 64;
+    var ctx = canvas.getContext("2d"), path = new Path2D(icon);
+    var fill = ctx.createLinearGradient(0, 5, 42, 62);
+    fill.addColorStop(0, "#fff9df");
+    fill.addColorStop(.42, colors[0]);
+    fill.addColorStop(1, colors[1]);
+    ctx.strokeStyle = colors[2]; ctx.lineWidth = 2; ctx.lineJoin = "round";
+    ctx.stroke(path); ctx.fillStyle = fill; ctx.fill(path, "evenodd");
+  }
+  function renderAchievements(box, achievements) {
+    var medals = (achievements || []).filter(function (entry) { return Object.hasOwn(EVENT_MEDALS, entry.id); });
+    if (!medals.length) {
       var empty = el("div", "coll-empty");
       empty.appendChild(el("b", "", "Достижений пока нет"));
       box.appendChild(empty);
       return;
     }
-    var g = el("div", "vgrid"), pathId = "tea-medal-" + (++teaMedalCount);
-    var medal = el("div", "vrec tea-medal"), art = el("div", "tea-medal-art");
-    var badge = el("div", "tea-event-badge"), cup = el("canvas", "pix");
-    medal.setAttribute("role", "img");
-    medal.setAttribute("aria-label", "Медаль «Прошёл чайный ивент»");
-    art.setAttribute("aria-hidden", "true");
-    itemIcon(cup, "p:tea");
-    badge.appendChild(cup);
-    badge.insertAdjacentHTML("beforeend", `
-      <svg class="tea-medal-lettering" viewBox="0 0 100 100">
-        <defs>
-          <path id="${pathId}-top" d="M13 50a37 37 0 0 1 74 0"/>
-          <path id="${pathId}-bottom" d="M9 50a41 41 0 0 0 82 0"/>
-        </defs>
-        <text><textPath href="#${pathId}-top" startOffset="50%" text-anchor="middle">ПРОШЁЛ</textPath></text>
-        <text><textPath href="#${pathId}-bottom" startOffset="50%" text-anchor="middle">ЧАЙНЫЙ ИВЕНТ</textPath></text>
-        <circle cx="12" cy="50" r="1.3"/>
-        <circle cx="88" cy="50" r="1.3"/>
-      </svg>`);
-    art.appendChild(badge);
-    medal.appendChild(art);
-    g.appendChild(medal);
-    box.appendChild(g);
+    var grid = el("div", "vgrid achievement-grid");
+    medals.forEach(function (entry) {
+      var data = EVENT_MEDALS[entry.id], colors = data[3], pathId = "event-medal-" + (++medalCount);
+      var medal = el("div", "vrec"), art = el("div", "event-medal-art"), badge = el("div", "event-medal");
+      var canvas = el("canvas", "pix");
+      ["light", "edge", "dark", "tone"].forEach(function (name, i) { badge.style.setProperty("--medal-" + name, colors[i]); });
+      badge.style.setProperty("--medal-label", colors[0]);
+      medal.setAttribute("role", "img");
+      art.setAttribute("aria-hidden", "true");
+      badge.appendChild(canvas);
+      drawMedalIcon(canvas, data[4], colors);
+      badge.insertAdjacentHTML("beforeend", `
+        <svg class="event-medal-lettering" viewBox="0 0 100 100">
+          <defs>
+            <path id="${pathId}-top" d="M17 50a33 33 0 0 1 66 0"/>
+            <path id="${pathId}-bottom" d="M14 50a36 36 0 0 0 72 0"/>
+          </defs>
+          <text><textPath href="#${pathId}-top" startOffset="50%" text-anchor="middle">${data[1]}</textPath></text>
+          <text class="${data[2].length > 12 ? "long-title" : ""}"><textPath href="#${pathId}-bottom" startOffset="50%" text-anchor="middle">${data[2]}</textPath></text>
+          <circle cx="17" cy="50" r="1.25"/><circle cx="83" cy="50" r="1.25"/>
+        </svg>`);
+      art.appendChild(badge);
+      medal.appendChild(art);
+      var happened = new Date(entry.event_at * 1000);
+      var date = el("time", "achievement-date", medalDate.format(happened));
+      date.dateTime = happened.toISOString();
+      medal.setAttribute("aria-label", "Медаль «" + data[0] + "», дата события " + date.textContent);
+      medal.appendChild(date);
+      grid.appendChild(medal);
+    });
+    box.appendChild(grid);
   }
 
   function renderColl() {
@@ -7291,7 +7336,7 @@
     if (F.collTab === "cards") return renderCards(box);
     if (F.collTab === "achievements") {
       $("collsub").textContent = "";
-      return renderAchievements(box, F.teaEventCompleted);
+      return renderAchievements(box, F.achievements);
     }
     var vs = myVinyls().slice().sort(function (a, b) { return TRANK[b.tier] - TRANK[a.tier] || FRANK[b.finish] - FRANK[a.finish] || b.at - a.at; });
     if (!vs.length) {
