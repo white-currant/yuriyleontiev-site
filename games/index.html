@@ -1244,7 +1244,7 @@
     var seconds = Math.max(0, Math.ceil((farmPauseUntil - Date.now()) / 1000));
     if (!seconds) return "";
     var parts = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
-    return "Лавка и соседи откроются через " + parts.map(function (n) { return String(n).padStart(2, "0"); }).join(":");
+    return "Откроется через " + parts.map(function (n) { return String(n).padStart(2, "0"); }).join(":");
   }
   function paintFarmPause() {
     var message = farmPauseMessage(), badge = $("farm-pause-countdown");

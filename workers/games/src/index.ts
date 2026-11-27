@@ -625,8 +625,11 @@ async function handle(req: Request, env: any): Promise<Response> {
   const initData = req.headers.get("x-init-data") || "";
   const user = browserProof ? null : await verifyInitData(initData);
   if (!browserProof && !user?.id) return json({ error: "Открой игру из Телеграма" }, 401);
-  if (farmPaused && url.pathname.startsWith("/api/farm/") && !FARM_PAUSE_ALLOWED.has(url.pathname))
-    return json({ error: "Эта функция фермы на паузе до 03:01 по Минску." }, 503);
+  if (farmPaused && url.pathname.startsWith("/api/farm/") && !FARM_PAUSE_ALLOWED.has(url.pathname)) {
+    const seconds = Math.ceil((farmPauseUntil - receivedAt) / 1000);
+    const parts = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
+    return json({ error: "Откроется через " + parts.map((n) => String(n).padStart(2, "0")).join(":") }, 503);
+  }
   let body: any = {};
   try { body = await req.json(); } catch { /* пустое тело */ }
   if (browserProof) {
