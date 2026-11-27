@@ -13,6 +13,10 @@
 // Погода — событие дня (weatherOn): звёздный дождь, лунный ливень, засуха, солнечный ветер, полнолуние или ясно.
 // Соседи: можно заглянуть на чужой участок, оставить подарок (5 пыли, раз в день) и купить семена в его лавке.
 
+function dustContext(reason: string, details?: object) {
+  return JSON.stringify({ reason, details });
+}
+
 type Strain = { id: string; name: string; shape: string; color: string; minutes: number; dust: number; vinyl: number;
                 thirst: number; points: number; bonus: string | null; gen: number; cost?: number; base?: boolean; hidden?: boolean; odd?: boolean; price?: number; tier?: string; myth?: boolean; nonce?: string };
 // базовые сорта: семена покупаются в «Семенной лавке станции» (cost — цена одного), дальше возвращаются с урожаем;
@@ -81,7 +85,7 @@ async function oddEvict(uid: number) {                                   // од
 export const SHELL_DUST = 1;
 export async function dustShell(u: any) {                                // распылить скорлупу — ✦1
   if (!(await q("UPDATE f_shell SET count = count - 1 WHERE user = ? AND count > 0 RETURNING 1", [u.id])).length) return { error: "Скорлупы нет" };
-  await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [SHELL_DUST, u.id]);
+  await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("shell_to_dust"), SHELL_DUST, u.id]);
   return { dust: SHELL_DUST, farm: await farmState(u) };
 }
 async function oddHeld(uid: number) {
@@ -149,7 +153,7 @@ async function dropVinyl(user: number, chance: number) {
                         [user, pick.id, tier, finish, now()]);
   const dup = Number(row[0]) > 1;
   const bonus = dup ? DUP_DUST[tier] * (finish === "plain" ? 1 : 2) : 0;
-  if (bonus) await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [bonus, user]);   // точный повтор — в пыль
+  if (bonus) await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("duplicate_vinyl", { track: pick.id, tier, finish }), bonus, user]);   // точный повтор — в пыль
   return { id: pick.id, tier, finish, duplicate: dup, dust: bonus };
 }
 
@@ -504,7 +508,7 @@ export async function takeStar(u: any, id: number) {
   await ensureFarm(u);
   const [r] = await q("DELETE FROM f_stars WHERE id = ? AND user = ? RETURNING dust", [id, u.id]);
   if (!r) return { error: "Звёздочку уже собрали" };
-  await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [Number(r[0]), u.id]);
+  await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("collect_star", { id }), Number(r[0]), u.id]);
   return { dust: Number(r[0]), farm: await farmState(u) };
 }
 export async function fixCrater(u: any, idx: number) {
@@ -528,7 +532,7 @@ export async function takeCoal(u: any, idx: number) {
   await q("DELETE FROM f_plots WHERE user = ? AND idx = ?", [u.id, idx]);
   const hasBarn = (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length > 0;
   if (hasBarn) await q("INSERT INTO f_barn (user, strain, count) VALUES (?, 'p:coal', 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [u.id]);
-  else await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [COAL_DUST, u.id]);
+  else await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("coal_to_dust", { bed: idx }), COAL_DUST, u.id]);
   return { barn: hasBarn, dust: hasBarn ? 0 : COAL_DUST, farm: await farmState(u) };
 }
 
@@ -569,7 +573,7 @@ export async function takeClump(u: any, id: number) {
   await ensureFarm(u);
   const [r] = await q("DELETE FROM f_clumps WHERE id = ? AND user = ? RETURNING dust", [id, u.id]);
   if (!r) return { error: "Комочек уже собрали" };
-  await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [Number(r[0]), u.id]);
+  await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("collect_moss_clump", { id }), Number(r[0]), u.id]);
   return { dust: Number(r[0]), farm: await farmState(u) };
 }
 async function boostOf(uid: number): Promise<[number, number][]> {
@@ -990,7 +994,7 @@ async function buyAnomaly(u: any) {
   if (full && !(await oddEvictable(u.id))) return { error: ODD_FULL };
   if (!(await q("INSERT INTO f_evlog (user, kind, at) SELECT 0, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = 0 AND kind = ?) RETURNING 1",
                 [o.key, now(), o.key])).length) return { error: "Уже раскупили" };
-  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [o.price, u.id, o.price])).length) {
+  if (!(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("buy_seed_from_station", { item: "anomaly", quantity: 1 }), o.price, u.id, o.price])).length) {
     await q("DELETE FROM f_evlog WHERE user = 0 AND kind = ?", [o.key]); return { error: "Не хватает звёздной пыли" }; }
   const evicted = full && (await oddEvict(u.id));
   await q(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, 'anomaly', 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1`, [u.id]);
@@ -1004,7 +1008,7 @@ export async function buySeeds(u: any, crop: string, n: number) {
   if (!c || c.hidden) return { error: "Таких семян в лавке станции нет" };
   await ensureFarm(u);
   const cost = (c.cost || 0) * k;
-  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [cost, u.id, cost])).length)
+  if (!(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("buy_seed_from_station", { item: crop, quantity: k }), cost, u.id, cost])).length)
     return { error: "Не хватает звёздной пыли" };
   await q(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`, [u.id, crop, k]);
   return { bought: k, farm: await farmState(u) };
@@ -1092,9 +1096,9 @@ export async function harvest(u: any, idx: number) {
   const writes: any[] = [hasBarn
     ? DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?)
                   ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.odd ? "p:eye" : s.id, crop)
-    : DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(crop * s.dust, u.id)];
+    : DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("harvest_to_dust", { item: s.id, quantity: crop, unitPrice: s.dust }), crop * s.dust, u.id)];
   if (wetGrain) writes.push(DB.prepare("INSERT INTO f_wet (user, strain, n, dry_at) VALUES (?, ?, ?, ?)").bind(u.id, s.id, crop, t + WET_DRY));
-  if (cometDust + mythDust) writes.push(DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(cometDust + mythDust, u.id));
+  if (cometDust + mythDust) writes.push(DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("harvest_bonus", { item: s.id, cometDust, mythDust }), cometDust + mythDust, u.id));
   if (points > 0) writes.push(DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) VALUES (?, ?, ?, ?, ?)")
     .bind(u.id, nameOf(u), points, "Лунная ферма", t));
   // с урожаем возвращаются семена той же культуры: не меньше 2 (посадил одно — получил больше), обычно 2, иногда 3;
@@ -1171,15 +1175,17 @@ export async function sellCrop(u: any, strain: string, n: number) {
   if (!pick.length) return { error: "В амбаре этого нет" };
   const ss: Record<string, { dust: number }> = { ...(await strains(pick.map((r) => r[0]).filter((x) => !String(x).startsWith("p:")))), ...(await productsFor(pick.map((r) => String(r[0])))).products };
   let got = 0, sold = 0;
+  const converted: { item: string; quantity: number; unitPrice: number }[] = [];
   for (const [id, have] of pick) {
     const s = ss[id]; if (!s) continue;
     const k = strain === "*" ? Number(have) : Math.max(1, Math.min(Number(have), Math.round(n) || 1));
     // списывает ровно один запрос: двойное нажатие не продаст лишнего
     if (!(await q("UPDATE f_barn SET count = count - ? WHERE user = ? AND strain = ? AND count >= ? RETURNING 1", [k, u.id, id, k])).length) continue;
+    converted.push({ item: String(id), quantity: k, unitPrice: s.dust });
     got += k * s.dust; sold += k;
   }
   if (!sold) return { error: "В амбаре этого нет" };
-  await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [got, u.id]);
+  await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("barn_to_dust", { items: converted }), got, u.id]);
   return { sold, dust: got, farm: await farmState(u) };
 }
 
@@ -1500,7 +1506,7 @@ export async function upgrade(u: any, kind: string) {
   const lvl = await levelOf(u.id, kind);
   if (lvl >= SLOTS_MAX) return { error: "Больше ячеек не бывает" };
   const price = b.up[lvl - 1];
-  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [price, u.id, price])).length) return { error: "Не хватает звёздной пыли" };
+  if (!(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("upgrade", { kind }), price, u.id, price])).length) return { error: "Не хватает звёздной пыли" };
   await q("INSERT INTO f_levels (user, kind, level) VALUES (?, ?, ?) ON CONFLICT(user, kind) DO UPDATE SET level = excluded.level", [u.id, kind, lvl + 1]);
   return { farm: await farmState(u) };
 }
@@ -1529,7 +1535,7 @@ export async function build(u: any, kind: string) {
     DB.prepare(`INSERT OR IGNORE INTO f_builds (user, kind, at)
                 SELECT user, ?, ? FROM f_farms WHERE user = ? AND dust >= ? RETURNING 1`)
       .bind(kind, now(), u.id, b.price),
-    DB.prepare("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND changes() = 1").bind(b.price, u.id),
+    DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND changes() = 1").bind(dustContext("build", { kind }), b.price, u.id),
   ]);
   if (!(placed.results || []).length) {
     if ((await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = ?", [u.id, kind])).length) return { error: "Уже построено" };
@@ -1755,7 +1761,7 @@ export async function fulfil(u: any, slot: number, pick?: Record<string, number>
     await q("INSERT OR REPLACE INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, ?, ?, ?, ?)", [u.id, slot, String(row[0]), Number(row[1]), Number(row[2]), t]);
     return { error: "Не хватает блюд в амбаре" };
   }
-  await DB.batch([DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(Number(row[1]), u.id),
+  await DB.batch([DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("station_order", { slot, items: done }), Number(row[1]), u.id),
                   DB.prepare("INSERT INTO f_orders (user, slot, items, reward, until, ready) VALUES (?, ?, '[]', 0, 0, ?)").bind(u.id, slot, Math.min(Number(row[2]), t + ORDER_FOR[slot]))]);   // новый — в конце срока сданного (старые длинные сроки — не дольше нового ритма)
   await logFeed("order", u.id, null, null, Number(row[1]));
   return { dust: Number(row[1]), farm: await farmState(u) };
@@ -1803,7 +1809,7 @@ export async function unlock(u: any) {
   const n = Number(unlocked);
   if (n >= PLOTS_MAX) return { error: "Все грядки открыты" };
   if (Number(dust) < PLOT_PRICE[n]) return { error: "Не хватает звёздной пыли" };
-  await q("UPDATE f_farms SET dust = dust - ?, unlocked = unlocked + 1 WHERE user = ?", [PLOT_PRICE[n], u.id]);
+  await q("UPDATE f_farms SET dust_context = ?, dust = dust - ?, unlocked = unlocked + 1 WHERE user = ?", [dustContext("unlock_bed", { bed: n + 1 }), PLOT_PRICE[n], u.id]);
   return { farm: await farmState(u) };
 }
 
@@ -1811,7 +1817,7 @@ export async function openGifts(u: any) {
   const [[sum]] = await q("SELECT COALESCE(SUM(dust), 0) FROM f_gifts WHERE to_user = ? AND opened = 0", [u.id]);
   await DB.batch([
     DB.prepare("UPDATE f_gifts SET opened = 1 WHERE to_user = ? AND opened = 0").bind(u.id),
-    DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(Number(sum), u.id),
+    DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("open_gifts"), Number(sum), u.id),
   ]);
   return { dust: Number(sum), farm: await farmState(u) };
 }
@@ -1891,7 +1897,7 @@ export async function setDecor(u: any, slot: string, item: string, on: boolean) 
   const has = free || (await q("SELECT 1 FROM f_decor WHERE user = ? AND kind = 'yard' AND item = ?", [u.id, key])).length > 0;
   if (!has) {   // сперва «занять» покупку, потом списать: два одновременных нажатия не спишут дважды; не хватило пыли — покупка снимается
     const claim = await q("INSERT OR IGNORE INTO f_decor (user, kind, item, at) VALUES (?, 'yard', ?, ?) RETURNING 1", [u.id, key, now()]);
-    if (claim.length && !(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [it.price, u.id, it.price])).length) {
+    if (claim.length && !(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("buy_decor", { slot, item }), it.price, u.id, it.price])).length) {
       await q("DELETE FROM f_decor WHERE user = ? AND kind = 'yard' AND item = ?", [u.id, key]);
       return { error: "Не хватает звёздной пыли" };
     }
@@ -1905,7 +1911,7 @@ export async function setRoof(u: any, color: string) {
   await ensureFarm(u);
   const has = color === "orange" || (await q("SELECT 1 FROM f_decor WHERE user = ? AND kind = 'roof' AND item = ?", [u.id, color])).length > 0;
   if (!has) {
-    if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [ROOF_PRICE, u.id, ROOF_PRICE])).length) return { error: "Не хватает звёздной пыли" };
+    if (!(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("buy_roof", { color }), ROOF_PRICE, u.id, ROOF_PRICE])).length) return { error: "Не хватает звёздной пыли" };
     await q("INSERT OR IGNORE INTO f_decor (user, kind, item, at) VALUES (?, 'roof', ?, ?)", [u.id, color, now()]);
   }
   await q("INSERT INTO f_style (user, roof) VALUES (?, ?) ON CONFLICT(user) DO UPDATE SET roof = excluded.roof", [u.id, color]);
@@ -1983,7 +1989,7 @@ export async function seedsToDust(u: any, strain: string, n: number, from = "inv
     ? await q("UPDATE f_chest SET count = count - ? WHERE user = ? AND strain = ? AND count >= ? RETURNING 1", [k, u.id, strain, k])
     : await q("UPDATE f_inv SET count = count - ? WHERE user = ? AND strain = ? AND count - listed >= ? RETURNING 1", [k, u.id, strain, k]);
   if (!ok.length) return { error: from === "chest" ? "В сундуке столько нет" : "Столько свободных семян нет" };
-  await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [got, u.id]);
+  await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("seeds_to_dust", { item: strain, from, quantity: k, unitPrice: seedDust(st) }), got, u.id]);
   return { dust: got, farm: await farmState(u) };
 }
 
@@ -2036,14 +2042,14 @@ async function buyItem(u: any, seller: number, pub: string, item: string, myName
   const it = (await itemInfo([item])).info[item];
   if (!it) return { error: "Такого товара нет" };
   const price = sellerPrice(stallPrice(it.dust), (await ownPrices(seller))[item]);
-  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [price, u.id, price])).length)
+  if (!(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("market_buy_item", { item, seller }), price, u.id, price])).length)
     return { error: "Не хватает звёздной пыли" };
   if (!(await q("UPDATE f_stall SET listed = listed - 1 WHERE user = ? AND item = ? AND listed > 0 RETURNING 1", [seller, item])).length) {
-    await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [price, u.id]);
+    await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("market_refund", { item, seller }), price, u.id]);
     return { error: "Уже раскупили" };
   }
   await DB.batch([
-    DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(price, seller),
+    DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("market_sell_item", { item, buyer: u.id }), price, seller),
     DB.prepare("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1").bind(u.id, item),
     DB.prepare("INSERT INTO f_sales (seller, buyer_name, strain, price, at) VALUES (?, ?, ?, ?, ?)").bind(seller, myName, item, price, now()),
   ]);
@@ -2064,16 +2070,16 @@ export async function buy(u: any, pub: string, strain: string, myName: string, k
   const full = strain === "anomaly" && (await oddHeld(u.id)) >= ODD_PER_USER;
   if (full && !(await oddEvictable(u.id))) return { error: ODD_FULL };
   const price = sellerPrice(s.price!, (await ownPrices(Number(f[0])))["s:" + strain]);
-  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [price, u.id, price])).length)
+  if (!(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("market_buy_seed", { item: strain, seller: Number(f[0]) }), price, u.id, price])).length)
     return { error: "Не хватает звёздной пыли" };
   // товар забирает ровно один покупатель; не вышло — пыль возвращаем
   if (!(await q("UPDATE f_inv SET count = count - 1, listed = listed - 1 WHERE user = ? AND strain = ? AND listed > 0 RETURNING 1", [f[0], strain])).length) {
-    await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [price, u.id]);
+    await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("market_refund", { item: strain, seller: Number(f[0]) }), price, u.id]);
     return { error: "Уже раскупили" };
   }
   const evicted = full && (await oddEvict(u.id));                          // третье — сначала пропадает одно старое, потом приходит новое
   await DB.batch([
-    DB.prepare("UPDATE f_farms SET dust = dust + ? WHERE user = ?").bind(price, f[0]),
+    DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("market_sell_seed", { item: strain, buyer: u.id }), price, f[0]),
     clearDropBeforePurchase(u.id, strain),
     DB.prepare(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1`).bind(u.id, strain),
     DB.prepare("INSERT INTO f_sales (seller, buyer_name, strain, price, at) VALUES (?, ?, ?, ?, ?)").bind(f[0], myName, strain, price, now()),
@@ -2265,10 +2271,10 @@ export async function buyGem(u: any, kind: string) {
   if (got.includes(kind)) return { error: "Этот самоцвет ты уже купил" };
   if (got.length >= GEM_MAX) return { error: "Больше самоцветов странник сегодня не продаст" };
   const price = (await gemPrices(t))[g.step];
-  if (!(await q("UPDATE f_farms SET dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [price, u.id, price])).length) return { error: "Не хватает звёздной пыли" };
+  if (!(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("buy_gem", { kind }), price, u.id, price])).length) return { error: "Не хватает звёздной пыли" };
   // камень достаётся одному запросу: двойное нажатие не купит его дважды
   if (!(await q("INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = ? AND kind = ? AND at >= ?) RETURNING 1", [u.id, "gem:" + kind, t, u.id, "gem:" + kind, dayStart(t)])).length) {
-    await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [price, u.id]); return { error: "Этот самоцвет ты уже купил" };
+    await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("gem_refund", { kind }), price, u.id]); return { error: "Этот самоцвет ты уже купил" };
   }
   await q("INSERT INTO f_barn (user, strain, count) VALUES (?, ?, 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [u.id, g.gem]);
   return { ok: true, kind, price, farm: await farmState(u) };
@@ -2548,7 +2554,7 @@ export async function dgChest(u: any, run: string, slot: number) {
 async function altarGive(uid: number, loot: string) {                     // находка алтаря — на ферму; что выдано на самом деле
   const hasBarn = async () => (await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [uid])).length > 0;
   const coal = async () => { if (await hasBarn()) await q("INSERT INTO f_barn (user, strain, count) VALUES (?, 'p:coal', 1) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1", [uid]);
-    else await q("UPDATE f_farms SET dust = dust + ? WHERE user = ?", [COAL_DUST, uid]); return "coal"; };
+    else await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("altar_coal_to_dust"), COAL_DUST, uid]); return "coal"; };
   if (["common", "uncommon", "rare", "super", "mythic", "secret", "epic", "legend", "card"].includes(loot)) { const k = loot === "card" ? "mythic" : cardKind(loot);
     await giveCard(uid, k, "странная комната подземелья"); return k; }
   if (loot === "seed") {                                                   // правило «не больше двух странных у игрока»: третье вытесняет одно из мешка;

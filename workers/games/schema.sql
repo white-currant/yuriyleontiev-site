@@ -16,7 +16,35 @@ CREATE TABLE IF NOT EXISTS g_refs (ref TEXT PRIMARY KEY, user INTEGER NOT NULL);
 -- water — сколько поливов осталось в лейке; на грядке grown — сколько уже выросло (сек), [wet_from, water_until) — окно полива
 -- (колонки water, grown, wet_from, water_until добавлены 2026-11-13 разовым ALTER на рабочей базе)
 CREATE TABLE IF NOT EXISTS f_farms (user INTEGER PRIMARY KEY, pub TEXT UNIQUE NOT NULL, dust INTEGER NOT NULL DEFAULT 10,
-  unlocked INTEGER NOT NULL DEFAULT 3, created INTEGER NOT NULL, water INTEGER NOT NULL DEFAULT 5);
+  unlocked INTEGER NOT NULL DEFAULT 3, created INTEGER NOT NULL, water INTEGER NOT NULL DEFAULT 5, dust_context TEXT);
+-- Контекст передаётся в том же UPDATE, что и пыль. Триггер пишет журнал и сразу очищает контекст.
+CREATE TABLE IF NOT EXISTS f_dust_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER NOT NULL, at INTEGER NOT NULL,
+  before INTEGER NOT NULL, after INTEGER NOT NULL, reason TEXT NOT NULL, details TEXT
+);
+CREATE INDEX IF NOT EXISTS f_dust_log_user ON f_dust_log (user, id);
+CREATE TRIGGER IF NOT EXISTS f_dust_log_create AFTER INSERT ON f_farms
+BEGIN
+  INSERT INTO f_dust_log (user, at, before, after, reason)
+  VALUES (NEW.user, unixepoch(), 0, NEW.dust, 'farm_created');
+END;
+CREATE TRIGGER IF NOT EXISTS f_dust_log_change AFTER UPDATE OF dust ON f_farms
+WHEN OLD.dust != NEW.dust OR NEW.dust_context IS NOT NULL
+BEGIN
+  INSERT INTO f_dust_log (user, at, before, after, reason, details)
+  SELECT NEW.user, unixepoch(), OLD.dust, NEW.dust,
+         COALESCE(json_extract(NEW.dust_context, '$.reason'), 'unattributed'),
+         json_extract(NEW.dust_context, '$.details')
+  WHERE OLD.dust != NEW.dust;
+  UPDATE f_farms SET dust_context = NULL WHERE user = NEW.user AND dust_context IS NOT NULL;
+END;
+CREATE TRIGGER IF NOT EXISTS f_dust_log_forget AFTER DELETE ON f_farms
+BEGIN
+  DELETE FROM f_dust_log WHERE user = OLD.user;
+  UPDATE f_dust_log SET details = json_remove(details, '$.buyer', '$.seller')
+  WHERE reason IN ('market_buy_item', 'market_sell_item', 'market_buy_seed', 'market_sell_seed', 'market_refund')
+    AND (json_extract(details, '$.buyer') = OLD.user OR json_extract(details, '$.seller') = OLD.user);
+END;
 CREATE TABLE IF NOT EXISTS f_plots (user INTEGER NOT NULL, idx INTEGER NOT NULL, crop TEXT NOT NULL, planted INTEGER NOT NULL,
   grown INTEGER NOT NULL DEFAULT 0, wet_from INTEGER NOT NULL DEFAULT 0, water_until INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, idx));
 -- сорта (общие для всех: гибрид, выведенный одним, может купить другой), семена в мешке и в лавке, продажи
