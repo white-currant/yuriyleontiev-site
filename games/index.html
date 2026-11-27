@@ -5502,14 +5502,11 @@
     if (F.barnSelling) return;
     F.barnSelling = true;
     haptic("light"); redraw();
-    return Promise.all(items.map(function (item) {
-      return farmCall("/api/farm/sell", item).catch(function () { return null; });
-    })).then(function (results) {
-      var confirmed = results.filter(function (r) { return r && !r.error; });
-      if (!confirmed.length) return;
-      var gain = confirmed.reduce(function (sum, r) { return sum + r.dust; }, 0);
-      haptic("success"); toast("+✦ " + gain + " звёздной пыли");
-    }).finally(function () { F.barnSelling = false; redraw(); });
+    var body = items.length === 1 ? items[0] : { items: items };
+    return farmCall("/api/farm/sell", body).then(function (r) {
+      if (r.error) return;
+      haptic("success"); toast("+✦ " + r.dust + " звёздной пыли");
+    }).catch(function () {}).finally(function () { F.barnSelling = false; redraw(); });
   }
   // мука помнит сорт колосьев, выпечка — сорт муки: «p:bread@<сорт>» (цена и цвет — от сорта, как на сервере)
   function recKey(id) { var r = id.indexOf("p:") === 0 ? id.slice(2) : id, i = r.indexOf("@"); return i < 0 ? r : r.slice(0, i); }

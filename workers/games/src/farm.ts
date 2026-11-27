@@ -1240,12 +1240,28 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
 }
 
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
-export async function sellCrop(u: any, strain: string, n: number) {
+export async function sellCrop(u: any, strain: string, n: number, items?: unknown) {
+  const quantities = new Map<string, number>();
+  if (items !== undefined) {
+    if (!Array.isArray(items) || !items.length) return { error: "Выбери предметы для распыления" };
+    for (const item of items) {
+      const id = item?.strain, count = item?.n;
+      if (typeof id !== "string" || !id || id === "*" || !Number.isSafeInteger(count) || count < 1 || quantities.has(id))
+        return { error: "Некорректный выбор для распыления" };
+      quantities.set(id, count);
+    }
+  }
   await ensureFarm(u);
-  const all = strain === "*";
-  const rows = all
-    ? await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])
-    : await q("SELECT strain, count FROM f_barn WHERE user = ? AND strain = ? AND count > 0", [u.id, strain]);
+  const bulk = quantities.size > 0, all = !bulk && strain === "*";
+  const rows = bulk
+    ? await q(`SELECT f_barn.strain, f_barn.count FROM f_barn
+      JOIN json_each(?) AS selection ON f_barn.strain = selection.value
+      WHERE user = ? AND count > 0`, [JSON.stringify([...quantities.keys()]), u.id])
+    : all
+      ? await q("SELECT strain, count FROM f_barn WHERE user = ? AND count > 0", [u.id])
+      : await q("SELECT strain, count FROM f_barn WHERE user = ? AND strain = ? AND count > 0", [u.id, strain]);
+  const changed = { error: "Содержимое амбара изменилось. Попробуй ещё раз." };
+  if (bulk && (rows.length !== quantities.size || rows.some(([id, have]) => Number(have) < quantities.get(String(id))!))) return changed;
   // «Весь урожай» сохраняет самоцветы, самоцветную пыль и странные глаза.
   const protectedItems = new Set([...Object.values(GEM_KINDS).flatMap((g) => [g.gem, g.dust]), "p:eye"]);
   const pick = all ? rows.filter(([id]) => !protectedItems.has(String(id))) : rows;
@@ -1259,8 +1275,8 @@ export async function sellCrop(u: any, strain: string, n: number) {
   const converted: { item: string; quantity: number; unitPrice: number }[] = [];
   for (const [id, have] of pick) {
     const item = String(id), price = prices[item];
-    if (!price) continue;
-    const quantity = all ? Number(have) : Math.max(1, Math.min(Number(have), Math.round(n) || 1));
+    if (!price) { if (bulk) return changed; continue; }
+    const quantity = bulk ? quantities.get(item)! : all ? Number(have) : Math.max(1, Math.min(Number(have), Math.round(n) || 1));
     converted.push({ item, quantity, unitPrice: price.dust });
     got += quantity * price.dust; sold += quantity;
   }
@@ -1278,7 +1294,7 @@ export async function sellCrop(u: any, strain: string, n: number) {
       WHERE f_barn.user = ? AND f_barn.strain = json_extract(selected.value, '$.item') AND changes() = 1`)
       .bind(selection, u.id),
   ]);
-  if (!credit.results?.length) return { error: "Содержимое амбара изменилось. Попробуй ещё раз." };
+  if (!credit.results?.length) return changed;
   return { sold, dust: got, farm: await farmState(u) };
 }
 

@@ -667,7 +667,7 @@ async function handle(req: Request, env: any): Promise<Response> {
     return approved.length ? json({ ok: true }) : json({ error: "Ссылка истекла. Открой новую проверку из Telegram." }, 410);
   }
   // Удобрение можно распылять из убежища подземелья. Эта операция всё равно учитывается в журнале доходов.
-  const dungeonFertilizer = url.pathname === "/api/farm/sell" && body?.strain === "p:fert";
+  const dungeonFertilizer = url.pathname === "/api/farm/sell" && body?.strain === "p:fert" && body?.items === undefined;
   const farmRoute = url.pathname === "/api/farm" ||
     (url.pathname.startsWith("/api/farm/") && !SHARED_FARM_ROUTES.has(url.pathname) && !dungeonFertilizer);
   if (farmRoute) {
@@ -755,7 +755,7 @@ async function handle(req: Request, env: any): Promise<Response> {
     case "/api/farm/stoke": return json(await farm.stoke(user, String(body.slot || "oven").slice(0, 16)));
     case "/api/farm/uncook": return json(await farm.uncook(user, String(body.slot || "").slice(0, 16)));
     case "/api/farm/upgrade": return json(await farm.upgrade(user, String(body.kind || "")));
-    case "/api/farm/sell": return json(await farm.sellCrop(user, String(body.strain || ""), Number(body.n || 1)));
+    case "/api/farm/sell": return json(await farm.sellCrop(user, String(body?.strain || ""), Number(body?.n || 1), body?.items));
     case "/api/farm/gifts": return json(await farm.openGifts(user));
     case "/api/farm/neighbors": return json(await farm.neighbors(user, await hiddenIds()));
     case "/api/farm/feed":
