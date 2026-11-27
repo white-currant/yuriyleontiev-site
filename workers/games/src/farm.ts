@@ -159,7 +159,11 @@ async function dropVinyl(user: number, chance: number) {
 
 // ---------- сорта ----------
 // Цена в лавке и «редкость» сорта считаются по свойствам: урожай, шанс пластинки, особое свойство, поколение.
-function priceOf(s: Strain) { return Math.max(3, Math.round(s.dust * 0.5 + s.vinyl * 120 + (s.bonus ? 15 : 0) + s.gen * 2)); }
+const SEED_PRICE = { minimum: 3, dust: 0.5, vinyl: 120, bonus: 15, generation: 2 };
+function priceOf(s: Strain) {
+  const p = SEED_PRICE;
+  return Math.max(p.minimum, Math.round(s.dust * p.dust + s.vinyl * p.vinyl + (s.bonus ? p.bonus : 0) + s.gen * p.generation));
+}
 function tierOf(p: number) { return p >= 70 ? "legendary" : p >= 40 ? "epic" : p >= 20 ? "rare" : "common"; }
 // за сбор всегда больше, чем за действие (посадка, полив — по 1): не меньше POINTS_HARVEST_MIN, в т.ч. у старых сортов
 // очки за сбор (его решение 2026-11-17, после вопроса Глеба «нищий мох даёт столько же, сколько легендарная тыква»):
@@ -293,7 +297,7 @@ export async function strains(ids: string[]): Promise<Record<string, Strain>> {
   return out;
 }
 // гибрид: форма — от собираемого растения, цвет — от соседа; свойства — среднее родителей ± мутация
-async function breed(a: Strain, b: Strain, mutX = 1): Promise<Strain> {
+async function breed(a: Strain, b: Strain, mutX = 1) {
   const r = Math.random, avg = (k: keyof Strain) => ((a[k] as number) + (b[k] as number)) / 2, mut = () => 0.85 + r() * 0.4;
   const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
   const pick = (list: string[], not: string[]) => { const l = list.filter((x) => !not.includes(x)); return l[Math.floor(r() * l.length)]; };
@@ -326,9 +330,7 @@ async function breed(a: Strain, b: Strain, mutX = 1): Promise<Strain> {
   else if (r() < 0.15) { const all = Object.keys(BONUSES); g.bonus = all[Math.floor(r() * all.length)]; }
   g.points = Math.max(POINTS_HARVEST_MIN, Math.round(g.minutes / 30));
   const id = await hashId(g), name = nameFor(g);
-  await q("INSERT OR IGNORE INTO f_strains (id, name, genes, created) VALUES (?, ?, ?, ?)", [id, name, JSON.stringify(g), now()]);
-  STRAIN_NONE.delete(id);
-  return { ...view({ id, name, ...g }), mutation };
+  return { strain: view({ id, name, ...g }), genes: JSON.stringify(g), mutation };
 }
 
 // ---------- погода: событие дня, одна на всех ----------
@@ -1189,17 +1191,21 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
   if (gcross || (pick0 && Math.random() < crossP)) {
     const pool = gcross ? (near.filter((x) => !ss[x[1]].odd).length ? near.filter((x) => !ss[x[1]].odd) : nearAny) : near, base = Object.values(CROPS).filter((c) => !c.hidden && c.id !== s.id);
     const other = pick0 || (pool.length ? ss[pool[Math.floor(Math.random() * pool.length)][1]] : view(base[Math.floor(Math.random() * base.length)]));
-    const h = await breed(s, other, gcross ? 3 : 1);
+    const { strain: h, genes, mutation } = await breed(s, other, gcross ? 3 : 1);
     // Строка сорта в f_inv остаётся после расхода всех семян. Проверка и выдача идут одним пакетом.
     const foundAt = now();
-    const [discovery] = await DB.batch([
+    const [, , discovery] = await DB.batch([
+      DB.prepare("INSERT OR IGNORE INTO f_strains (id, name, genes, created) VALUES (?, ?, ?, ?)").bind(h.id, h.name, genes, foundAt),
+      DB.prepare(`INSERT INTO f_strain_origin (strain, breeder, mutation, parent_a, parent_b)
+        SELECT ?, ?, ?, ?, ? WHERE changes() = 1`).bind(h.id, u.id, mutation || "none", s.name, other.name),
       DB.prepare(`INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ?
                   WHERE NOT EXISTS (SELECT 1 FROM f_inv WHERE user = ? AND strain = ?) RETURNING 1`)
         .bind(u.id, SEED_DROP_KEY + h.id, foundAt, u.id, h.id),
       DB.prepare("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1").bind(u.id, h.id),
       DB.prepare("DELETE FROM f_evlog WHERE user = ? AND kind >= 'seed:hybrid:' AND kind < 'seed:hybrid;' AND at <= ?").bind(u.id, foundAt - SEED_DROP_SECONDS),
     ]);
-    hybrid = { ...h, parents: [s.name, other.name], fresh: (discovery.results || []).length > 0 };
+    STRAIN_NONE.delete(h.id);
+    hybrid = { ...h, mutation, parents: [s.name, other.name], fresh: (discovery.results || []).length > 0 };
   }
   const luck = (s.bonus === "lucky" ? 2 : 1) * (weatherOn(t) === "fullmoon" ? 2 : 1);
   const vinyl = await dropVinyl(u.id, s.vinyl * luck);
@@ -2159,6 +2165,51 @@ export async function book(u: any) {
   return { strains: Object.values(ss), bonuses: BONUSES };
 }
 
+// Гербарий: все выведенные сорта, включая те, которых у игрока никогда не было.
+export async function herbarium(options: { search?: unknown; mode?: unknown; page?: unknown; shape?: unknown }, hidden: number[]) {
+  const { search, mode, page, shape } = options;
+  const size = 20;
+  const query = String(search ?? "").trim().slice(0, 80).toLocaleLowerCase("ru").replace(/ё/g, "е");
+  const text = query.replace(/[!%_]/g, "!$&"), firstCapital = text.charAt(0).toLocaleUpperCase("ru") + text.slice(1);
+  const name = "REPLACE(REPLACE(s.name, 'ё', 'е'), 'Ё', 'Е')";
+  let where = "COALESCE(json_extract(s.genes, '$.myth'), 0) = 0";
+  const args: any[] = [];
+  if (text) {
+    where += ` AND (${name} LIKE ? ESCAPE '!' OR ${name} LIKE ? ESCAPE '!' OR s.id LIKE ? ESCAPE '!')`;
+    args.push(`%${text}%`, `%${firstCapital}%`, `${text.startsWith("h") ? "" : "h"}${text}%`);
+  }
+  if (typeof shape === "string" && SHAPES.includes(shape)) {
+    where += " AND json_extract(s.genes, '$.shape') = ?";
+    args.push(shape);
+  }
+  const color = typeof mode === "string" && mode.startsWith("color:") ? mode.slice(6) : "";
+  if (COLORS.includes(color) || color === "anomaly") {
+    where += " AND json_extract(s.genes, '$.color') = ?";
+    args.push(color);
+  }
+  let order = mode === "oldest" ? "s.created ASC, s.id ASC" : "s.created DESC, s.id DESC";
+  if (mode === "price_asc" || mode === "price_desc") {
+    const p = SEED_PRICE;
+    const price = `MAX(${p.minimum}, ROUND(json_extract(s.genes, '$.dust') * ${p.dust}
+      + json_extract(s.genes, '$.vinyl') * ${p.vinyl}
+      + CASE WHEN COALESCE(json_extract(s.genes, '$.bonus'), '') <> '' THEN ${p.bonus} ELSE 0 END
+      + json_extract(s.genes, '$.gen') * ${p.generation}))`;
+    order = `${price} ${mode === "price_asc" ? "ASC" : "DESC"}, ${order}`;
+  }
+  const from = "FROM f_strains s LEFT JOIN f_strain_origin o ON o.strain = s.id";
+  const [[total]] = await q(`SELECT COUNT(*) ${from} WHERE ${where}`, args);
+  const pages = Math.max(1, Math.ceil(total / size));
+  const current = Math.min(pages, Math.max(1, Math.trunc(Number(page)) || 1));
+  const rows = await q(`SELECT s.id, s.name, s.genes, s.created, o.breeder, p.name AS breeder_name, o.mutation, o.parent_a, o.parent_b
+    ${from} LEFT JOIN g_profiles p ON p.user = o.breeder WHERE ${where}
+    ORDER BY ${order} LIMIT ? OFFSET ?`, [...args, size, (current - 1) * size]);
+  return { total, pages, page: current, entries: rows.map(([id, title, genes, created, uid, breeder, mutation, a, b]) => ({
+    ...view({ id, name: title, ...JSON.parse(genes) }),
+    created, breeder: !hidden.includes(Number(uid)) ? breeder || null : null,
+    mutation: mutation || null, parents: a && b ? [a, b] : null,
+  })) };
+}
+
 // рынок: все семена, выставленные игроками (кроме своих). Наружу — публичное имя продавца и номер участка (pub), не аккаунт.
 export async function market(u: any, hidden: number[]) {
   const rows = await q(`SELECT i.user, f.pub, i.strain, i.listed, p.name, pr.price FROM f_inv i JOIN f_farms f ON f.user = i.user
@@ -2254,6 +2305,7 @@ export async function monoFeed(after: number) {                 // для бот
       name: (MONO_NAMES[k] || [k])[0], text: (MONO_NAMES[k] || ["", ""])[1] }; });
 }
 export async function forgetFarm(uid: number) {
+  await q("UPDATE f_strain_origin SET breeder = NULL WHERE breeder = ?", [uid]);
   for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM g_items WHERE user = ? AND game = 'farm'",
                      "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?", "DELETE FROM f_stall WHERE user = ?", "DELETE FROM f_plotev WHERE user = ?", "DELETE FROM f_evlog WHERE user = ?", "DELETE FROM f_stars WHERE user = ?", "DELETE FROM f_cratercrop WHERE user = ?", "DELETE FROM f_mono WHERE user = ?", "DELETE FROM f_monomark WHERE user = ?", "DELETE FROM f_clumps WHERE user = ?", "DELETE FROM f_notify WHERE user = ?", "DELETE FROM f_orders WHERE user = ?", "DELETE FROM f_chest WHERE user = ?", "DELETE FROM f_prices WHERE user = ?",
                      "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?", "DELETE FROM f_builds WHERE user = ?", "DELETE FROM f_jobs WHERE user = ?",

@@ -778,6 +778,7 @@ async function handle(req: Request, env: any, ctx?: { waitUntil(task: Promise<un
     case "/api/farm/fertilize": return json(await farm.fertilize(user, Number(body.idx)));
     case "/api/farm/fill": return json(await farm.fill(user));
     case "/api/farm/book": return json(await farm.book(user));
+    case "/api/farm/herbarium": return json(await farm.herbarium(body || {}, await hiddenIds()));
     case "/api/dg": return json(await farm.dgState(user));
     case "/api/dg/pack": return json(await farm.dgPack(user, String(body.item || "").slice(0, 80), body.slot == null ? -1 : Number(body.slot)));
     case "/api/dg/start": return json(await farm.dgStart(user, String(body.size || "")));

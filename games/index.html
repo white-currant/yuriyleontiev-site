@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611271411";
+    var BUILD = "202611271532";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -1006,6 +1006,30 @@
   .book .bpage.fwd.in, .book .bpage.back.in { transform: none; }
   body[data-screen^="farm"] .book h3 { color: #3b2614; font-size: 21px; text-align: center; padding-bottom: 8px; border-bottom: 2px solid rgba(90, 56, 32, .35); }
   body[data-screen^="farm"] .book .bpage > h3:first-child { padding-left: 40px; padding-right: 40px; }   /* заголовок страницы не заходит под крестик */
+  .herbarium-tabs { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; margin-top: 10px; }
+  .herbarium-tab { display: grid; place-items: center; min-width: 0; min-height: 40px; padding: 1px; border: 1px solid #be9a61;
+    border-radius: 4px; color: #3b2614; background: transparent; font: 650 12px var(--pix); }
+  .herbarium-tab canvas { width: 30px; height: 26px; image-rendering: pixelated; }
+  .herbarium-tab[aria-pressed="true"] { color: #fff2d0; background: #69442a; border-color: #69442a; }
+  @media (max-width: 360px) { .herbarium-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+  .herbarium-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 11px; }
+  .herbarium-filters input, .herbarium-filters select { box-sizing: border-box; width: 100%; min-width: 0; height: 38px; padding: 0 7px; font: 14px var(--pix);
+    border: 1px solid #ab8755; border-radius: 4px; color: #3b2614; background: #fbefcf; }
+  .herbarium-list { display: grid; margin-top: 7px; }
+  .herbarium-entry { display: grid; grid-template-columns: 48px minmax(0, 1fr) 15px; align-items: center; gap: 10px;
+    min-height: 62px; padding: 7px 5px; border: 0; border-bottom: 1px solid #d7bd87; color: #3b2614;
+    background: transparent; text-align: left; font: inherit; }
+  .herbarium-entry canvas { width: 45px; height: 39px; image-rendering: pixelated; }
+  .herbarium-entry b, .herbarium-entry small { display: block; }
+  .herbarium-entry small { margin-top: 3px; color: #765533; }
+  .herbarium-specimen { display: grid; place-items: center; margin: 14px 0 10px; padding: 12px; background: rgba(120,80,30,.08); }
+  .herbarium-specimen canvas { width: 90px; height: 78px; image-rendering: pixelated; }
+  .herbarium-specimen + .bsub { white-space: normal; }
+  .herbarium-foot button[hidden] + button { grid-column: 1 / -1; }
+  .herbarium-facts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 7px 12px; margin-top: 12px; font-size: 14px; }
+  .herbarium-facts div { border-top: 1px solid #d7bd87; padding: 5px 0; }
+  .herbarium-facts dt { font-size: 12px; color: #765533; }
+  .herbarium-facts dd { margin: 2px 0 0; font-weight: 650; overflow-wrap: anywhere; }
   .book .bsub { margin-top: 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: #7a5c38; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .book .brule { margin-top: 10px; font-size: 14px; line-height: 1.4; color: #3b2614; }
   .book .brule b { color: #2b1a0e; }
@@ -4986,7 +5010,7 @@
       w.onclick = fillCan; box.appendChild(w);
       var hs = document.createElement("button"); hs.type = "button"; hs.className = "plot well house";       // домик: весь инвентарь
       hs.style.left = 2 / FW * 100 + "%"; hs.style.top = 26 / FH * 100 + "%"; hs.style.width = 62 / FW * 100 + "%"; hs.style.height = 64 / FH * 100 + "%";
-      hs.appendChild(el("span", "lbl water", "справочник")); hs.onclick = function () { haptic("light"); openBook(); }; box.appendChild(hs);
+      hs.appendChild(el("span", "lbl water", "книги")); hs.onclick = function () { haptic("light"); farmBooks(); }; box.appendChild(hs);
       var bn = document.createElement("button"); bn.type = "button"; bn.className = "plot well barn";            // амбар: собранный урожай
       bn.style.left = 76 / FW * 100 + "%"; bn.style.top = 26 / FH * 100 + "%"; bn.style.width = 44 / FW * 100 + "%"; bn.style.height = 36 / FH * 100 + "%";
       var nb = barnItems().reduce(function (a, it) { return a + it.count; }, 0), hb = hasBuild(F.state, "barn");
@@ -5848,6 +5872,150 @@
   function bookIcon(cv, s) {                                  // значок в справочнике: холст одного размера у всех форм, растение по центру внизу
     var rows = (CROP[s.shape] || CROP.moss)[3], W = 15, H = 13, c = cv.getContext("2d");
     cv.width = W; cv.height = H; c.clearRect(0, 0, W, H); sprS(c, (W - rows[0].length) >> 1, H - 1, rows, s);
+  }
+  function farmBooks() {
+    sheet(function (sh, close) {
+      sh.appendChild(el("h3", "", "Книги садовода"));
+      sh.appendChild(btn("Справочник", "ghost", function () { close(); openBook(); }));
+      sh.appendChild(btn("Гербарий", "", function () { close(); openHerbarium(); }));
+    });
+  }
+  function openHerbarium() {
+    var mutations = { shape: "Мутация формы", color: "Мутация расцветки", both: "Мутация формы и расцветки", none: "Гибрид" };
+    return sheet(function (sh, close) {
+      sh.classList.add("book"); F.bookEl = sh;
+      var page = el("div", "bpage in"), title = el("h3", "", "Гербарий");
+      var tabs = el("div", "herbarium-tabs"), activeShape = "";
+      tabs.setAttribute("role", "group"); tabs.setAttribute("aria-label", "Виды растений");
+      var standardColors = { moss: "moss", berry: "berry", crystal: "crystal", grain: "sun",
+        flower: "nebula", mushroom: "night", pumpkin: "ember", cactus: "aurora" };
+      [["", "Все"]].concat(SHAPES).forEach(function (pair) {
+        var tab = el("button", "herbarium-tab"); tab.type = "button";
+        tab.title = pair[1]; tab.setAttribute("aria-label", pair[1]);
+        if (pair[0]) {
+          var icon = el("canvas"); icon.setAttribute("aria-hidden", "true");
+          bookIcon(icon, { shape: pair[0], color: standardColors[pair[0]], base: true });
+          tab.appendChild(icon);
+        } else tab.textContent = pair[1];
+        tab.setAttribute("aria-pressed", String(!pair[0]));
+        tab.onclick = function () {
+          if (activeShape === pair[0]) return;
+          activeShape = pair[0];
+          tabs.querySelector('[aria-pressed="true"]').setAttribute("aria-pressed", "false");
+          tab.setAttribute("aria-pressed", "true");
+          loadFirstPage();
+        };
+        tabs.appendChild(tab);
+      });
+      var filters = el("div", "herbarium-filters"), search = el("input"), mode = el("select");
+      search.type = "search"; search.placeholder = "Название или код"; search.setAttribute("aria-label", "Поиск сорта");
+      mode.setAttribute("aria-label", "Сортировка или расцветка");
+      var groups = [
+        ["Дата выведения", [["newest", "Сначала новые"], ["oldest", "Сначала старые"]]],
+        ["Цена семени", [["price_asc", "Сначала дешёвые"], ["price_desc", "Сначала дорогие"]]],
+        ["Расцветка", COLORS.map(function (pair) { return ["color:" + pair[0], pair[1][2]]; }).concat([["color:anomaly", "Странная"]])],
+      ];
+      groups.forEach(function (group) {
+        var options = el("optgroup"); options.label = group[0];
+        group[1].forEach(function (pair) {
+          var option = el("option", "", pair[1]); option.value = pair[0]; options.appendChild(option);
+        });
+        mode.appendChild(options);
+      });
+      filters.append(search, mode);
+      var list = el("div", "herbarium-list"), detail = el("div"), status = el("p", "bsub"), nav = el("div", "bnav");
+      status.setAttribute("role", "status"); detail.hidden = true;
+      var prev = el("button", "bbtn", "‹"), next = el("button", "bbtn", "›"), num = el("span", "bnum");
+      prev.type = next.type = "button";
+      prev.setAttribute("aria-label", "Предыдущая страница"); next.setAttribute("aria-label", "Следующая страница");
+      nav.append(prev, num, next);
+      var back = btn("К списку", "ghost", function () {
+        title.textContent = "Гербарий";
+        detail.hidden = back.hidden = true; tabs.hidden = filters.hidden = list.hidden = status.hidden = nav.hidden = false;
+        page.scrollTop = listScroll;
+      });
+      back.hidden = true;
+      var foot = el("div", "salebtns herbarium-foot");
+      foot.append(back, btn("Закрыть", "", close));
+      page.append(title, tabs, filters, status, list, detail);
+      sh.append(page, nav, foot);
+      var current = 1, request = 0, typing, listScroll = 0;
+      function select(st) {
+        listScroll = page.scrollTop;
+        tabs.hidden = filters.hidden = list.hidden = status.hidden = nav.hidden = true;
+        detail.hidden = back.hidden = false;
+        title.textContent = st.name;
+        detail.replaceChildren();
+        var specimen = el("div", "herbarium-specimen"), icon = el("canvas", "pix");
+        bookIcon(icon, st); specimen.appendChild(icon);
+        detail.append(specimen, el("p", "bsub", strainCode(st) + " · поколение " + st.gen + " · " + (SEEDTIER[st.tier] || SEEDTIER.common)[0]));
+        var facts = el("dl", "herbarium-facts");
+        var shape = SHAPES.find(function (x) { return x[0] === st.shape; });
+        var color = COLORS.find(function (x) { return x[0] === st.color; });
+        var data = [
+          ["Автор", st.breeder || "Неизвестен"],
+          ["Дата вывода", new Intl.DateTimeFormat("ru", { timeZone: "Europe/Minsk" }).format(st.created * 1000)],
+          ["Происхождение", mutations[st.mutation] || "Гибрид · мутация неизвестна"],
+          ["Родители", st.parents ? st.parents.join(" × ") : "Не записаны"],
+          ["Вид", shape ? shape[1] : "Неизвестен"],
+          ["Расцветка", color ? color[1][2] : "Странная"],
+          ["Время роста", fmtLeft(st.minutes * 60)],
+          ["Продолжительность полива", fmtLeft(thirstOf(st) * 60)],
+          ["Пыль за урожай", st.dust + " за штуку"],
+          ["Очки за сбор", st.points],
+          ["Шанс пластинки", Math.round(st.vinyl * 100) + "%"],
+          ["Базовый шанс карты", Math.round(st.vinyl * 500) / 10 + "%"],
+          ["Семян за сбор", st.bonus === "seedy" ? "3–4" : "2–3"],
+          ["Цена семени в лавке", st.price + " пыли"],
+          ["Пыль за семя", seedDustOf(st)],
+          ["Особое свойство", st.bonus ? BONUS_SHORT[st.bonus] : "Обычные свойства"],
+        ];
+        data.forEach(function (pair) {
+          var row = el("div"); row.append(el("dt", "", pair[0]), el("dd", "", pair[1])); facts.appendChild(row);
+        });
+        detail.appendChild(facts);
+        page.scrollTop = 0;
+      }
+      function load(target) {
+        var active = ++request;
+        status.textContent = "Загружаю сорта…";
+        list.replaceChildren(); prev.disabled = next.disabled = true;
+        var options = { search: search.value, mode: mode.value, shape: activeShape, page: target };
+        sendFarmAction("/api/farm/herbarium", options).then(function (r) {
+          if (!sh.isConnected || active !== request) return;
+          current = r.page;
+          status.textContent = r.total ? "Найдено сортов: " + r.total : "Сортов не найдено";
+          num.textContent = current + " / " + r.pages;
+          prev.disabled = current === 1; next.disabled = current === r.pages;
+          r.entries.forEach(function (st) {
+            var item = el("button", "herbarium-entry"), icon = el("canvas", "pix"), label = el("span");
+            item.type = "button"; bookIcon(icon, st);
+            label.append(el("b", "", st.name), el("small", "", strainCode(st) + " · " + (st.breeder || "Автор неизвестен")));
+            item.append(icon, label, el("span", "", "›")); item.onclick = function () { select(st); };
+            list.appendChild(item);
+          });
+          page.scrollTop = 0;
+        }).catch(function (error) {
+          if (!sh.isConnected || active !== request) return;
+          status.textContent = error.cancelled ? "Проверка отменена" : "Гербарий не загрузился";
+          list.replaceChildren(btn("Повторить", "", function () { load(target); }));
+        });
+      }
+      search.oninput = function () {
+        if (typing) clearTimeout(typing);
+        request++;
+        prev.disabled = next.disabled = true;
+        typing = setTimeout(function () { if (sh.isConnected) load(1); }, 220);
+      };
+      function loadFirstPage() {
+        clearTimeout(typing);
+        load(1);
+      }
+      mode.onchange = loadFirstPage;
+      prev.onclick = function () { load(current - 1); };
+      next.onclick = function () { load(current + 1); };
+      load(1);
+    });
   }
   function openBook() {
     var s = F.state; if (!s) return;

@@ -73,6 +73,10 @@ CREATE TABLE IF NOT EXISTS f_plots (user INTEGER NOT NULL, idx INTEGER NOT NULL,
   grown INTEGER NOT NULL DEFAULT 0, wet_from INTEGER NOT NULL DEFAULT 0, water_until INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, idx));
 -- сорта (общие для всех: гибрид, выведенный одним, может купить другой), семена в мешке и в лавке, продажи
 CREATE TABLE IF NOT EXISTS f_strains (id TEXT PRIMARY KEY, name TEXT NOT NULL, genes TEXT NOT NULL, created INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS f_strain_origin (
+  strain TEXT PRIMARY KEY, breeder INTEGER, mutation TEXT, parent_a TEXT, parent_b TEXT
+);
+CREATE INDEX IF NOT EXISTS f_strains_created ON f_strains (created DESC, id DESC);
 CREATE TABLE IF NOT EXISTS f_inv (user INTEGER NOT NULL, strain TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
   listed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, strain));
 -- амбар: собранный урожай (count штук сорта strain); продаётся станции или идёт на кухню
