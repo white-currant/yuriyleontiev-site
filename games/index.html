@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611282209";
+    var BUILD = "202611282217";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -712,6 +712,8 @@
   .fly.spent { color: #ffd08a; animation-name: flydown; }
   @keyframes flyup { 0% { opacity: 0; transform: translate(-50%, 6px) scale(.8); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -38px); } }
   @keyframes flydown { 0% { opacity: 0; transform: translate(-50%, -4px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, 22px); } }
+  #shop-refresh { flex: 0 0 32px; padding: 0; justify-content: center; }
+  #shop-refresh:disabled { opacity: .5; }
   #shopdust.bump { animation: dustbump .4s ease-out; }
   #shopdust.bad { animation: dustbad .4s ease-out; }
   @keyframes dustbump { 30% { transform: scale(1.25); filter: brightness(1.4); } }
@@ -1204,7 +1206,17 @@
   </section>
 
   <section class="screen" id="farm-shop" hidden>
-    <div class="farm-top"><button class="exit" type="button" data-go="farm">← На ферму</button><div class="dust-pill" id="shopdust">✦ 0</div></div>
+    <div class="farm-top">
+      <button class="exit" type="button" data-go="farm">← На ферму</button>
+      <div class="pills">
+        <button class="exit" type="button" id="shop-refresh" aria-label="Обновить" title="Обновить">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 11a8 8 0 0 0-13.7-5.7L4 8m0-4v4h4M4 13a8 8 0 0 0 13.7 5.7L20 16m-4 0h4v4"/>
+          </svg>
+        </button>
+        <div class="dust-pill" id="shopdust">✦ 0</div>
+      </div>
+    </div>
     <h2 style="margin-top:16px;font-size:24px;letter-spacing:-.02em">Лавка</h2>
     <div class="tabs" id="shoptabs"><button type="button" data-st="buy" aria-pressed="true">Купить</button><button type="button" data-st="sell" aria-pressed="false">Продать</button></div>
     <div class="seg cats" id="shopcats"><button type="button" data-cat="seed" aria-pressed="true">Семена</button><button type="button" data-cat="crop" aria-pressed="false">Урожай</button><button type="button" data-cat="food" aria-pressed="false">Блюда</button></div>
@@ -7763,7 +7775,9 @@
     if (shopSeedObserver) shopSeedObserver.disconnect();
     box.innerHTML = ""; setText($("shopdust"), "✦ " + formatGameNumber(s.dust));
     // в «Купить» — кружок: сколько штук игроки выставили в разделе
-    var entry = shopOffers.get(marketKey()), now = Date.now();
+    var entry = shopOffers.get(marketKey()), now = Date.now(), refresh = $("shop-refresh");
+    refresh.hidden = F.shopTab !== "buy";
+    refresh.disabled = !!(entry && entry.pending);
     document.querySelectorAll("#shopcats button").forEach(function (b) {
       b.setAttribute("aria-pressed", String(b.dataset.cat === F.shopCat));
       var old = b.querySelector(".badge"); if (old) old.remove();
@@ -8471,6 +8485,13 @@
   $("todg").onclick = function () { if (!dgLocked) openDungeon(); }; $("dgart").onclick = function () { if (!dgLocked) openDungeon(); };
   $("toneighbors").onclick = openNeighbors;
   $("toshop").onclick = function () { openShop("buy"); };
+  $("shop-refresh").onclick = function () {
+    if (F.shopTab !== "buy" || pauseTrade()) return;
+    haptic("light");
+    var entry = shopOffers.get(marketKey());
+    if (entry) entry.until = 0;
+    loadShopOffers();
+  };
   $("decorbtn").onclick = function () { haptic("light"); decorSheet(); };
   document.querySelectorAll("#shoptabs button").forEach(function (b) { b.onclick = function () { haptic("light"); F.shopSel = null; openShop(b.dataset.st); }; });
   document.querySelectorAll("#shopcats button").forEach(function (b) { b.onclick = function () { selectShopCategory(b.dataset.cat); }; });
