@@ -459,8 +459,9 @@ export const COAL_DUST = 120;
 const BURN_PER_DAY = 3;                                      // вспышек на ферму за сутки (без Огненной ночи)
 const near4 = (i: number) => [i - 3, i + 3, i % 3 ? i - 1 : -1, i % 3 < 2 ? i + 1 : -1].filter((x) => x >= 0 && x < PLOTS_MAX);
 // наступившие события: уголь и комета появляются к своему времени; просроченный иней тает. Возвращает события по грядкам.
-async function plotEvents(uid: number) {
-  const t = now(), rows = await q("SELECT idx, kind, at, until FROM f_plotev WHERE user = ?", [uid]), out: Record<number, any> = {};
+const PLOT_EVENTS_SQL = "SELECT idx, kind, at, until FROM f_plotev WHERE user = ?";
+async function plotEvents(uid: number, known?: any[][]) {
+  const t = now(), rows = known ?? await q(PLOT_EVENTS_SQL, [uid]), out: Record<number, any> = {};
   // огненное растение на соседней грядке растапливает иней, даже если его посадили раньше, чем грядка замёрзла (Yehor, 2026-11-16)
   let fireAt: number[] = [];
   if (rows.some((r) => String(r[1]) === "frost")) {
@@ -718,7 +719,7 @@ function farmReads(uid: number, t: number): [string, any[]][] {
     ["SELECT at FROM f_evlog WHERE user = ? AND kind = 'odd:win' ORDER BY at DESC LIMIT 1", [uid]],
     [`SELECT ${PLOT_COLS} FROM f_plots WHERE user = ?`, [uid]],
     ["SELECT started FROM f_mono WHERE user = ? AND kind = 'moss' AND until <= ?", [uid, t]],
-    ["SELECT idx, kind, at, until FROM f_plotev WHERE user = ?", [uid]],
+    [PLOT_EVENTS_SQL, [uid]],
     ["SELECT dust, unlocked, pub, water FROM f_farms WHERE user = ?", [uid]],
     ["SELECT strain, count, listed FROM f_inv WHERE user = ? AND count > 0", [uid]],
     [SEED_DROP_READ, [uid, t - SEED_DROP_SECONDS]],
@@ -925,13 +926,14 @@ function plotAudit(uid: number, at: number, action: PlotAction, idx: number, str
 export async function auditPlotRejection(uid: number, at: number, action: PlotAction, idx: number, reason: string) {
   await plotAudit(uid, at, action, idx, null, null, "rejected", reason).raw();
 }
-export async function plant(u: any, idx: number, crop: string, receivedAt = Date.now()) {
-  if (!(idx >= 0 && idx < PLOTS_MAX) || !crop) return { error: "Нет такой грядки или семян" };
+export async function plant(u: any, idx: number, crop: string, receivedAt = Date.now(), compact = false) {
+  if (!(Number.isInteger(idx) && idx >= 0 && idx < PLOTS_MAX) || !crop) return { error: "Нет такой грядки или семян" };
   await ensureFarm(u);
   const [[unlocked]] = await q("SELECT unlocked FROM f_farms WHERE user = ?", [u.id]);
   if (idx >= Number(unlocked)) return { error: "Грядка ещё закрыта" };
   if ((await q("SELECT 1 FROM f_plots WHERE user = ? AND idx = ?", [u.id, idx])).length) return { error: "Грядка занята" };
-  await plotEvents(u.id);
+  const previousEvents = compact ? await q(PLOT_EVENTS_SQL, [u.id]) : undefined;
+  await plotEvents(u.id, previousEvents);
   if ((await q("SELECT 1 FROM f_plotev WHERE user = ? AND idx = ? AND kind = 'frost'", [u.id, idx])).length) return { error: "Грядка замёрзла" };
   if ((await q("SELECT 1 FROM f_plotev WHERE user = ? AND idx = ? AND kind = 'crater'", [u.id, idx])).length) return { error: "Сначала убери кратер" };
   const t = now();
@@ -939,7 +941,7 @@ export async function plant(u: any, idx: number, crop: string, receivedAt = Date
   const mossy = crop !== "moss" && await mossNow(u.id);
   // сажаем всегда из мешка; выставленные в лавку не трогаем
   const ok = mossy ? await q("SELECT 1 FROM f_inv WHERE user = ? AND strain = ? AND count - listed > 0", [u.id, crop])
-                   : await q("UPDATE f_inv SET count = count - 1 WHERE user = ? AND strain = ? AND count - listed > 0 RETURNING 1", [u.id, crop]);
+                   : await q("UPDATE f_inv SET count = count - 1 WHERE user = ? AND strain = ? AND count - listed > 0 RETURNING count, listed", [u.id, crop]);
   if (!ok.length) return { error: "Таких семян у тебя нет" };
   if (mossy) crop = "moss";
   // посадили сухим — сразу после посадки нужно полить
@@ -984,7 +986,15 @@ export async function plant(u: any, idx: number, crop: string, receivedAt = Date
       ...nb.map((i) => DB.prepare("INSERT OR REPLACE INTO f_monomark (user, idx, kind, at) VALUES (?, ?, 'myth', ?)").bind(u.id, i, t))]);
   }
   const mono = await checkMono(u.id);
-  return { points: POINTS_PLANT, thawed, mono, mossy, farm: await farmState(u) };
+  const result = { points: POINTS_PLANT, thawed, mono, mossy };
+  if (compact && previousEvents?.length === 0 && s && !s.odd && !s.myth && !mono && !mossy && !thawed.length) {
+    const [count, listed] = ok[0];
+    return { ...result, farm_patch: {
+      kind: "plant", plot: plotView([idx, crop, t, 0, t, t], idx, Number(unlocked)),
+      seed: { strain: crop, count: Number(count), listed: Number(listed) }, now: now(),
+    } };
+  }
+  return { ...result, farm: await farmState(u) };
 }
 
 // ---------- ночная аномалия в общей лавке (его решение 2026-11-18) ----------
@@ -1070,8 +1080,9 @@ export async function fill(u: any) {
   return { farm: await farmState(u) };
 }
 
-export async function water(u: any, idx: number, receivedAt = Date.now()) {
-  const EVW = await plotEvents(u.id);
+export async function water(u: any, idx: number, receivedAt = Date.now(), compact = false) {
+  const previousEvents = compact ? await q(PLOT_EVENTS_SQL, [u.id]) : undefined;
+  const EVW = await plotEvents(u.id, previousEvents);
   if (EVW[idx] && EVW[idx].kind === "burning") {                 // потушить горящую грядку: полив из лейки, уголь — сразу
     if (!(await q("UPDATE f_farms SET water = water - 1 WHERE user = ? AND water > 0 RETURNING 1", [u.id])).length) return { error: "Лейка пуста — набери воды в колодце" };
     const [doused] = await DB.batch([
@@ -1092,19 +1103,25 @@ export async function water(u: any, idx: number, receivedAt = Date.now()) {
   if (weatherOn(t) === "shower") return { error: "Сегодня лунный ливень — грядки политы сами" };
   // поливается только сухая грядка: иначе лейкой можно было бы «накликивать» очки
   if (t < Number(p[5])) return { error: "Грядка ещё влажная" };
-  if (!(await q("UPDATE f_farms SET water = water - 1 WHERE user = ? AND water > 0 RETURNING 1", [u.id])).length)
-    return { error: "Лейка пуста — набери воды в колодце" };
+  const [water] = await q("UPDATE f_farms SET water = water - 1 WHERE user = ? AND water > 0 RETURNING water", [u.id]);
+  if (!water) return { error: "Лейка пуста — набери воды в колодце" };
   // накопленный рост фиксируем и открываем новое окно полива
   // окно полива открывает ровно один запрос (условие water_until <= сейчас) — двойное нажатие не даст очки дважды
+  const grown = growth(p, t, boost, rainSlow(s));
+  const wetUntil = t + s.thirst * 60 * (weatherOn(t) === "drought" ? 0.5 : 1) * (s.bonus === "hardy" ? 2 : 1);
   const [done] = await DB.batch([
     DB.prepare("UPDATE f_plots SET grown = ?, wet_from = ?, water_until = ? WHERE user = ? AND idx = ? AND crop = ? AND planted = ? AND water_until <= ? RETURNING 1")
-      .bind(growth(p, t, boost, rainSlow(s)), t, t + s.thirst * 60 * (weatherOn(t) === "drought" ? 0.5 : 1) * (s.bonus === "hardy" ? 2 : 1),
-        u.id, idx, s.id, p[2], t),
+      .bind(grown, t, wetUntil, u.id, idx, s.id, p[2], t),
     plotAudit(u.id, receivedAt, "water", idx, s.id, 1, "ok", null, true),
     DB.prepare("INSERT INTO g_events (user, name, delta, reason, at) SELECT ?, ?, ?, ?, ? WHERE changes() = 1")
       .bind(u.id, nameOf(u), POINTS_WATER, "Лунная ферма", t),
   ]);
   if (!done.results?.length) { await q("UPDATE f_farms SET water = water + 1 WHERE user = ?", [u.id]); return { error: "Грядка ещё влажная" }; }
+  if (compact && previousEvents?.length === 0 && !s.myth && !s.odd) return {
+    points: POINTS_WATER,
+    farm_patch: { kind: "water", plot: { idx, crop: s.id, planted: Number(p[2]), grown, wet_from: t, water_until: wetUntil },
+      water: Number(water[0]), now: now() },
+  };
   return { points: POINTS_WATER, farm: await farmState(u) };
 }
 
@@ -2228,6 +2245,7 @@ function herbariumEntry([id, title, genes, created, uid, breeder, mutation, a, b
 }
 
 // Гербарий: все выведенные сорта, включая те, которых у игрока никогда не было.
+const HERBARIUM_SEARCH_COUNTS = new Map<string, { revision: number; total: number }>();
 export async function herbarium(options: { search?: unknown; mode?: unknown; page?: unknown; shape?: unknown }, hidden: number[]) {
   const { search, mode, page, shape } = options;
   const size = 20;
@@ -2240,12 +2258,14 @@ export async function herbarium(options: { search?: unknown; mode?: unknown; pag
     where += ` AND (${name} LIKE ? ESCAPE '!' OR ${name} LIKE ? ESCAPE '!' OR s.id LIKE ? ESCAPE '!')`;
     args.push(`%${text}%`, `%${firstCapital}%`, `${text.startsWith("h") ? "" : "h"}${text}%`);
   }
-  if (typeof shape === "string" && SHAPES.includes(shape)) {
+  const species = typeof shape === "string" && SHAPES.includes(shape) ? shape : "";
+  if (species) {
     where += " AND json_extract(s.genes, '$.shape') = ?";
-    args.push(shape);
+    args.push(species);
   }
-  const color = typeof mode === "string" && mode.startsWith("color:") ? mode.slice(6) : "";
-  if (COLORS.includes(color) || color === "anomaly") {
+  const selected = typeof mode === "string" && mode.startsWith("color:") ? mode.slice(6) : "";
+  const color = COLORS.includes(selected) || selected === "anomaly" ? selected : "";
+  if (color) {
     where += " AND json_extract(s.genes, '$.color') = ?";
     args.push(color);
   }
@@ -2259,7 +2279,26 @@ export async function herbarium(options: { search?: unknown; mode?: unknown; pag
     order = `${price} ${mode === "price_asc" ? "ASC" : "DESC"}, ${order}`;
   }
   const from = "FROM f_strains s LEFT JOIN f_strain_origin o ON o.strain = s.id";
-  const [[total]] = await q(`SELECT COUNT(*) ${from} WHERE ${where}`, args);
+  let total: number;
+  if (!query) {
+    const filters = ["shape <> '*'"];
+    const values = [];
+    if (species) { filters.push("shape = ?"); values.push(species); }
+    if (color) { filters.push("color = ?"); values.push(color); }
+    const [[count]] = await q(`SELECT COALESCE(SUM(n), 0) FROM f_herbarium_counts WHERE ${filters.join(" AND ")}`, values);
+    total = Number(count);
+  } else {
+    const [[revision]] = await q("SELECT n FROM f_herbarium_counts WHERE shape = '*' AND color = '*'");
+    const key = JSON.stringify([query, species, color]);
+    const cached = HERBARIUM_SEARCH_COUNTS.get(key);
+    if (cached?.revision === revision) total = cached.total;
+    else {
+      const [[count]] = await q(`SELECT COUNT(*) FROM f_strains s WHERE ${where}`, args);
+      total = Number(count);
+      if (HERBARIUM_SEARCH_COUNTS.size >= 128) HERBARIUM_SEARCH_COUNTS.clear();
+      HERBARIUM_SEARCH_COUNTS.set(key, { revision, total });
+    }
+  }
   const pages = Math.max(1, Math.ceil(total / size));
   const current = Math.min(pages, Math.max(1, Math.trunc(Number(page)) || 1));
   const rows = await q(`SELECT ${HERBARIUM_COLUMNS}
@@ -2301,17 +2340,38 @@ export async function herbariumLineage(id: unknown) {
 }
 
 // рынок: все семена, выставленные игроками (кроме своих). Наружу — публичное имя продавца и номер участка (pub), не аккаунт.
-export async function market(u: any, hidden: number[], exact?: unknown) {
+export async function market(u: any, hidden: number[], exact?: unknown, seedPage?: unknown) {
   const strain = typeof exact === "string" && /^h[0-9a-f]{10}$/.test(exact) ? exact : "";
   if (exact != null && !strain) return { offers: [], items: [], strains: {}, products: {}, bonuses: BONUSES };
-  const rows = await q(`SELECT i.user, f.pub, i.strain, i.listed, p.name, pr.price FROM f_inv i JOIN f_farms f ON f.user = i.user
-                        LEFT JOIN g_profiles p ON p.user = i.user LEFT JOIN f_prices pr ON pr.user = i.user AND pr.item = 's:' || i.strain
-                        WHERE i.listed > 0 AND i.user != ? ${strain ? "AND i.strain = ?" : ""} LIMIT 200`, strain ? [u.id, strain] : [u.id]);
+  const filter = typeof seedPage === "string" ? /^(\d+):(\d+)$/.exec(seedPage) : null;
+  const cursor = filter ? [Number(filter[1]), Number(filter[2])] : [];
+  if (typeof seedPage === "string" && (!filter || cursor.some((value) => !Number.isSafeInteger(value) || value <= 0)))
+    return { error: "Обнови предложения лавки" };
+  const paged = !strain && (seedPage === true || cursor.length > 0);
+  const size = 30;
+  const rows = paged
+    ? await q(`SELECT i.user, f.pub, i.strain, i.listed, p.name, pr.price, i.offer_id FROM (
+        SELECT user, strain, listed, rowid AS offer_id FROM f_inv
+        WHERE listed > 0 AND user != ? ${cursor.length ? "AND listed >= ? AND (listed, rowid) > (?, ?)" : ""}
+        ORDER BY listed, rowid LIMIT ?
+      ) i JOIN f_farms f ON f.user = i.user
+      LEFT JOIN g_profiles p ON p.user = i.user LEFT JOIN f_prices pr ON pr.user = i.user AND pr.item = 's:' || i.strain
+      ORDER BY i.listed, i.offer_id`, [u.id, ...(cursor.length ? [cursor[0], ...cursor] : []), size + 1])
+    : await q(`SELECT i.user, f.pub, i.strain, i.listed, p.name, pr.price FROM f_inv i JOIN f_farms f ON f.user = i.user
+      LEFT JOIN g_profiles p ON p.user = i.user LEFT JOIN f_prices pr ON pr.user = i.user AND pr.item = 's:' || i.strain
+      WHERE i.listed > 0 AND i.user != ? ${strain ? "AND i.strain = ?" : ""} LIMIT 200`, strain ? [u.id, strain] : [u.id]);
+  let next_seed_page: string | null = null;
+  if (paged && rows.length > size) {
+    rows.pop();
+    const last = rows[rows.length - 1];
+    next_seed_page = last[3] + ":" + last[6];
+  }
   const ss = await strains(rows.map((r) => r[2]));
   const offers = rows.map(([uid, pub, strain, n, name, own]) => ({ pub, strain, count: Number(n), price: ss[strain] ? sellerPrice(ss[strain].price!, own) : 0,
                                                                seller: hidden.includes(Number(uid)) ? "Сосед" : name || "Сосед" }))
     .filter((o) => ss[o.strain]).sort((a, b) => b.price - a.price);
   if (strain) return { offers, items: [], strains: ss, products: {}, bonuses: BONUSES };
+  if (cursor.length) return { offers, items: [], strains: ss, products: {}, bonuses: BONUSES, next_seed_page };
   const an = await anomalyLive();                                // ночная аномалия — среди семян игроков, на случайном месте
   if (an) { ss.anomaly = view(CROPS.anomaly); offers.splice(fnv(an.key) % (offers.length + 1), 0, { pub: ANOM_PUB, strain: "anomaly", count: 1, price: an.price, seller: an.seller }); }
   const st = await q(`SELECT s.user, f.pub, s.item, s.listed, p.name, pr.price FROM f_stall s JOIN f_farms f ON f.user = s.user
@@ -2320,7 +2380,7 @@ export async function market(u: any, hidden: number[], exact?: unknown) {
   const ii = await itemInfo(st.map((r) => String(r[2])));
   const items = st.map(([uid, pub, item, n, name, own]) => ({ pub, item: String(item), count: Number(n), price: ii.info[String(item)] ? sellerPrice(stallPrice(ii.info[String(item)].dust), own) : 0,
                                                           seller: hidden.includes(Number(uid)) ? "Сосед" : name || "Сосед" })).filter((o) => o.price);
-  return { offers, items, strains: { ...ss, ...ii.strains }, products: ii.products, bonuses: BONUSES };
+  return { offers, items, strains: { ...ss, ...ii.strains }, products: ii.products, bonuses: BONUSES, next_seed_page };
 }
 
 export async function salesSeen(u: any) {

@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611272244";
+    var BUILD = "202611281454";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -202,7 +202,6 @@
     background: #17142c; border-top: 1px solid rgba(255, 255, 255, .1); animation: up .22s ease-out; }
   @keyframes up { from { transform: translateY(30px); opacity: 0; } }
   .sheet h3 { font-size: 18px; font-weight: 700; }
-  .farm-check-widget { min-height: 130px; display: grid; place-items: center; margin: 12px 0; }
   .sheet { position: relative; }
   .sheet > .shx { position: absolute; top: 10px; right: 10px; z-index: 3; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%;
                   background: rgba(255, 255, 255, .1); color: var(--white); font-size: 17px; line-height: 1; cursor: pointer; }
@@ -699,6 +698,7 @@
   @keyframes dustbump { 30% { transform: scale(1.25); filter: brightness(1.4); } }
   @keyframes dustbad { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
   /* лавка: шапка с балансом остаётся наверху при прокрутке */
+  .shop-seed-end { height: 1px; }
   #farm-shop .farm-top { position: sticky; top: 0; z-index: 6; margin: calc(-18px - var(--top)) -16px 0; padding: calc(var(--top) + 12px) 16px 10px;
     background: rgba(29, 22, 56, .92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
   .invcount { align-self: center; font-size: 12.5px; color: var(--dim); }
@@ -1276,7 +1276,6 @@
       .then(function (r) { syncFarmPause(r); return r.json().then(function (j) {
         if (r.ok) return j;
         var error = new Error(j.error || r.status);
-        if (j.farm_check) error.farmCheck = j.farm_check;
         throw error;
       }); });
   }
@@ -1322,7 +1321,8 @@
     ["home", "game", "nope", "farm", "farm-shop", "farm-neighbors", "farm-visit"].forEach(function (s) { $(s).hidden = s !== id; });
     var was = document.body.dataset.screen; document.body.dataset.screen = id; scrollTo(0, 0);
     playSelect(playGameFor(id));
-    if ((farmSession || farmPermit) && id.indexOf("farm") !== 0) leaveFarm();
+    if (farmSession && id.indexOf("farm") !== 0) leaveFarm();
+    if (was === "farm-shop" && id !== was && shopSeedObserver) shopSeedObserver.disconnect();
     if (id !== "farm") dropGem();
     if (was && was !== id) document.querySelectorAll(".sheet-wrap,.thanks-wrap").forEach(function (w) { w.remove(); });   // ушёл с экрана — его окна закрываются (баг 2026-11-16: окно семени осталось поверх гильдии)
     if (!document.querySelector(".sheet-wrap")) document.documentElement.classList.remove("locked");
@@ -3963,229 +3963,28 @@
   }
   // На экране действия видны сразу, на сервер отправляем их в порядке нажатий.
   F.pending = 0;
-  var farmWrites = Promise.resolve(), farmRevision = 0, cancelledFarmRevision = 0;
+  var farmWrites = Promise.resolve(), farmRevision = 0, farmSnapshotAt = 0;
   function loadFarm(entering) {
     var revision = farmRevision, canApply = !F.pending, session = farmSession;
-    var request = entering ? sendFarmAction("/api/farm") : farmRequest("/api/farm", {}, farmPermit);
-    return request.then(function (st) {
+    return call("/api/farm").then(function (st) {
       if (!entering && canApply && !F.pending && revision === farmRevision && session === farmSession) setFarm(st);
       return st;
     });
   }
-  var farmPermit = "", farmSession = null, farmOpening = null, farmCheckPending = null, turnstileLoader = null;
-  function revokeFarmPermit(permit) {
-    if (permit) call("/api/farm/leave", { farm_permit: permit }, true).catch(function () {});
-  }
-  function leaveFarm() {
-    var permit = farmPermit;
-    farmPermit = "";
-    farmSession = null;
-    revokeFarmPermit(permit);
-  }
+  var farmSession = null, farmOpening = null;
+  function leaveFarm() { farmSession = null; }
   window.addEventListener("pagehide", leaveFarm);
-  function farmRequest(path, body, permit) {
-    return call(path, permit ? Object.assign({}, body, { farm_permit: permit }) : body);
-  }
-  function loadFarmTurnstile() {
-    if (!turnstileLoader) {
-      turnstileLoader = new Promise(function (resolve, reject) {
-        var script = el("script");
-        var timer = setTimeout(failed, 20000);
-        function cleanup() {
-          clearTimeout(timer);
-          delete window.onFarmTurnstileLoad;
-        }
-        function failed() {
-          cleanup();
-          script.remove();
-          reject(new Error("Не удалось загрузить капчу. Проверь подключение и попробуй ещё раз."));
-        }
-        window.onFarmTurnstileLoad = function () {
-          if (!window.turnstile || typeof window.turnstile.render !== "function") return failed();
-          cleanup();
-          resolve();
-        };
-        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onFarmTurnstileLoad";
-        script.onerror = failed;
-        document.head.appendChild(script);
-      }).catch(function (e) { turnstileLoader = null; throw e; });
-    }
-    return turnstileLoader;
-  }
-  function confirmFarmPlay(check) {
-    if (farmCheckPending) return farmCheckPending;
-    farmCheckPending = new Promise(function (resolve, reject) {
-      var widget, mount, status, retry, browser, claim, closeSheet, watcher, timer, attempt = 0;
-      var finished = false, verifying = false, browserId = "";
-      function clearWidget() {
-        clearTimeout(timer);
-        if (widget !== undefined) {
-          window.turnstile.remove(widget);
-          widget = undefined;
-        }
-      }
-      function finish(error, permit) {
-        if (finished) return;
-        finished = true;
-        watcher.disconnect();
-        clearWidget();
-        closeSheet();
-        if (bb && document.body.dataset.screen === "home" && !document.querySelector(".sheet-wrap")) bb.hide();
-        if (error) reject(error);
-        else {
-          if (farmOpening) $("farm-loading").hidden = false;
-          resolve(permit);
-        }
-      }
-      function offerBrowserCheck() {
-        if (!check.browser || !browser.hidden) return;
-        var current = attempt;
-        browser.hidden = false;
-        browser.disabled = true;
-        call("/api/farm/browser/start").then(function (r) {
-          if (finished || current !== attempt) return;
-          browserId = r.id;
-          browser.disabled = false;
-        }).catch(function () {
-          if (!finished && current === attempt) browser.hidden = true;
-        });
-      }
-      function openBrowserCheck() {
-        if (!browserId) return;
-        attempt++;
-        clearWidget();
-        browser.hidden = true;
-        claim.hidden = false;
-        claim.disabled = false;
-        mount.hidden = true;
-        status.textContent = "Пройди проверку в браузере, вернись сюда и нажми «Продолжить на ферму».";
-        var link = new URL("farm-check.html", location.href);
-        link.hash = new URLSearchParams({ check: browserId, sitekey: check.sitekey }).toString();
-        if (tg && tg.openLink) tg.openLink(link.href);
-        else window.open(link.href, "_blank", "noopener,noreferrer");
-      }
-      function claimBrowserCheck() {
-        var current = attempt;
-        claim.disabled = true;
-        call("/api/farm/browser/claim", { id: browserId }).then(function (r) {
-          if (finished || !wrap.isConnected || current !== attempt) revokeFarmPermit(r.permit);
-          else if (r.permit) finish(null, r.permit);
-          else status.textContent = "Проверка в браузере пока не завершена. Закончи её и вернись сюда.";
-        }).catch(function (e) {
-          if (finished || current !== attempt) return;
-          status.textContent = e.message;
-          offerBrowserCheck();
-        }).finally(function () {
-          if (!finished && current === attempt) claim.disabled = false;
-        });
-      }
-      function startCheck() {
-        var current = ++attempt;
-        clearWidget();
-        retry.hidden = true;
-        browser.hidden = true;
-        claim.hidden = true;
-        browserId = "";
-        mount.hidden = false;
-        verifying = false;
-        status.textContent = "Загружаю проверку…";
-        function active() { return !finished && wrap.isConnected && current === attempt; }
-        function fail(message) {
-          if (!active()) return;
-          attempt++;
-          status.textContent = message;
-          retry.hidden = false;
-          mount.hidden = true;
-          clearWidget();
-          browser.hidden = true;
-          offerBrowserCheck();
-        }
-        loadFarmTurnstile().then(function () {
-          if (!active()) return;
-          timer = setTimeout(function () {
-            if (!active()) return;
-            status.textContent = "Проверка занимает больше времени. Можно подождать или повторить.";
-            retry.hidden = false;
-            offerBrowserCheck();
-          }, 12000);
-          widget = window.turnstile.render(mount, {
-            sitekey: check.sitekey, cData: check.session, action: "farm-play",
-            theme: "dark", size: "compact", language: "ru", appearance: "always", "response-field": false,
-            "before-interactive-callback": function () {
-              if (!active()) return;
-              clearTimeout(timer);
-              retry.hidden = true;
-              status.textContent = "Поставь галочку, чтобы открыть ферму.";
-            },
-            callback: function (token) {
-              if (!active() || verifying) return;
-              clearTimeout(timer);
-              retry.hidden = true;
-              browser.hidden = true;
-              verifying = true;
-              status.textContent = "Проверяю…";
-              call("/api/farm/verify", { token: token }).then(function (r) {
-                if (!active()) revokeFarmPermit(r.permit);
-                else finish(null, r.permit);
-              }).catch(function (e) { fail(e.message); });
-            },
-            "error-callback": function () { fail("Капча не запустилась. Попробуй ещё раз."); },
-            "unsupported-callback": function () { fail("Эта версия Telegram не поддерживает проверку. Обнови приложение и попробуй ещё раз."); },
-            "timeout-callback": function () { fail("Время проверки истекло. Попробуй ещё раз."); },
-          });
-          if (!active()) clearWidget();
-        }).catch(function (e) { fail(e.message); });
-      }
-      var bb = tg && tg.BackButton;
-      var wrap = sheet(function (sh, close) {
-        closeSheet = close;
-        sh.appendChild(el("h3", "", "Вход на Лунную ферму"));
-        status = el("p", "sub");
-        status.setAttribute("role", "status");
-        sh.appendChild(status);
-        mount = el("div", "farm-check-widget"); sh.appendChild(mount);
-        retry = btn("Повторить проверку", "", startCheck); sh.appendChild(retry);
-        browser = btn("Открыть капчу в браузере", "ghost", openBrowserCheck); sh.appendChild(browser);
-        claim = btn("Продолжить на ферму", "", claimBrowserCheck); sh.appendChild(claim);
-        sh.appendChild(btn("Отмена", "ghost", close));
-      }, true);
-      if (farmOpening) $("farm-loading").hidden = true;
-      if (bb) bb.show();
-      watcher = new MutationObserver(function () {
-        if (!wrap.isConnected) finish(Object.assign(new Error("Проверка отменена"), { cancelled: true }));
-      });
-      watcher.observe(document.body, { childList: true });
-      startCheck();
-    }).finally(function () { farmCheckPending = null; });
-    return farmCheckPending;
-  }
-  function sendFarmAction(path, body) {
-    var sentPermit = farmPermit, screen = document.body.dataset.screen;
-    function onSameScreen() { return document.body.dataset.screen === screen && !document.hidden && (!tg || tg.isActive !== false); }
-    return farmRequest(path, body, sentPermit).catch(function (error) {
-      if (!error.farmCheck || !onSameScreen()) throw error;
-      if (farmPermit && sentPermit !== farmPermit) return farmRequest(path, body, farmPermit);
-      return confirmFarmPlay(error.farmCheck).then(function (permit) {
-        if (!onSameScreen()) {
-          revokeFarmPermit(permit);
-          throw Object.assign(new Error("Проверка отменена"), { cancelled: true });
-        }
-        farmPermit = permit;
-        return farmRequest(path, body, permit);
-      });
-    });
-  }
   function farmCall(path, body) {
+    // Очередь быстрых действий заканчиваем полным состоянием, чтобы не затереть оптимистичные изменения.
+    if (!F.pending && F.state && Date.now() - farmSnapshotAt < 60000
+        && !hasBuild(F.state, "hive") && !F.state.mono
+        && (path === "/api/farm/plant" || path === "/api/farm/water")) {
+      body = Object.assign({}, body, { compact: true });
+    }
     F.pending++;
-    var revision = ++farmRevision, eggCollection = F.eggCollection;
-    var send = function () {
-      if (revision <= cancelledFarmRevision)
-        throw Object.assign(new Error("Проверка отменена"), { cancelled: true });
-      return sendFarmAction(path, body).catch(function (e) {
-        if (e.cancelled) cancelledFarmRevision = farmRevision;
-        throw e;
-      });
-    };
+    farmRevision++;
+    var eggCollection = F.eggCollection;
+    var send = function () { return call(path, body); };
     var request = farmWrites.then(function () { return eggCollection ? eggCollection.then(send, send) : send(); });
     farmWrites = request.then(function () {}, function () {});
     return request.then(function (r) {
@@ -4195,11 +3994,14 @@
         if (!F.pending) loadFarm().catch(function () {});
         return r;
       }
-      if (r.farm && !F.pending) setFarm(r.farm);
+      if (!F.pending) {
+        if (r.farm) setFarm(r.farm);
+        else if (r.farm_patch && !applyFarmPatch(r.farm_patch)) loadFarm().catch(function () {});
+      }
       return r;
     }, function (e) {
       F.pending--;
-      if (!e.cancelled) toast("Не получилось: " + e.message);
+      toast("Не получилось: " + e.message);
       if (!F.pending) loadFarm().catch(function () {});
       throw e;
     });
@@ -5230,7 +5032,30 @@
       setTimeout(function () { if (cm) { sceneShake(380); haptic("medium"); } else haptic("medium"); }, 500 + d * 700 + (cm ? 840 : 0)); d++; });
     F.evSeen = nk; try { localStorage.setItem("farm_evseen", JSON.stringify(nk)); } catch (e) {}
   }
-  function setFarm(st) {
+  function applyFarmPatch(patch) {
+    var s = F.state, plot = patch.plot, current = s && s.plots[plot.idx];
+    if (!current || current.crop !== plot.crop) return false;
+    if (patch.kind === "water") {
+      if (current.planted !== plot.planted) return false;
+      s.plots[plot.idx] = Object.assign({}, current, plot);
+      s.water = patch.water;
+    } else {
+      var seed = patch.seed, item = bagOf(seed.strain);
+      if (item) Object.assign(item, seed);
+      else if (seed.count) s.inv.push(seed);
+      s.inv = s.inv.filter(function (it) { return it.count > 0; });
+      if (seed.count <= seed.listed && s.seed_drops) delete s.seed_drops[seed.strain];
+      s.plots[plot.idx] = plot;
+      s.marks = marksOf(s).filter(function (mark) {
+        return mark.idx !== plot.idx || ["wild", "g2", "gseed", "gcross", "oddfresh"].indexOf(mark.kind) < 0;
+      });
+    }
+    s.now = patch.now;
+    setFarm(s, true);
+    return true;
+  }
+  function setFarm(st, compact) {
+    if (!compact) farmSnapshotAt = Date.now();
     siblings(st);
     var wasW = F.state && F.state.wanderer && F.state.wanderer.left > 0 && F.wanderIn;       // стоял странник, а полнолуние кончилось — уходит
     evSpot(st);
@@ -5269,7 +5094,7 @@
       else renderFarm();
       farmLoop(); farmAnim(); showNotice(); slimeRaid();
     }).catch(function (e) {
-      if (!e.cancelled) toast("Не получилось: " + e.message);
+      toast("Не получилось: " + e.message);
     }).finally(function () {
       loading.hidden = true;
       farmOpening = null;
@@ -6100,7 +5925,7 @@
           if (!tree.open || loaded || loading) return;
           loading = true;
           content.replaceChildren(el("p", "herbarium-lineage-message", "Загружаю родословную…"));
-          sendFarmAction("/api/farm/herbarium/lineage", { id: st.id }).then(function (r) {
+          call("/api/farm/herbarium/lineage", { id: st.id }).then(function (r) {
             if (!tree.isConnected) return;
             var nodes = new Map(r.nodes.map(function (node) { return [node.id, node]; }));
             var root = nodes.get(r.root);
@@ -6158,13 +5983,13 @@
       function openAncestor(id, button) {
         var active = ++cardRequest;
         button.disabled = true;
-        sendFarmAction("/api/farm/herbarium/strain", { id: id }).then(function (st) {
+        call("/api/farm/herbarium/strain", { id: id }).then(function (st) {
           if (!button.isConnected || active !== cardRequest) return;
           cardHistory.push({ title: title.textContent, content: Array.from(detail.childNodes), scroll: page.scrollTop, button: button });
           back.textContent = "К прошлому сорту";
           drawCard(st);
         }).catch(function (error) {
-          if (button.isConnected && active === cardRequest && !error.cancelled) toast("Не удалось открыть сорт: " + error.message);
+          if (button.isConnected && active === cardRequest) toast("Не удалось открыть сорт: " + error.message);
         }).finally(function () { button.disabled = false; });
       }
       function select(st) {
@@ -6237,7 +6062,7 @@
         status.textContent = "Загружаю сорта…";
         list.replaceChildren(); prev.disabled = next.disabled = true;
         var options = { search: search.value, mode: mode.value, shape: activeShape, page: target };
-        sendFarmAction("/api/farm/herbarium", options).then(function (r) {
+        call("/api/farm/herbarium", options).then(function (r) {
           if (!sh.isConnected || active !== request) return;
           current = r.page;
           status.textContent = r.total ? "Найдено сортов: " + r.total : "Сортов не найдено";
@@ -6251,9 +6076,9 @@
             list.appendChild(item);
           });
           page.scrollTop = 0;
-        }).catch(function (error) {
+        }).catch(function () {
           if (!sh.isConnected || active !== request) return;
-          status.textContent = error.cancelled ? "Проверка отменена" : "Гербарий не загрузился";
+          status.textContent = "Гербарий не загрузился";
           list.replaceChildren(btn("Повторить", "", function () { load(target); }));
         });
       }
@@ -6484,7 +6309,7 @@
       sh.appendChild(page); sh.appendChild(nav);
       var foot = el("div", "salebtns"); foot.appendChild(btn("Инвентарь", "ghost", function () { close(); invSheet(); })); foot.appendChild(btn("Закрыть", "", close)); sh.appendChild(foot);
       draw(0);
-      sendFarmAction("/api/farm/book").then(function (r) { if (r.strains) { data = r; draw(0); } }).catch(function () {});   // полный список — с сервера
+      call("/api/farm/book").then(function (r) { if (r.strains) { data = r; draw(0); } }).catch(function () {});   // полный список — с сервера
     });
     return wrap;
   }
@@ -7579,23 +7404,56 @@
 
   // ---------- лавка: купить (станция и игроки) / продать (свои выведенные сорта) ----------
   F.shopTab = "buy";
-  var shopMarketRequest = 0;
+  var shopMarketRequest = 0, shopSeedLoading = false, shopSeedFailed = false, shopSeedObserver;
+  function watchSeedOffers(marker) {
+    if (!shopSeedObserver) {
+      shopSeedObserver = new IntersectionObserver(function (entries) {
+        if (!entries.some(function (entry) { return entry.isIntersecting && entry.target.isConnected; })) return;
+        shopSeedObserver.disconnect();
+        loadMoreSeedOffers();
+      }, { rootMargin: "0px 0px 96px" });
+    }
+    shopSeedObserver.observe(marker);
+  }
+  function seedOfferKey(offer) { return "of:" + offer.pub + ":" + offer.strain; }
+  function loadMoreSeedOffers() {
+    var m = F.market, active = shopMarketRequest;
+    if (!m || !m.next_seed_page || shopSeedLoading || shopSeedFailed || $("farm-shop").hidden) return;
+    shopSeedLoading = true;
+    renderShopTab();
+    return call("/api/farm/market", { seed_page: m.next_seed_page }).then(function (page) {
+      if (active !== shopMarketRequest) return;
+      var known = new Map(m.offers.map(function (offer) { return [seedOfferKey(offer), offer]; }));
+      page.offers.forEach(function (offer) { known.set(seedOfferKey(offer), offer); });
+      m.offers = Array.from(known.values());
+      Object.assign(m.strains, page.strains);
+      m.next_seed_page = page.next_seed_page;
+      extend(page);
+    }).catch(function () {
+      if (active === shopMarketRequest) shopSeedFailed = true;
+    }).finally(function () {
+      if (active !== shopMarketRequest) return;
+      shopSeedLoading = false;
+      if (!$("farm-shop").hidden) renderShopTab();
+    });
+  }
   function openShop(tab, strain) {
     if (pauseTrade()) return;
     var focus = strain || "", active = ++shopMarketRequest;
     if (focus !== (F.shopFocus || "")) { F.market = null; F.shopSel = null; }
-    F.shopFocus = focus; F.shopMarketFailed = false;
+    F.shopFocus = focus; F.shopMarketFailed = false; shopSeedLoading = shopSeedFailed = false;
+    if ((tab || F.shopTab) === "buy") F.market = null;
     if (focus) F.shopCat = "seed";
     F.shopTab = tab || F.shopTab; show("farm-shop");
     document.querySelectorAll("#shoptabs button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.st === F.shopTab)); });
     renderShopTab();
-    if (F.shopTab === "buy" || F.shopCat !== "seed") {
-      return call("/api/farm/market", focus ? { strain: focus } : {}).then(function (m) {
+    if (F.shopTab === "buy") {
+      return call("/api/farm/market", focus ? { strain: focus } : { seed_page: true }).then(function (m) {
         if (active !== shopMarketRequest) return;
         if (focus) {
           m.offers = m.offers.filter(function (offer) { return offer.strain === focus; });
-          var i = m.offers.length - 1, offer = m.offers[i];
-          F.shopSel = offer ? "of:" + i + ":" + offer.pub + ":" + offer.strain : null;
+          var offer = m.offers[m.offers.length - 1];
+          F.shopSel = offer ? seedOfferKey(offer) : null;
         }
         F.market = m; extend(m);
         if (F.shopTab === "buy" && !$("farm-shop").hidden) renderShopTab();
@@ -7684,6 +7542,7 @@
   }
   function renderShopTab() {
     var s = F.state, box = $("shopview"); if (!s) return;
+    if (shopSeedObserver) shopSeedObserver.disconnect();
     box.innerHTML = ""; setText($("shopdust"), "✦ " + s.dust);
     // в «Купить» — кружок: сколько штук игроки выставили в разделе
     var cnt = { seed: 0, crop: 0, food: 0, fert: 0 }, mk = F.market;
@@ -7692,7 +7551,7 @@
       b.setAttribute("aria-pressed", String(b.dataset.cat === F.shopCat));
       var old = b.querySelector(".badge"); if (old) old.remove();
       var n = F.shopTab === "buy" ? cnt[b.dataset.cat] : 0;
-      if (n) b.appendChild(el("span", "badge", n > 99 ? "99+" : String(n)));
+      if (n) b.appendChild(el("span", "badge", n > 99 ? "99+" : String(n) + (b.dataset.cat === "seed" && mk.next_seed_page ? "+" : "")));
     });
     var cat = F.shopCat, sel = F.shopSel, pick = function (k) { F.shopSel = k; renderShopTab(); };
     var note = function (t) { box.appendChild(el("div", "farm-note left", t)); };
@@ -7727,9 +7586,9 @@
             acts.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st); })); d.appendChild(acts);
           };
         });
-        (m ? m.offers : []).forEach(function (o, i) {
+        (m ? m.offers : []).forEach(function (o) {
           var st = m.strains[o.strain]; if (!st) return;
-          var key = "of:" + i + ":" + o.pub + ":" + o.strain;
+          var key = seedOfferKey(o);
           var op = o.price || st.price;
           wares.push({ key: key, icon: seedIconOf(st), tag: "✦ " + op, qty: "×" + o.count, seller: o.seller, have: ownSeeds(o.strain) });
           if (o.pub === "~") act[key] = function () {                                   // ночная аномалия: ни сорта, ни свойств — только цена
@@ -7771,6 +7630,16 @@
       shelf(box, wares, sel, pick);
       if (sel) act[sel](); else note((cat === "seed" ? "Нажми на товар, чтобы посмотреть и купить. Базовые семена — у станции, выведенные сорта продают игроки." : "Нажми на товар, чтобы посмотреть и купить.")
         + " Зелёная метка «✓ 3» в углу — столько таких " + (cat === "seed" ? "семян" : "у тебя") + (cat === "seed" ? " у тебя уже есть (в инвентаре и сундуке)." : " уже есть (в амбаре и сундуке)."));
+      if (cat === "seed" && m && m.next_seed_page) {
+        if (shopSeedFailed) note("Не удалось загрузить предложения. Открой лавку заново.");
+        else if (shopSeedLoading) note("Загружаю предложения…");
+        else {
+          var marker = el("div", "shop-seed-end");
+          marker.setAttribute("aria-hidden", "true");
+          box.appendChild(marker);
+          watchSeedOffers(marker);
+        }
+      }
       return;
     }
     // продать
@@ -8245,8 +8114,8 @@
         var a = el("div", "invacts");
         a.appendChild(btn(on ? "Не присылать" : "Присылать мне", on ? "ghost" : "", function () {
           haptic("light");
-          if (on) { drawNote(false); return sendFarmAction("/api/farm/notify", { on: false }).catch(function () {}); }
-          var turnOn = function () { drawNote(true); sendFarmAction("/api/farm/notify", { on: true }).catch(function () {}); };
+          if (on) { drawNote(false); return call("/api/farm/notify", { on: false }).catch(function () {}); }
+          var turnOn = function () { drawNote(true); call("/api/farm/notify", { on: true }).catch(function () {}); };
           if (tg && tg.requestWriteAccess) tg.requestWriteAccess(function (allowed) { if (allowed) turnOn(); else toast("Без разрешения бот не может написать тебе"); });
           else turnOn();
         }));
@@ -8324,7 +8193,7 @@
   // подземелье в рамке зовёт сервер и рисует блюда через главное окно: вход Телеграма и значки еды — одни на всё мини-приложение
   window.dgCall = call; window.dgIcon = function (cv, id) { itemIcon(cv, id); };
   window.dgSeedIcon = function (cv) { cropIcon(cv, (F.state && F.state.strains && F.state.strains.anomaly) || ODD, true); };   // странное семя — как в инвентаре фермы (для бустера подземелья, 2026-11-20)
-  window.dgFarm = function () { if (F.state && farmPermit) loadFarm().catch(function () {}); }; // после похода ферма перечитывает амбар
+  window.dgFarm = function () { if (farmSession && F.state && !F.pending) loadFarm().catch(function () {}); }; // после похода ферма перечитывает амбар
   function openDungeon() {
     haptic("light");
     var w = el("div", "dgwrap"), f = el("iframe"), x = el("button", "dgx", "✕");
