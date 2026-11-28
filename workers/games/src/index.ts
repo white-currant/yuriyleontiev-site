@@ -623,7 +623,7 @@ async function handle(req: Request, env: any): Promise<Response> {
       const action = url.pathname.endsWith("/plant") ? "plant" : url.pathname.endsWith("/water") ? "water" : "harvest";
       const compact = body?.compact === true;
       const result = action === "plant" ? await farm.plant(user, idx, String(body?.crop || ""), receivedAt, compact)
-        : action === "water" ? await farm.water(user, idx, receivedAt, compact) : await farm.harvest(user, idx, receivedAt);
+        : action === "water" ? await farm.water(user, idx, receivedAt, compact) : await farm.harvest(user, idx, receivedAt, compact);
       if (typeof result.error === "string") await farm.auditPlotRejection(user.id, receivedAt, action, idx, result.error);
       return json(result);
     }

@@ -219,6 +219,7 @@
   </div></div>
   <div id="sheet"><div class="pan" id="sheetbox"></div></div>
 </div>
+<script src="../number-format.js?v=1"></script>
 <script>
 (function () {
   var W = 144, H = 256, FLOOR = 122;
@@ -729,7 +730,7 @@
   var mTab = "buy";                                  // вкладки рынка (его просьба 2026-11-19): «Купить» — еда от игроков, «Продать» — твоё удобрение
   function marketView() {
     head("Рынок"); if (!D) return noServer();
-    box.appendChild(el("div", "sh-t c", "звёздной пыли ✦ " + D.dust));
+    box.appendChild(el("div", "sh-t c", "звёздной пыли ✦ " + formatGameNumber(D.dust)));
     var tabs = el("div", "two");
     [["buy", "Купить"], ["sell", "Продать"]].forEach(function (t) { var b = el("button", "btn" + (mTab === t[0] ? "" : " alt"), t[1]); b.type = "button";
       b.onclick = function (e) { e.stopPropagation(); if (mTab === t[0]) return; mTab = t[0]; mSel = null; marketView(); }; tabs.appendChild(b); });
@@ -742,12 +743,12 @@
       if (!food.length) box.appendChild(el("div", "sh-t", "Еды на рынке сейчас нет."));
       else {
         var g = el("div", "wares");
-        food.forEach(function (o, i) { g.appendChild(ware(o.item, { on: mSel === i, sat: satOf(o.item), q: o.count > 1 ? "×" + o.count : "", tag: "✦ " + o.price, click: function () { mSel = mSel === i ? null : i; marketView(); } })); });
+        food.forEach(function (o, i) { g.appendChild(ware(o.item, { on: mSel === i, sat: satOf(o.item), q: o.count > 1 ? "×" + o.count : "", tag: "✦ " + formatGameNumber(o.price), click: function () { mSel = mSel === i ? null : i; marketView(); } })); });
         box.appendChild(g);
         var o = food[mSel];
         if (o) {
           box.appendChild(el("div", "sh-t c", nameOf(o.item, M.products) + " · сытость " + satOf(o.item) + " · " + o.seller));
-          var one = el("div", "one"), b = el("button", "btn", "Купить за ✦ " + o.price); b.type = "button"; b.disabled = D.dust < o.price;
+          var one = el("div", "one"), b = el("button", "btn", "Купить за ✦ " + formatGameNumber(o.price)); b.type = "button"; b.disabled = D.dust < o.price;
           b.onclick = function (e) { e.stopPropagation(); b.disabled = true; b.textContent = "Покупаю…"; D.dust -= o.price; addFood(o.item, 1); o.count--; if (!o.count) M.items.splice(M.items.indexOf(o), 1); mSel = null; marketView();
             seq("/api/farm/buy", { pub: o.pub, strain: o.item, kind: "item" }).then(function (r) { if (r.error) tell(r.error); else tell("Куплено — в амбаре"); mRefresh(); return load(); })
               .catch(function (e2) { tell(e2.message); load(); }); };

@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611281825";
+    var BUILD = "202611282039";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -34,6 +34,7 @@
   })();
 </script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="number-format.js?v=1"></script>
 <style>
   :root {
     --bg: #120a05;
@@ -1389,11 +1390,11 @@
     if (p.dg_art && $("dgart").getAttribute("src") !== p.dg_art) $("dgart").src = p.dg_art;   // чёткая — только кому открыто
     dgLock(dgMine ? 0 : p.dg_at, p.now);
     try { if (dgMine) localStorage.setItem("dg-owner", "1"); else localStorage.removeItem("dg-owner"); } catch (e) {}   // заранее показываем только тому, кому открыто   // хозяин — запомнить: карточка подземелья сразу при старте (2026-11-20)   // удобрение в лавке — только хозяину (его срочная правка 2026-11-19): у остальных вкладки нет вовсе                 // подземелье — пока только хозяину: у него одного нет привязки канала
-    $("pts").textContent = p.points + " " + plural(p.points, "очко", "очка", "очков");
+    $("pts").textContent = formatGameNumber(p.points) + " " + plural(p.points, "очко", "очка", "очков");
     $("karma").textContent = p.karma; $("place").textContent = p.place || "—";
     var lad = [0, 30, 100, 250, 500, 1000, 2000, 5000, 12000, 25000, 50000], prev = 0;
     lad.forEach(function (n) { if (p.points >= n) prev = n; });
-    $("next").textContent = p.next ? "до следующего звания " + (p.next - p.points) : "высшее звание";
+    $("next").textContent = p.next ? "до следующего звания " + formatGameNumber(p.next - p.points) : "высшее звание";
     $("bar").style.width = (p.next ? Math.max(3, (p.points - prev) / (p.next - prev) * 100) : 100) + "%";
     if ("link" in p && !$("home").hidden) renderLink(p.link);
   }
@@ -1488,7 +1489,7 @@
     var avw = 30;                                                  // колонка аватарок — по самой широкой рамке звания в списке, чтобы имена стояли ровно
     rows.forEach(function (r, i) {
       var li = document.createElement("li");
-      li.innerHTML = '<span class="n">' + (i + 1) + '</span><span class="av"></span><span><span class="nm"></span><span class="t"></span></span><span class="p">' + r.points + "</span>";
+      li.innerHTML = '<span class="n">' + (i + 1) + '</span><span class="av"></span><span><span class="nm"></span><span class="t"></span></span><span class="p">' + formatGameNumber(r.points) + "</span>";
       li.querySelector(".nm").textContent = r.name; li.querySelector(".t").textContent = r.title || "";
       li.querySelector(".av").textContent = initial(r.name);
       setPhoto(li.querySelector(".av"), r.avatar); avw = Math.max(avw, rankFrame(li.querySelector(".av"), r.title, 15).w);
@@ -1509,7 +1510,7 @@
         var p = res[0]; body.innerHTML = "";
         if (p.error) { body.textContent = p.error; return; }
         var st = el("div", "pstats");
-        [["очков", p.points], ["место", p.place || "—"], ["карма", p.karma]].forEach(function (x) { var d = el("div"); d.appendChild(el("b", "", String(x[1]))); d.appendChild(el("span", "", x[0])); st.appendChild(d); });
+        [["очков", formatGameNumber(p.points)], ["место", p.place || "—"], ["карма", p.karma]].forEach(function (x) { var d = el("div"); d.appendChild(el("b", "", String(x[1]))); d.appendChild(el("span", "", x[0])); st.appendChild(d); });
         body.appendChild(st);
         if (p.farm) {
           var fm = el("div", "pfarm"); fm.appendChild(el("b", "", "🌙 Лунная ферма"));
@@ -1660,7 +1661,7 @@
       $("sec").textContent = a.right ? "✓" : "✕"; $("secnote").textContent = "";
       $("status").textContent = a.right ? (a.late ? "Верно, но время вышло" : "Верно!") : (id ? "Мимо" : "Время вышло");
       $("result").textContent = a.answer.title + (a.answer.album ? " · " + a.answer.album : "");
-      $("pointsline").textContent = gained ? "+" + gained + " " + plural(gained, "очко", "очка", "очков") + (a.bonus ? " (из них +" + a.bonus + " за серию)" : "")
+      $("pointsline").textContent = gained ? "+" + formatGameNumber(gained) + " " + plural(gained, "очко", "очка", "очков") + (a.bonus ? " (из них +" + a.bonus + " за серию)" : "")
         : a.right && a.practice ? "Тренировка — без очков" : a.right && a.late ? "Время вышло — без очков" : "";
       $("streak").textContent = a.streak > 1 ? "серия " + a.streak : ""; $("streak").className = "streak" + (a.streak > 1 ? " on" : "");
       $("practice").hidden = !a.practice;
@@ -1934,7 +1935,7 @@
             else b = btn(hasR ? "Поставить" : "Купить за ✦ " + price, "", function (ev) {
               if (!hasR && s.dust < price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
               haptic("success");
-              if (!hasR) { s.dust -= price; s.roofs_owned = owned.concat([pk]); buyFx(ev.currentTarget, (cols[pk] || "") + " крыша", "−✦ " + price); }
+              if (!hasR) { s.dust -= price; s.roofs_owned = owned.concat([pk]); buyFx(ev.currentTarget, (cols[pk] || "") + " крыша", "−✦ " + formatGameNumber(price)); }
               s.roof = pk; F.roofTry = null; renderFarm(); draw();
               toast(hasR ? "Крыши перекрашены" : "Куплено: " + (cols[pk] || "").toLowerCase() + " крыша");
               farmCall("/api/farm/roof", { color: pk }).catch(function () {});
@@ -2820,11 +2821,11 @@
   function strainCode(s) { return s.base ? "" : "сорт " + s.id.slice(1, 5).toUpperCase(); }
   function describe(s) {
     if (s.odd) return "";                                                                                   // о странном — ни слова (его правка 2026-11-18)                                    // коротко, значками: рост · пыль · полив · шанс артефакта (коллекционного предмета; сейчас это пластинки)
-    return "⏱ " + fmtLeft(s.minutes * 60) + "  ✦ " + s.dust + "  💧 " + fmtLeft(thirstOf(s) * 60) + "  🏺 " + Math.round(s.vinyl * 100) + "%";
+    return "⏱ " + fmtLeft(s.minutes * 60) + "  ✦ " + formatGameNumber(s.dust) + "  💧 " + fmtLeft(thirstOf(s) * 60) + "  🏺 " + Math.round(s.vinyl * 100) + "%";
   }
   function factGrid(s) {                                    // то же, но с подписями — для справочника
     var g = el("div", "facts");
-    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "в пыль: " + s.dust], ["💧", "полив раз в " + fmtLeft(thirstOf(s) * 60)], ["🏺", "артефакт " + Math.round(s.vinyl * 100) + "%"]]
+    [["⏱", "растёт " + fmtLeft(s.minutes * 60)], ["✦", "в пыль: " + formatGameNumber(s.dust)], ["💧", "полив раз в " + fmtLeft(thirstOf(s) * 60)], ["🏺", "артефакт " + Math.round(s.vinyl * 100) + "%"]]
       .forEach(function (x) { var d = el("div"); d.appendChild(el("i", "", x[0])); d.append(x[1]); g.appendChild(d); });
     return g;
   }
@@ -4000,7 +4001,7 @@
     // Очередь быстрых действий заканчиваем полным состоянием, чтобы не затереть оптимистичные изменения.
     if (!F.pending && F.state && Date.now() - farmSnapshotAt < 60000
         && !hasBuild(F.state, "hive") && !F.state.mono
-        && (path === "/api/farm/plant" || path === "/api/farm/water")) {
+        && (path === "/api/farm/plant" || path === "/api/farm/water" || path === "/api/farm/harvest")) {
       body = Object.assign({}, body, { compact: true });
     }
     F.pending++;
@@ -4018,7 +4019,7 @@
       }
       if (!F.pending) {
         if (r.farm) setFarm(r.farm);
-        else if (r.farm_patch && !applyFarmPatch(r.farm_patch)) loadFarm().catch(function () {});
+        else if (r.farm_patch && !applyFarmPatch(r.farm_patch, r.hybrid)) loadFarm().catch(function () {});
       }
       return r;
     }, function (e) {
@@ -4875,10 +4876,10 @@
       var b = el("button", "cstar"); b.type = "button"; b.style.left = st.x / FW * 100 + "%"; b.style.top = st.y / FH * 100 + "%";
       var ph = function (ms) { return -((Date.now() + st.id * 230) % ms) / 1000 + "s"; };
       b.style.animationDelay = ph(1600); b.style.setProperty("--shd", ph(1400)); b.style.setProperty("--gld", ph(2200));   // ферма перерисовывается каждую секунду — покачивание не сбивается
-      b.appendChild(ICON_IMG["✦"].cloneNode(false)); b.appendChild(el("span", "", "+" + st.dust));
+      b.appendChild(ICON_IMG["✦"].cloneNode(false)); b.appendChild(el("span", "", "+" + formatGameNumber(st.dust)));
       b.onclick = function () {                                                     // сразу: в баланс с полётом, сервер подтвердит
         haptic("light"); var cs = F.state; cs.stars = (cs.stars || []).filter(function (x) { return x.id !== st.id; });
-        var r = b.getBoundingClientRect(), d = $("dustpill").getBoundingClientRect(), n = el("div", "", "+" + st.dust + " ✦");
+        var r = b.getBoundingClientRect(), d = $("dustpill").getBoundingClientRect(), n = el("div", "", "+" + formatGameNumber(st.dust) + " ✦");
         n.style.color = "#ffe7a8"; n.style.font = "700 14px var(--pix)"; n.style.textShadow = "0 1px 2px rgba(0,0,0,.7)"; n.style.whiteSpace = "nowrap";
         flyNode(n, [r.left + r.width / 2, r.top + r.height / 2], [d.left + d.width / 2, d.top + d.height / 2], 0, 650);
         setTimeout(function () { cs.dust += st.dust; renderFarm(); var p = $("dustpill"); p.classList.remove("bump"); void p.offsetWidth; p.classList.add("bump"); }, 650);
@@ -4889,10 +4890,10 @@
     if (own) (F.state.clumps || []).forEach(function (st) {                         // мшистые комочки после «Мох захватил ферму»
       var b = el("button", "cstar clump"); b.type = "button"; b.style.left = st.x / FW * 100 + "%"; b.style.top = st.y / FH * 100 + "%";
       b.style.animationDelay = -((Date.now() + st.id * 230) % 1600) / 1000 + "s";
-      var cv = el("canvas", "pix"); cropIcon(cv, F.state.strains.moss, true); b.appendChild(cv); b.appendChild(el("span", "", "+" + st.dust));
+      var cv = el("canvas", "pix"); cropIcon(cv, F.state.strains.moss, true); b.appendChild(cv); b.appendChild(el("span", "", "+" + formatGameNumber(st.dust)));
       b.onclick = function () {
         haptic("light"); var cs = F.state; cs.clumps = (cs.clumps || []).filter(function (x) { return x.id !== st.id; });
-        var r = b.getBoundingClientRect(), d = $("dustpill").getBoundingClientRect(), n = el("div", "", "+" + st.dust + " ✦");
+        var r = b.getBoundingClientRect(), d = $("dustpill").getBoundingClientRect(), n = el("div", "", "+" + formatGameNumber(st.dust) + " ✦");
         n.style.color = "#d6ffb0"; n.style.font = "700 14px var(--pix)"; n.style.textShadow = "0 1px 2px rgba(0,0,0,.7)"; n.style.whiteSpace = "nowrap";
         flyNode(n, [r.left + r.width / 2, r.top + r.height / 2], [d.left + d.width / 2, d.top + d.height / 2], 0, 650);
         setTimeout(function () { cs.dust += st.dust; renderFarm(); var p = $("dustpill"); p.classList.remove("bump"); void p.offsetWidth; p.classList.add("bump"); }, 650);
@@ -5066,7 +5067,7 @@
     var s = F.state; if (!s) return;
     var now = farmNow();
     renderBreeding(s.breeding, now);
-    setText($("dustpill"), "✦ " + s.dust);
+    setText($("dustpill"), "✦ " + formatGameNumber(s.dust));
     var rkNow = roofKey(s); if (F.decorIconKey !== rkNow) { F.decorIconKey = rkNow; decorIcon($("decoricon"), ROOF_PAL[rkNow]); }
     gemPill();
     var ban = $("farmbanners"), mo = monoOf(s, now);
@@ -5092,7 +5093,7 @@
       var gb = el("button", "", "Забрать"); gb.onclick = function () {      // сразу: пыль в балансе, баннер прочь; сервер подтвердит
         var cs = F.state;                                                   // текущее состояние, не то, с которым плашку собрали (баг 2026-11-15: плашка «висела» до ответа сервера)
         var sum = (cs.gifts || []).reduce(function (a, x) { return a + (x.dust || 0); }, 0);
-        haptic("success"); cs.dust += sum; cs.gifts = []; renderFarm(); toast("+" + sum + " звёздной пыли");
+        haptic("success"); cs.dust += sum; cs.gifts = []; renderFarm(); toast("+" + formatGameNumber(sum) + " звёздной пыли");
         var dp = $("dustpill"); if (dp) { dp.classList.remove("bump"); void dp.offsetWidth; dp.classList.add("bump"); }
         farmCall("/api/farm/gifts").catch(function () {});
       };
@@ -5101,7 +5102,7 @@
     if (s.sales && s.sales.length) {
       var sum = s.sales.reduce(function (a, x) { return a + x.price; }, 0), sb = el("div", "banner gift");
       var who = s.sales.map(function (x) { return x.buyer; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
-      sb.appendChild(el("span", "", "🛒 Покупки в твоей лавке на ✦ " + sum + ": " + who.slice(0, 3).join(", ") + (who.length > 3 ? " и др." : "")));
+      sb.appendChild(el("span", "", "🛒 Покупки в твоей лавке на ✦ " + formatGameNumber(sum) + ": " + who.slice(0, 3).join(", ") + (who.length > 3 ? " и др." : "")));
       var ok = el("button", "", "Ок"); ok.onclick = function () { haptic("light"); F.state.sales = []; renderFarm(); farmCall("/api/farm/sales/seen").catch(function () {}); };
       sb.appendChild(ok); ban.appendChild(sb);
     }
@@ -5148,13 +5149,34 @@
       setTimeout(function () { if (cm) { sceneShake(380); haptic("medium"); } else haptic("medium"); }, 500 + d * 700 + (cm ? 840 : 0)); d++; });
     F.evSeen = nk; try { localStorage.setItem("farm_evseen", JSON.stringify(nk)); } catch (e) {}
   }
-  function applyFarmPatch(patch) {
+  function applyFarmPatch(patch, hybrid) {
     var s = F.state, plot = patch.plot, current = s && s.plots[plot.idx];
     if (!current || current.crop !== plot.crop) return false;
     if (patch.kind === "water") {
       if (current.planted !== plot.planted) return false;
       s.plots[plot.idx] = Object.assign({}, current, plot);
       s.water = patch.water;
+    } else if (patch.kind === "harvest") {
+      s.plots[plot.idx] = plot;
+      if (patch.dust != null) s.dust = patch.dust;
+      if (patch.barn) {
+        var crop = barnOf(patch.barn.strain);
+        if (crop) crop.count = patch.barn.count;
+        else s.barn.push(patch.barn);
+        Object.assign(s.products, patch.products);
+      }
+      if (hybrid) {
+        s.strains[hybrid.id] = hybrid;
+        if (patch.seed_drop_until) {
+          s.seed_drops = s.seed_drops || {};
+          s.seed_drops[hybrid.id] = patch.seed_drop_until;
+        }
+      }
+      patch.seeds.forEach(function (seed) {
+        var item = bagOf(seed.strain);
+        if (item) Object.assign(item, seed);
+        else s.inv.push(seed);
+      });
     } else {
       var seed = patch.seed, item = bagOf(seed.strain);
       if (item) Object.assign(item, seed);
@@ -5181,7 +5203,7 @@
     F.state = st; F.fetched = Date.now(); if (wasW && !st.wanderer) { F.wanderIn = 0; wanderLeave(); } renderFarm(); if (F.invRedraw) F.invRedraw();
     if (F.barnRedraw) F.barnRedraw();
     if (st.tea_prank) updateTeaPrank(st.tea_prank);
-    if (!$("farm-shop").hidden) { setText($("shopdust"), "✦ " + st.dust); if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
+    if (!$("farm-shop").hidden) { setText($("shopdust"), "✦ " + formatGameNumber(st.dust)); if (!F.pending) renderShopTab(); }   // лавка открыта — баланс и «у тебя N» тоже
   }
   function farmLoop() {
     clearInterval(F.tick);
@@ -5307,7 +5329,7 @@
       if (pl.idx !== s.unlocked) return toast("Сначала открой предыдущую грядку");
       return sheet(function (sh, close) {
         var label = "Открыть за ✦ " + pl.price;
-        var info = el("div", "sub", "Открыть за " + pl.price + " звёздной пыли. У тебя: " + s.dust);
+        var info = el("div", "sub", "Открыть за " + pl.price + " звёздной пыли. У тебя: " + formatGameNumber(s.dust));
         sh.appendChild(el("h3", "", "Новая грядка")); sh.appendChild(info);
         var b = btn(label, "", function () {
           if (F.unlocking) return;
@@ -5315,7 +5337,7 @@
           farmCall("/api/farm/unlock", { idx: pl.idx }).then(function (r) {
             if (r.error) {
               var dust = typeof r.dust === "number" ? r.dust : F.state.dust;
-              info.textContent = "Открыть за " + pl.price + " звёздной пыли. У тебя: " + dust;
+              info.textContent = "Открыть за " + pl.price + " звёздной пыли. У тебя: " + formatGameNumber(dust);
               b.disabled = dust < pl.price;
               return;
             }
@@ -5387,11 +5409,11 @@
       if (inf.s.odd) { (F.oddFx = F.oddFx || []).push({ i: pl.idx, t0: Date.now() }); farmAnim(); setTimeout(function () { haptic("medium"); }, 480); setTimeout(function () { haptic("light"); }, 1150); }
       if (hasB) { var gx0 = gain; setTimeout(function () { floatText(pl.idx, "+" + gx0 + " в амбар" + pts); flyFruit(pl.idx, inf.s, gx0); }, oddW); barnAdd(inf.s.odd ? "p:eye" : inf.s.id, gain);
         if (inf.s.shape === "grain" && showerNow(now)) { (s.wet = s.wet || []).push({ strain: inf.s.id, n: gain, dry_at: now + 3600 }); setTimeout(function () { floatText(pl.idx, "колосья мокрые — час сохнут", "big"); }, 700); } }
-      else { floatText(pl.idx, "+" + gain * inf.s.dust + " ✦" + pts); s.dust += gain * inf.s.dust; flyDust(pl.idx); }
+      else { floatText(pl.idx, "+" + formatGameNumber(gain * inf.s.dust) + " ✦" + pts); s.dust += gain * inf.s.dust; flyDust(pl.idx); }
       if (gemX) setTimeout(function () { floatText(pl.idx, "самоцвет: урожай ×2!", "big"); }, starX ? 700 : 250);
       if (starX) setTimeout(function () { floatText(pl.idx, "созвездие: урожай ×2!", "big"); }, 250);
       else if (mossX) setTimeout(function () { floatText(pl.idx, "мох разросся: ×2!", "big"); }, 250);
-      if (mythX) { var md = gain * inf.s.dust * 2; s.dust += md; setTimeout(function () { floatText(pl.idx, "мифическая пыль +" + md + " ✦", "big"); flyDust(pl.idx); }, 300); }
+      if (mythX) { var md = gain * inf.s.dust * 2; s.dust += md; setTimeout(function () { floatText(pl.idx, "мифическая пыль +" + formatGameNumber(md) + " ✦", "big"); flyDust(pl.idx); }, 300); }
       var hon = pl.honey;                                                           // мёд: таймер не дошёл — пропал; дошёл, а улей не знал — баночка в улей
       if (hon && !hon.got) { if (hon.until > now) setTimeout(function () { floatText(pl.idx, "пчёлы не успели — мёда нет", "big"); }, starX || gemX || mossX ? 1100 : 650); else hiveAdd(hon.item, 1); }
       s.plots[pl.idx] = { idx: pl.idx, crop: null }; renderFarm();   // сразу, не дожидаясь сервера
@@ -5400,7 +5422,7 @@
       return farmCall("/api/farm/harvest", { idx: pl.idx }).then(function (r) {
         if (r.error) return;
         if (r.double) { evFx("double", pl.idx); floatText(pl.idx, "×2 щедрый урожай!", "big"); }
-        if (r.comet) floatText(pl.idx, "комета! +" + r.comet + " ✦", "big");
+        if (r.comet) floatText(pl.idx, "комета! +" + formatGameNumber(r.comet) + " ✦", "big");
         if (r.frost) { evFx("frost", pl.idx, 350); setTimeout(function () { haptic("medium"); floatText(pl.idx, "грядку сковал лёд", "big"); }, 600); }
         (r.thawed || []).forEach(function (ti, n) { evFx("thaw", ti, 150 + n * 180); setTimeout(function () { haptic("light"); floatText(ti, "лёд растаял", "big"); }, 600 + n * 180); });
         if (r.sunbeam >= 0) {                                                     // луч падает ~0,45 с — надпись и отдача в момент удара
@@ -5410,7 +5432,7 @@
         if (inf.s.odd) setTimeout(function () { if (r.seeds) flySeeds(pl.idx, inf.s); setTimeout(function () { floatText(pl.idx, !r.seeds ? "…семени не осталось" : "…осталось странное семя", "big"); }, 450); }, Math.max(0, 1900 - (Date.now() - tH)));
         else if (r.seeds) setTimeout(function () { floatText(pl.idx, "+" + r.seeds + " " + plural(r.seeds, "семя", "семени", "семян") + " в инвентарь", "seedf"); }, 450);
         if (r.vinyl || r.card) F.items = null;
-        var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl, r.farm && r.farm.vinyls); };
+        var next = function () { if (r.vinyl) showVinyl(r.vinyl.id, r.vinyl, r.vinyls || (r.farm && r.farm.vinyls)); };
         var next2 = r.card ? function () { showCardFound(r.card, next); } : next;   // тайная карта при сборе (его решение 2026-11-20)
         if (r.hybrid) setTimeout(function () { showHybrid(r.hybrid, next2); }, 500); else if (r.vinyl || r.card) setTimeout(next2, 500);
       }).catch(function () {});
@@ -5487,7 +5509,7 @@
     var body = items.length === 1 ? items[0] : { items: items };
     return farmCall("/api/farm/sell", body).then(function (r) {
       if (r.error) return;
-      haptic("success"); toast("+✦ " + r.dust + " звёздной пыли");
+      haptic("success"); toast("+✦ " + formatGameNumber(r.dust) + " звёздной пыли");
     }).catch(function () {}).finally(function () { F.barnSelling = false; redraw(); });
   }
   // мука помнит сорт колосьев, выпечка — сорт муки: «p:bread@<сорт>» (цена и цвет — от сорта, как на сервере)
@@ -5594,13 +5616,13 @@
       var props = el("div", "variants");
       var line = function (k, v) { var r = el("div"); r.appendChild(el("b", "", k)); r.appendChild(el("span", "", v)); props.appendChild(r); };
       line("Растёт", fmtLeft(st.minutes * 60) + " под поливом");
-      line("Урожай", "✦ " + st.dust + " пыли за штуку");
-      line("Очки за сбор", st.points + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
+      line("Урожай", "✦ " + formatGameNumber(st.dust) + " пыли за штуку");
+      line("Очки за сбор", formatGameNumber(st.points) + " " + plural(st.points, "очко", "очка", "очков") + " в звание");
       line("Полив", "одного хватает на " + fmtLeft(thirstOf(st) * 60));
       line("Шанс артефакта", Math.round(st.vinyl * 100) + "% с урожая");
       line("Семена с урожая", (st.bonus === "seedy" ? "3–4 (плодовитый)" : "2–3") + " за грядку");
       if (st.bonus) line("Особое свойство", bonuses[st.bonus] || "");
-      line(st.base ? "Цена у станции" : "Цена в лавке", "✦ " + (st.base ? st.cost : st.price) + " за семя");
+      line(st.base ? "Цена у станции" : "Цена в лавке", "✦ " + formatGameNumber(st.base ? st.cost : st.price) + " за семя");
       if (!st.odd) sh.appendChild(props);                                       // странное семя — без свойств
       var mine = s && !opt.foreign ? bagOf(st.id) : null;
       var hv = null, lavDraw = null, dq = null;
@@ -5622,11 +5644,11 @@
         var dcap0 = el("div", "sub", "Лишние семена — в звёздную пыль:"); dcap0.style.marginTop = "14px"; sh.appendChild(dcap0);
         var sd = seedDustOf(st);
         dq = qtyBox(sh, { key: "dust:" + st.id, max: function () { return freeOf(bagOf(st.id)); }, empty: "Свободных семян больше нет.",
-          acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + sd * n; }, cls: "ghost",
+          acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + formatGameNumber(sd * n); }, cls: "ghost",
                    run: function (n) { seedsDust(st.id, n, "inv"); if (hv) hv.textContent = "У тебя: " + bagOf(st.id).count; if (lavDraw) lavDraw(); } }] });
       }
       if (mine && st.base) sh.appendChild(el("div", "sub", "Семена станции в своей лавке не продаются — только выведенные тобой сорта."));
-      if (opt.buy) sh.appendChild(btn("Купить за ✦ " + st.price, "", function () { close(); opt.buy(); }));
+      if (opt.buy) sh.appendChild(btn("Купить за ✦ " + formatGameNumber(st.price), "", function () { close(); opt.buy(); }));
       if (opt.back) sh.appendChild(btn("Назад", "ghost", function () { close(); opt.back(); }));
     });
   }
@@ -5680,7 +5702,7 @@
   function varLabel(id) { var st = F.state.strains[id]; if (!st) return ""; var ids = varIds(st.name), i = ids.indexOf(id); return ids.length > 1 && i >= 0 ? ROMAN[i] || String(i + 1) : ""; }
   // таблица сравнения вариантов одного названия: лучшее в столбце подсвечено, худшее приглушено; cnt(id) — число в последнем столбце
   function variantTable(ids, selId, onPick, cnt, onAgain, showSeedDrops) {   // onAgain — тап по уже выбранной строке
-    var s = F.state, cols = [["minutes", -1, function (v) { return fmtLeft(v * 60); }], ["dust", 1, function (v) { return v; }],
+    var s = F.state, cols = [["minutes", -1, function (v) { return fmtLeft(v * 60); }], ["dust", 1, formatGameNumber],
                 ["thirst", 1, function (v) { return fmtLeft(v * 60); }], ["vinyl", 1, function (v) { return Math.round(v * 100) + "%"; }]];
     var t = el("div", "vtable"), hd = el("div", "vrow head");
     ["", "", "⏱ рост", "✦ пыль", "💧 полив", "🏺", "шт"].forEach(function (x) { hd.appendChild(el("span", "", x)); }); t.appendChild(hd);
@@ -5692,7 +5714,7 @@
             worst = c[1] > 0 ? Math.min.apply(null, vals) : Math.max.apply(null, vals), cls = ids.length > 1 && best !== worst ? (v === best ? " best" : v === worst ? " worst" : "") : "";
         r.appendChild(el("span", "vc" + cls, c[2](v)));
       });
-      r.appendChild(el("span", "cnt", "×" + cnt(id)));
+      r.appendChild(el("span", "cnt", "×" + formatGameNumber(cnt(id))));
       if (showSeedDrops && freeOf(bagOf(id)) > 0) seedNewBadge(r, seedDropUntil(id));
       var ls = (bagOf(id) || { listed: 0 }).listed; if (ls > 0) { r.classList.add("sold"); r.appendChild(el("span", "vsale", "в продаже " + ls)); }
       r.onclick = function () {
@@ -6175,13 +6197,13 @@
           ["Расцветка", color ? color[1][2] : "Странная"],
           ["Время роста", fmtLeft(st.minutes * 60)],
           ["Продолжительность полива", fmtLeft(thirstOf(st) * 60)],
-          ["Пыль за урожай", st.dust + " за штуку"],
-          ["Очки за сбор", st.points],
+          ["Пыль за урожай", formatGameNumber(st.dust) + " за штуку"],
+          ["Очки за сбор", formatGameNumber(st.points)],
           ["Шанс пластинки", Math.round(st.vinyl * 100) + "%"],
           ["Базовый шанс карты", Math.round(st.vinyl * 500) / 10 + "%"],
           ["Семян за сбор", st.bonus === "seedy" ? "3–4" : "2–3"],
-          [st.base ? "Цена у станции" : "Цена семени в лавке", (st.base ? st.cost : st.price) + " пыли"],
-          ["Пыль за семя", seedDustOf(st)],
+          [st.base ? "Цена у станции" : "Цена семени в лавке", formatGameNumber(st.base ? st.cost : st.price) + " пыли"],
+          ["Пыль за семя", formatGameNumber(seedDustOf(st))],
           ["Особое свойство", st.bonus ? BONUS_SHORT[st.bonus] : "Обычные свойства"],
         ]);
         data.forEach(function (pair) {
@@ -6402,7 +6424,7 @@
             var r = rs[k], row = el("div", "rrow"), cv = el("canvas", "pix"); itemIcon(cv, "p:" + k); row.appendChild(cv);
             var tx = el("div"); tx.appendChild(el("b", "", r.name + (r.kind === "mill" ? " · мельница" : "")));
             var sat = k === "omelet" ? satOfItem("p:" + k) : 0;
-            tx.appendChild(el("div", "rneed", Object.keys(r.needs).map(function (n) { return (NEED[n] || n) + " ×" + r.needs[n]; }).join(" + ") + " · ⏱ " + fmtLeft(r.min * 60) + " · ✦ " + r.dust + (sat ? " · сытость " + sat : "")));
+            tx.appendChild(el("div", "rneed", Object.keys(r.needs).map(function (n) { return (NEED[n] || n) + " ×" + r.needs[n]; }).join(" + ") + " · ⏱ " + fmtLeft(r.min * 60) + " · ✦ " + formatGameNumber(r.dust) + (sat ? " · сытость " + sat : "")));
             row.appendChild(tx); rl.appendChild(row);
           });
           page.appendChild(rl);
@@ -6478,7 +6500,7 @@
     var s = F.state, st = s.strains[id], got = n * seedDustOf(st);
     if (from === "chest") chestOf(id).count -= n; else bagOf(id).count -= n;
     if (F.sel === id && freeOf(bagOf(id)) <= 0) F.sel = "can";
-    s.dust += got; haptic("success"); toast("+✦ " + got + " звёздной пыли"); renderFarm(); if (F.invRedraw) F.invRedraw();
+    s.dust += got; haptic("success"); toast("+✦ " + formatGameNumber(got) + " звёздной пыли"); renderFarm(); if (F.invRedraw) F.invRedraw();
     farmCall("/api/farm/seed-dust", { strain: id, n: n, from: from }).catch(function () {});
   }
   function chestOf(id) { var r = null; (F.state.chest || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
@@ -6532,7 +6554,7 @@
         var dust = function (n) { seedsDust(id, n, src); if ((src === "chest" ? chestOf(id).count : freeOf(bagOf(id))) <= 0) F.chestSel = null; draw(); };
         qtyBox(fbox, { key: "chest:" + sel, max: function () { return from === "bag" ? freeOf(bagOf(id)) : (chestOf(id) || { count: 0 }).count; },
           acts: [{ t: function (n) { return (from === "bag" ? "В сундук " : "Достать ") + n; }, run: function (n) { move(sg * n); } },
-                 { t: function (n) { return "В пыль " + n + " · ✦ " + sd * n; }, cls: "ghost", run: function (n) { dust(n); } }] });
+                 { t: function (n) { return "В пыль " + n + " · ✦ " + formatGameNumber(sd * n); }, cls: "ghost", run: function (n) { dust(n); } }] });
       };
       draw();
       var acts = el("div", "salebtns"); acts.appendChild(btn("Готово", "", close)); foot.appendChild(acts); sh.appendChild(foot);
@@ -6578,14 +6600,14 @@
         }
         // счётчик ниже — только для пыли (его вопрос 2026-11-17: казалось, что он относится к продаже); подпись отделяет его от зелёной кнопки
         if (fr > 0) { var dcap = el("div", "sub", "Лишние семена — в звёздную пыль:"); dcap.style.marginTop = "14px"; foot.appendChild(dcap); }
-        var vacts = [{ t: function (n) { return "В пыль " + n + " · ✦ " + sd * n; }, cls: "ghost", run: function (n) { seedsDust(id, n, "inv"); draw(); } }];
+        var vacts = [{ t: function (n) { return "В пыль " + n + " · ✦ " + formatGameNumber(sd * n); }, cls: "ghost", run: function (n) { seedsDust(id, n, "inv"); draw(); } }];
         qtyBox(foot, { key: "var:" + id, max: function () { return freeOf(bagOf(id)); }, acts: vacts });
         if (g.ids.length > 1) {                                       // оставить выбранный, остальные — в пыль
           var rest = g.ids.filter(function (x) { return x !== id; }), restN = 0, restD = 0;
           rest.forEach(function (x) { var n = freeOf(bagOf(x)); restN += n; restD += n * seedDustOf(s.strains[x]); });
           if (restN) {
             var c3 = el("div", "invacts");
-            c3.appendChild(btn(confirmAll ? "Точно? Распылить " + restN + " · ✦ " + restD : "Оставить" + lbl + ", остальные в пыль · ✦ " + restD, confirmAll ? "" : "ghost", function () {
+            c3.appendChild(btn(confirmAll ? "Точно? Распылить " + restN + " · ✦ " + formatGameNumber(restD) : "Оставить" + lbl + ", остальные в пыль · ✦ " + formatGameNumber(restD), confirmAll ? "" : "ghost", function () {
               if (!confirmAll) { confirmAll = true; haptic("light"); return draw(true); }
               rest.forEach(function (x) { var n = freeOf(bagOf(x)); if (n > 0) seedsDust(x, n, "inv"); });
               confirmAll = false; F.sel = id; F.pick[name] = id; draw();
@@ -6981,24 +7003,24 @@
         };
         if (picked.length === 1) {
           var sel = picked[0], st = itemOf(sel.strain);
-          footInfo.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + st.dust + " пыли." + (satOfItem(sel.strain) ? " Сытость " + satOfItem(sel.strain) + "." : "") + (BARN_MULTI ? " Можно выделить ещё ячейки." : "")));
+          footInfo.appendChild(el("div", "sub", itemName(sel.strain) + ": в амбаре " + sel.count + ", одна штука — ✦ " + formatGameNumber(st.dust) + " пыли." + (satOfItem(sel.strain) ? " Сытость " + satOfItem(sel.strain) + "." : "") + (BARN_MULTI ? " Можно выделить ещё ячейки." : "")));
           if (recKey(sel.strain) === "brew") footInfo.appendChild(el("div", "sub", BREW_SAYS));   // у странной похлёбки — её свойство
           var wn = wetOf(sel.strain); if (wn > 0) footInfo.appendChild(el("div", "sub", "Мокрые после ливня: " + wn + " " + plural(wn, "сноп", "снопа", "снопов") + ". Смолоть их можно, когда просохнут, — через " + fmtLeft(wetLeft(sel.strain)) + ". Продать можно и мокрыми."));
           var bsel = sel;
           qtyBox(footInfo, { key: "barn:" + bsel.strain, max: function () { return (barnOf(bsel.strain) || { count: 0 }).count; },
-            acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + st.dust * n; }, run: function (n) { toDust([{ strain: bsel.strain, n: n }], drawBarn); } },
+            acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + formatGameNumber(st.dust * n); }, run: function (n) { toDust([{ strain: bsel.strain, n: n }], drawBarn); } },
                    { t: function (n) { return "В лавку " + n; }, cls: "sell", run: function (n) { toStall([{ strain: bsel.strain, count: n }]); } }] });
         } else if (picked.length > 1) {
           var cnt = 0, sum = 0; picked.forEach(function (x) { cnt += x.count; sum += x.count * itemOf(x.strain).dust; });
-          footInfo.appendChild(el("div", "sub", "Выделено ячеек: " + picked.length + " — " + cnt + " " + plural(cnt, "штука", "штуки", "штук") + ", в пыль это ✦ " + sum + "."));
-          acts.appendChild(btn("В пыль · ✦ " + sum, "", function () {
+          footInfo.appendChild(el("div", "sub", "Выделено ячеек: " + picked.length + " — " + cnt + " " + plural(cnt, "штука", "штуки", "штук") + ", в пыль это ✦ " + formatGameNumber(sum) + "."));
+          acts.appendChild(btn("В пыль · ✦ " + formatGameNumber(sum), "", function () {
             toDust(picked.map(function (x) { return { strain: x.strain, n: x.count }; }), drawBarn);
           }));
           acts.appendChild(btn("В лавку", "sell", function () { toStall(picked); }));
           acts.appendChild(btn("Отменить", "ghost", function () { F.barnSet = {}; drawBarn(); }));
         } else {
           footInfo.appendChild(el("div", "sub", "Нажми на ячейку, чтобы превратить урожай в звёздную пыль или выставить в лавку." + (BARN_MULTI ? " Можно выделить несколько." : "")));
-          acts.appendChild(btn("Весь урожай в пыль · ✦ " + total, "", function () { toDust([{ strain: "*", n: 0 }], drawBarn); }));
+          acts.appendChild(btn("Весь урожай в пыль · ✦ " + formatGameNumber(total), "", function () { toDust([{ strain: "*", n: 0 }], drawBarn); }));
         }
         footInfo.appendChild(acts);
       };
@@ -7054,7 +7076,7 @@
         cur.list.forEach(function (o) {
           var card = el("div", "order"); box.appendChild(card);
           if (!o.items.length) { card.appendChild(el("div", "ohead", o.tier + " заказ")); card.appendChild(el("div", "sub", "Новый заказ появится через " + fmtLeft(o.ready - tn) + ".")); return; }
-          var hd = el("div", "ohead"); hd.append(o.tier + " заказ · ✦ " + o.reward); var lf = o.until - tn; hd.appendChild(el("small", "", "ещё " + (lf >= 86400 ? Math.floor(lf / 86400) + " дн " + Math.floor(lf % 86400 / 3600) + " ч" : fmtShort(lf)))); card.appendChild(hd);   // долгие сроки — днями
+          var hd = el("div", "ohead"); hd.append(o.tier + " заказ · ✦ " + formatGameNumber(o.reward)); var lf = o.until - tn; hd.appendChild(el("small", "", "ещё " + (lf >= 86400 ? Math.floor(lf / 86400) + " дн " + Math.floor(lf % 86400 / 3600) + " ч" : fmtShort(lf)))); card.appendChild(hd);   // долгие сроки — днями
           var ul = el("div", "olist");
           o.items.forEach(function (it) {
             var have = haveRecipe(it.recipe, it.grade), row = el("div", "orow" + (have >= it.n ? " ok" : ""));
@@ -7086,7 +7108,7 @@
               var on = pk.ids[b.strain] || 0, wrap = el("div", "pcell"), cell = el("div", "slot" + (on ? " on" : "")); cell.setAttribute("aria-label", itemName(b.strain));
               var cv2 = el("canvas", "pix"); itemIcon(cv2, b.strain); cell.appendChild(cv2);
               cell.appendChild(el("span", "n", on ? on + "/" + b.count : String(b.count)));
-              cell.appendChild(el("span", "vars", "✦ " + (itemOf(b.strain) || {}).dust));
+              cell.appendChild(el("span", "vars", "✦ " + formatGameNumber((itemOf(b.strain) || {}).dust)));
               var set = function (v) { haptic("light"); if (v > 0) pk.ids[b.strain] = v; else delete pk.ids[b.strain]; draw(); };
               var pm = el("div", "pm"), mn = el("button", "", "−"), pl = el("button", "", "+"); mn.type = pl.type = "button";
               mn.onclick = function () { if (on > 0) set(on - 1); };
@@ -7098,12 +7120,12 @@
           });
           if (anyPicked) card.appendChild(btn("Сбросить выбор", "ghost", function () { haptic("light"); pk.ids = {}; draw(); }));
           var a = el("div", "invacts");
-          var give = btn("Сдать · ✦ " + o.reward, "", function () {
+          var give = btn("Сдать · ✦ " + formatGameNumber(o.reward), "", function () {
             if (!ready) return;
             haptic("success");
             var body = { slot: o.slot, pick: {} };
             Object.keys(pk.ids).forEach(function (id) { body.pick[id] = pk.ids[id]; var b0 = barnOf(id); if (b0) b0.count -= pk.ids[id]; }); delete F.orderPicks[o.slot];
-            F.state.dust += o.reward; var rw = o.reward; o.items = []; o.ready = Math.min(o.until, farmNow() + [86400, 86400, 172800][o.slot]); renderFarm(); draw(); toast("Заказ сдан: +✦ " + rw);   // как на сервере: новый — в конце срока сданного (ритм сутки/сутки/двое, 2026-11-17); было ORDER_NEXT на сервере
+            F.state.dust += o.reward; var rw = o.reward; o.items = []; o.ready = Math.min(o.until, farmNow() + [86400, 86400, 172800][o.slot]); renderFarm(); draw(); toast("Заказ сдан: +✦ " + formatGameNumber(rw));   // как на сервере: новый — в конце срока сданного (ритм сутки/сутки/двое, 2026-11-17); было ORDER_NEXT на сервере
             farmCall("/api/farm/order", body).catch(function () {});
           });
           give.disabled = !ready; a.appendChild(give);
@@ -7244,7 +7266,7 @@
           var cell = el("div", "slot" + (on ? " on" : "")); cell.setAttribute("aria-label", itemName(v.pid) || v.r.name);
           var cv = el("canvas", "pix"); itemIcon(cv, v.pid); cell.appendChild(cv);
           cell.appendChild(el("span", "n", String(v.can)));
-          cell.appendChild(el("span", "vars", "✦ " + v.info.dust));
+          cell.appendChild(el("span", "vars", "✦ " + formatGameNumber(v.info.dust)));
           cell.onclick = function () { haptic("light"); F.ovenSel = on ? null : { kind: kind, k: v.k, sort: v.sort }; drawCats(); };
           g.appendChild(cell);
         });
@@ -7255,7 +7277,7 @@
         if (picked) {
           var v = picked, r = v.r, d = el("div", "ovpick");
           d.appendChild(el("b", "", itemName(v.pid) || r.name));
-          var s1 = el("small", "", v.parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + v.info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : "") + (r.kind === "oven" && r.points ? " · сытость " + ((F.state && F.state.satmap && F.state.satmap[v.k]) || r.points) : ""));
+          var s1 = el("small", "", v.parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + formatGameNumber(v.info.dust) + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : "") + (r.kind === "oven" && r.points ? " · сытость " + ((F.state && F.state.satmap && F.state.satmap[v.k]) || r.points) : ""));
           d.appendChild(s1); d.appendChild(s2); if (v.k === "brew") d.appendChild(el("small", "", BREW_SAYS)); pl.appendChild(d);
           if (!slot) { var no = btn("Все ячейки заняты", "ghost", function () {}); no.disabled = true; pl.appendChild(no); }
           else qtyBox(pl, { key: "cook:" + v.k + ":" + v.sort, max: function () { return v.can; },
@@ -7446,7 +7468,7 @@
         var k = v.k, sort = v.sort, r = v.r, can = v.can, outKey = v.outKey, pid = v.pid, info = v.info, parts = v.parts;
         var row = el("div", "seed"), cv = el("canvas", "pix"); itemIcon(cv, pid); row.appendChild(cv);
         var tx = el("span"); tx.appendChild(el("b", "", itemName(pid) || r.name));
-        var s1 = el("small", "", parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + info.dust + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : "") + (r.kind === "oven" && r.points ? " · сытость " + ((F.state && F.state.satmap && F.state.satmap[k]) || r.points) : ""));
+        var s1 = el("small", "", parts.join(" + ")), s2 = el("small", "", "⏱ " + fmtLeft(r.min * 60) + " за штуку · ✦ " + formatGameNumber(info.dust) + (r.points ? " · +" + r.points + " " + plural(r.points, "очко", "очка", "очков") : "") + (r.kind === "oven" && r.points ? " · сытость " + ((F.state && F.state.satmap && F.state.satmap[k]) || r.points) : ""));
         s1.style.display = s2.style.display = "block"; tx.appendChild(s1); tx.appendChild(s2);
         row.appendChild(tx); sh.appendChild(row);
         var acts = el("div", "invacts");
@@ -7616,7 +7638,7 @@
   function priceFor(key, base) { var own = ((F.state && F.state.prices) || {})[key], r = rangeOf(base); return own ? Math.max(r[0], Math.min(r[1], own)) : base; }
   function priceControl(d, key, base, item, kind, redraw) {
     var cur = priceFor(key, base), r = rangeOf(base), stepN = Math.max(1, Math.round(base * .05));
-    var pl = el("div", "sub", "Цена за штуку" + (cur === base ? " — как на рынке" : " (на рынке ✦ " + base + ")") + ". Можно от ✦ " + r[0] + " до ✦ " + r[1] + "."); pl.style.marginTop = "16px"; d.appendChild(pl);
+    var pl = el("div", "sub", "Цена за штуку" + (cur === base ? " — как на рынке" : " (на рынке ✦ " + formatGameNumber(base) + ")") + ". Можно от ✦ " + formatGameNumber(r[0]) + " до ✦ " + formatGameNumber(r[1]) + "."); pl.style.marginTop = "16px"; d.appendChild(pl);
     var set = function (v) {
       v = Math.max(r[0], Math.min(r[1], v)); haptic("light");
       F.state.prices = F.state.prices || {}; if (v === base) delete F.state.prices[key]; else F.state.prices[key] = v;
@@ -7625,7 +7647,7 @@
     var row = el("div", "qty price"), dn = btn("−", "ghost", function () { set(cur - stepN); }), up = btn("+", "ghost", function () { set(cur + stepN); }),
         same = btn("как на рынке", "ghost", function () { set(base); });
     dn.disabled = cur <= r[0]; up.disabled = cur >= r[1]; same.disabled = cur === base;
-    row.appendChild(dn); row.appendChild(el("div", "qval", "✦ " + cur)); row.appendChild(up); row.appendChild(same); d.appendChild(row);
+    row.appendChild(dn); row.appendChild(el("div", "qval", "✦ " + formatGameNumber(cur))); row.appendChild(up); row.appendChild(same); d.appendChild(row);
   }
   // выставление на продажу — один вид везде (его правка 2026-11-15): «На продаже X из Y», счётчик «Выставить / Убрать», цена счётчиком
   // o: { key, listed(), total(), step(d), priceKey, base, item, kind, redraw() }
@@ -7677,7 +7699,7 @@
   function renderShopTab() {
     var s = F.state, box = $("shopview"); if (!s) return;
     if (shopSeedObserver) shopSeedObserver.disconnect();
-    box.innerHTML = ""; setText($("shopdust"), "✦ " + s.dust);
+    box.innerHTML = ""; setText($("shopdust"), "✦ " + formatGameNumber(s.dust));
     // в «Купить» — кружок: сколько штук игроки выставили в разделе
     var cnt = { seed: 0, crop: 0, food: 0, fert: 0 }, mk = F.market;
     if (mk) { mk.offers.forEach(function (o) { cnt.seed += o.count; }); (mk.items || []).forEach(function (o) { cnt[catOf(o.item)] += o.count; }); }
@@ -7724,16 +7746,16 @@
           var st = m.strains[o.strain]; if (!st) return;
           var key = seedOfferKey(o);
           var op = o.price || st.price;
-          wares.push({ key: key, icon: seedIconOf(st), tag: "✦ " + op, qty: "×" + o.count, seller: o.seller, have: ownSeeds(o.strain) });
+          wares.push({ key: key, icon: seedIconOf(st), tag: "✦ " + formatGameNumber(op), qty: "×" + formatGameNumber(o.count), seller: o.seller, have: ownSeeds(o.strain) });
           if (o.pub === "~") act[key] = function () {                                   // ночная аномалия: ни сорта, ни свойств — только цена
             var d = infoBox(box, "???", ["Продаёт " + o.seller + "."]);
-            var acts = el("div", "invacts"), b = btn("Купить за ✦ " + op, "", function () { buyWare(b, o.pub, "anomaly", "seed", op, "+1 семя", "Странное семя — в инвентаре"); });
+            var acts = el("div", "invacts"), b = btn("Купить за ✦ " + formatGameNumber(op), "", function () { buyWare(b, o.pub, "anomaly", "seed", op, "+1 семя", "Странное семя — в инвентаре"); });
             acts.appendChild(b); d.appendChild(acts); oddWarn(d, b);
           };
           else act[key] = function () {
             var tier = SEEDTIER[st.tier] || SEEDTIER.common;
             var d = st.odd ? infoBox(box, st.name, ["Продаёт " + o.seller + "."]) : infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · продаёт " + o.seller, describe(st)]);
-            var acts = el("div", "invacts"), b = btn("Купить за ✦ " + op, "", function () { buyWare(b, o.pub, st.id, "seed", op, "+1 семя", "Куплено: " + st.name + " — семя в инвентаре"); });
+            var acts = el("div", "invacts"), b = btn("Купить за ✦ " + formatGameNumber(op), "", function () { buyWare(b, o.pub, st.id, "seed", op, "+1 семя", "Куплено: " + st.name + " — семя в инвентаре"); });
             acts.appendChild(b); if (!st.odd) acts.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: m.bonuses, buy: function () { b.click(); } }); }));
             d.appendChild(acts); if (st.id === "anomaly") oddWarn(d, b);
           };
@@ -7743,10 +7765,10 @@
           if (catOf(o.item) !== cat) return;
           var it = itemOf(o.item); if (!it) return;
           var key = "it:" + i + ":" + o.pub + ":" + o.item;
-          wares.push({ key: key, icon: itemIconOf(o.item), tag: "✦ " + o.price, qty: "×" + o.count, seller: o.seller, have: ownItems(o.item) });
+          wares.push({ key: key, icon: itemIconOf(o.item), tag: "✦ " + formatGameNumber(o.price), qty: "×" + formatGameNumber(o.count), seller: o.seller, have: ownItems(o.item) });
           act[key] = function () {
-            var d = infoBox(box, itemName(o.item), ["Продаёт " + o.seller + ". Ляжет к тебе в амбар.", "В пыль в амбаре — ✦ " + it.dust + "." + (satOfItem(o.item) ? " " + satTxt(o.item) : "")]);
-            var acts = el("div", "invacts"), b = btn("Купить за ✦ " + o.price, "", function () {
+            var d = infoBox(box, itemName(o.item), ["Продаёт " + o.seller + ". Ляжет к тебе в амбар.", "В пыль в амбаре — ✦ " + formatGameNumber(it.dust) + "." + (satOfItem(o.item) ? " " + satTxt(o.item) : "")]);
+            var acts = el("div", "invacts"), b = btn("Купить за ✦ " + formatGameNumber(o.price), "", function () {
               if (!hasBuild(F.state, "barn")) { haptic("error"); return toast("Урожай и блюда кладут в амбар — сначала построй его"); }
               buyWare(b, o.pub, o.item, "item", o.price, "+1 в амбар", "Куплено: " + itemName(o.item).toLowerCase() + " — в амбаре");
             });
@@ -7782,7 +7804,7 @@
       s.inv.filter(function (it) { return it.count > 0 && s.strains[it.strain] && (!s.strains[it.strain].base || s.strains[it.strain].odd); }).forEach(function (it) {
         var st = s.strains[it.strain], key = "inv:" + it.strain;
         var sp = priceFor("s:" + st.id, st.price);
-        mine.push({ key: key, icon: seedIconOf(st), tag: "✦ " + sp, qty: it.listed ? "в продаже\n" + it.listed + " из " + it.count : "×" + it.count, sale: !!it.listed });
+        mine.push({ key: key, icon: seedIconOf(st), tag: "✦ " + formatGameNumber(sp), qty: it.listed ? "в продаже\n" + it.listed + " из " + it.count : "×" + it.count, sale: !!it.listed });
         acts2[key] = function () {
           // как в инвентаре: номер варианта, код сорта и все свойства — таблицей вместе с одноимёнными вариантами (его правка 2026-11-17)
           var vl = varLabel(st.id), tier = SEEDTIER[st.tier] || SEEDTIER.common;
@@ -7802,9 +7824,9 @@
       (s.stall || []).forEach(function (x) { if (x.listed > 0 && ids.indexOf(x.item) < 0) ids.push(x.item); });
       ids.filter(function (id) { return catOf(id) === cat && itemOf(id); }).forEach(function (id) {
         var it = itemOf(id), inb = (barnOf(id) || { count: 0 }).count, ons = (stallOf(id) || { listed: 0 }).listed, base = stallPrice(it.dust), price = priceFor(id, base), key = "b:" + id;
-        mine.push({ key: key, icon: itemIconOf(id), tag: "✦ " + price, qty: ons ? "в продаже\n" + ons + " из " + (inb + ons) : "×" + inb, sale: !!ons });
+        mine.push({ key: key, icon: itemIconOf(id), tag: "✦ " + formatGameNumber(price), qty: ons ? "в продаже\n" + ons + " из " + (inb + ons) : "×" + inb, sale: !!ons });
         acts2[key] = function () {
-          var d = infoBox(box, itemName(id), ["Игрокам — ✦ " + price + " за штуку, в пыль — ✦ " + it.dust + "." + (satOfItem(id) ? " " + satTxt(id) : ""),
+          var d = infoBox(box, itemName(id), ["Игрокам — ✦ " + formatGameNumber(price) + " за штуку, в пыль — ✦ " + formatGameNumber(it.dust) + "." + (satOfItem(id) ? " " + satTxt(id) : ""),
             "Выставленное лежит на прилавке: его не смолоть, не испечь и не распылить, пока не уберёшь."]);
           saleBox(d, { key: "sale:" + id, listed: function () { return (stallOf(id) || { listed: 0 }).listed; },
             total: function () { return (barnOf(id) || { count: 0 }).count + (stallOf(id) || { listed: 0 }).listed; },
@@ -7841,8 +7863,8 @@
   function buyWare(b, pub, id, kind, price, gain, done) {
     var cur = F.state;
     if (cur.dust < price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
-    haptic("success"); buyFx(b, gain, "−✦ " + price);
-    cur.dust -= price; setText($("shopdust"), "✦ " + cur.dust);
+    haptic("success"); buyFx(b, gain, "−✦ " + formatGameNumber(price));
+    cur.dust -= price; setText($("shopdust"), "✦ " + formatGameNumber(cur.dust));
     b.disabled = true; b.textContent = "Покупаю…";
     call("/api/farm/buy", { pub: pub, strain: id, kind: kind }).then(function (r) {
       if (r.error) { toast(r.error); loadFarm().catch(function () {}); return openShop("buy", F.shopFocus); }
@@ -7928,7 +7950,7 @@
       var show1 = found || bestOf(vs) || { tier: "common", finish: "plain" }, tier = TIER[show1.tier] || TIER.common;
       sheet(function (sh) {
         sh.classList.add("vdetail");
-        if (found) { var n = el("div", "mono", found.duplicate ? "Повтор — +" + found.dust + " звёздной пыли" : "Новая пластинка в фонотеке!"); n.style.color = "var(--gold)"; sh.appendChild(n); }
+        if (found) { var n = el("div", "mono", found.duplicate ? "Повтор — +" + formatGameNumber(found.dust) + " звёздной пыли" : "Новая пластинка в фонотеке!"); n.style.color = "var(--gold)"; sh.appendChild(n); }
         var cv = el("canvas", "pix" + finCls(show1.finish)); sh.appendChild(cv); drawVinyl(cv, t, 64, show1.tier, show1.finish);
         sh.appendChild(el("h3", "", t.title));
         var sub = el("div", "sub"); var tb = el("b", "", tier[0] + (show1.finish !== "plain" ? ", " + FINISH[show1.finish] : "")); tb.style.color = tier[1]; sub.appendChild(tb);
@@ -8173,19 +8195,19 @@
     (v.shop || []).forEach(function (it) {
       var st = v.strains[it.strain]; if (!st) return;
       var vp = it.price || st.price;
-      wares.push({ key: "s:" + it.strain, icon: seedIconOf(st), tag: "✦ " + vp, qty: "×" + it.count });
+      wares.push({ key: "s:" + it.strain, icon: seedIconOf(st), tag: "✦ " + formatGameNumber(vp), qty: "×" + it.count });
       act["s:" + it.strain] = function () {
         var tier = SEEDTIER[st.tier] || SEEDTIER.common, d = st.odd ? infoBox(box, st.name, []) : infoBox(box, st.name + " · " + strainCode(st), [tier[0] + " · семена", describe(st)]);
-        var a = el("div", "invacts"), b = btn("Купить за ✦ " + vp, "", function () { buyHere(b, st.id, "seed", vp, "Куплено: " + st.name + " — семя в инвентаре"); });
+        var a = el("div", "invacts"), b = btn("Купить за ✦ " + formatGameNumber(vp), "", function () { buyHere(b, st.id, "seed", vp, "Куплено: " + st.name + " — семя в инвентаре"); });
         a.appendChild(b); if (!st.odd) a.appendChild(btn("Подробнее", "ghost", function () { seedSheet(st, { foreign: true, bonuses: v.bonuses, buy: function () { b.click(); } }); })); d.appendChild(a); if (st.id === "anomaly") oddWarn(d, b);
       };
     });
     (v.stall || []).forEach(function (x) {
       var it = itemOf(x.item); if (!it) return;
-      wares.push({ key: "i:" + x.item, icon: itemIconOf(x.item), tag: "✦ " + x.price, qty: "×" + x.count });
+      wares.push({ key: "i:" + x.item, icon: itemIconOf(x.item), tag: "✦ " + formatGameNumber(x.price), qty: "×" + formatGameNumber(x.count) });
       act["i:" + x.item] = function () {
-        var d = infoBox(box, itemName(x.item), [(catOf(x.item) === "food" ? "Блюда" : catOf(x.item) === "fert" ? "Удобрение" : "Урожай") + " · ляжет к тебе в амбар", "В пыль в амбаре — ✦ " + it.dust + "." + (satOfItem(x.item) ? " " + satTxt(x.item) : "")]);
-        var a = el("div", "invacts"), b = btn("Купить за ✦ " + x.price, "", function () {
+        var d = infoBox(box, itemName(x.item), [(catOf(x.item) === "food" ? "Блюда" : catOf(x.item) === "fert" ? "Удобрение" : "Урожай") + " · ляжет к тебе в амбар", "В пыль в амбаре — ✦ " + formatGameNumber(it.dust) + "." + (satOfItem(x.item) ? " " + satTxt(x.item) : "")]);
+        var a = el("div", "invacts"), b = btn("Купить за ✦ " + formatGameNumber(x.price), "", function () {
           if (!hasBuild(F.state, "barn")) { haptic("error"); return toast("Урожай и блюда кладут в амбар — сначала построй его"); }
           buyHere(b, x.item, "item", x.price, "Куплено: " + itemName(x.item).toLowerCase() + " — в амбаре");
         });
@@ -8286,14 +8308,14 @@
       r.neighbors.forEach(function (n) {
         var li = el("li"); var av = el("span", "av"); av.className = "av"; av.style.cssText = "border-radius:50%;display:grid;place-items:center;font-weight:650;background:radial-gradient(circle at 35% 30%,#fff1d2,#ffc469 35%,#8a4a14);color:#2a1406";
         av.textContent = initial(n.name); setPhoto(av, n.avatar); li.appendChild(av);
-        var t = el("span"), nm = el("span", "nn"); nm.appendChild(el("span", "", n.name)); if (n.dust != null) nm.appendChild(el("b", "nd", "✦ " + n.dust)); t.appendChild(nm); t.appendChild(el("span", "t", n.title + (n.gifted ? " · подарок оставлен" : ""))); li.appendChild(t);
+        var t = el("span"), nm = el("span", "nn"); nm.appendChild(el("span", "", n.name)); if (n.dust != null) nm.appendChild(el("b", "nd", "✦ " + formatGameNumber(n.dust))); t.appendChild(nm); t.appendChild(el("span", "t", n.title + (n.gifted ? " · подарок оставлен" : ""))); li.appendChild(t);
         li.appendChild(btn("В гости", "", function () { visit(n.pub); })); li.lastChild.className = "";
         ul.appendChild(li);
       });
       if (r.me) {                                                  // своя плашка — на своём месте по пыли (его просьба 2026-11-16)
         var m = r.me, li2 = el("li", "me"), av2 = el("span", "av"); av2.style.cssText = "border-radius:50%;display:grid;place-items:center;font-weight:650;background:radial-gradient(circle at 35% 30%,#fff1d2,#ffc469 35%,#8a4a14);color:#2a1406";
         av2.textContent = initial(m.name); setPhoto(av2, m.avatar); li2.appendChild(av2);
-        var t2 = el("span"), nm2 = el("span", "nn"); nm2.appendChild(el("span", "", m.name)); nm2.appendChild(el("b", "nd", "✦ " + m.dust)); t2.appendChild(nm2);
+        var t2 = el("span"), nm2 = el("span", "nn"); nm2.appendChild(el("span", "", m.name)); nm2.appendChild(el("b", "nd", "✦ " + formatGameNumber(m.dust))); t2.appendChild(nm2);
         t2.appendChild(el("span", "t", (m.title ? m.title + " · " : "") + "это ты")); li2.appendChild(t2);
         li2.appendChild(el("b", "place", m.place + "-е"));
         var at = ul.children[m.place - 1]; if (at) ul.insertBefore(li2, at); else ul.appendChild(li2);

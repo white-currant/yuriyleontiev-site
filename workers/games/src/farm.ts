@@ -318,14 +318,14 @@ async function breed(a: Strain, b: Strain, mutX = 1) {
   const g: any = {
     shape, color,
     minutes: Math.round(clamp(avg("minutes") * mut(), 5, 480)),          // до минуты, а не до 5 (его решение 2026-11-16, вопрос Denis: «почему 20, а не 15»)
-    dust: Math.round(clamp(avg("dust") * mut(), 1, 400)),
+    dust: Math.max(1, Math.round(avg("dust") * mut())),
     vinyl: Math.round(clamp(avg("vinyl") * mut(), 0.01, 0.5) * 100) / 100,
     thirst: Math.round(clamp(avg("thirst") * mut(), 10, 240) / 5) * 5,
     bonus: null as string | null, gen: Math.max(a.gen, b.gen) + 1,
   };
   if (r() < 0.1) {                                       // скачок: одно свойство заметно лучше
     const k = ["dust", "minutes", "vinyl", "thirst"][Math.floor(r() * 4)];
-    if (k === "dust") g.dust = Math.min(400, Math.round(g.dust * 1.5));
+    if (k === "dust") g.dust = Math.round(g.dust * 1.5);
     if (k === "minutes") g.minutes = Math.max(5, Math.round(g.minutes * 0.7));
     if (k === "vinyl") g.vinyl = Math.min(0.5, Math.round(g.vinyl * 150) / 100);
     if (k === "thirst") g.thirst = Math.min(240, Math.round(g.thirst * 1.5 / 5) * 5);
@@ -608,7 +608,7 @@ async function mythSeed(uid: number) {                         // мифичес
   const inv = (await q("SELECT strain FROM f_inv WHERE user = ? AND count > 0", [uid])).map((r) => String(r[0]));
   const pool = Object.values(await strains(inv)).filter((x) => !x.myth && !x.hidden);
   const b = pool[Math.floor(Math.random() * pool.length)];
-  const g: any = { shape: b.shape, color: b.color, minutes: b.minutes, dust: Math.min(1200, b.dust * 3), vinyl: b.vinyl, thirst: b.thirst,
+  const g: any = { shape: b.shape, color: b.color, minutes: b.minutes, dust: b.dust * 3, vinyl: b.vinyl, thirst: b.thirst,
                    bonus: b.bonus, gen: b.gen, points: b.points, myth: true,
                    nonce: [...crypto.getRandomValues(new Uint8Array(4))].map((x) => x.toString(16).padStart(2, "0")).join("") };
   const id = await hashId(g), name = nameFor(g);
@@ -908,8 +908,7 @@ async function farmState1(u: any, t: number, started: number, eventRows?: any[][
   const bs = [...barn.map((b) => b.strain), ...stall.map((x) => x.item), ...hive.map((x) => x.item), ...Object.values(HON).map((h: any) => h.item)];
   const bss = await strains(barn.map((b) => String(b.strain)).filter((x) => !x.startsWith("p:")));   // что можно приготовить из амбара — с ценой и сортом
   for (const b of barn) { const id = String(b.strain), g = bss[id];
-    if (g?.shape === "grain") bs.push("p:flour@" + flourKey(g));
-    if (g) for (const rk in RAW_MAIN) if (RAW_MAIN[rk] === g.shape) bs.push("p:" + rk + "@" + rawKey(g));
+    if (g) bs.push(...cropProductKeys(g));
     if (recipeOf(id) === "flour" && sortOf(id)) for (const rk in RECIPES) if (RECIPES[rk].needs["p:flour"]) bs.push("p:" + rk + "@" + sortOf(id)); }
   const FER: Record<number, { n: number; c: number }> = {};    // удобрение на текущих посадках
   for (const [i, n, pl, c] of await q("SELECT idx, n, planted, credit FROM f_fert WHERE user = ?", [u.id])) if (by.get(Number(i)) && Number(by.get(Number(i))[2]) === Number(pl)) FER[Number(i)] = { n: Number(n), c: Number(c) };
@@ -1167,8 +1166,9 @@ export async function water(u: any, idx: number, receivedAt = Date.now(), compac
   return { points: POINTS_WATER, farm: await farmState(u) };
 }
 
-export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
-  const EV = await plotEvents(u.id);
+export async function harvest(u: any, idx: number, receivedAt = Date.now(), compact = false) {
+  const previousEvents = compact ? await q(PLOT_EVENTS_SQL, [u.id]) : undefined;
+  const EV = await plotEvents(u.id, previousEvents);
   if (EV[idx] && EV[idx].kind === "coal") {
     const result = await takeCoal(u, idx);
     if (!result.error) await plotAudit(u.id, receivedAt, "harvest", idx, "p:coal", 1, "coal").raw();
@@ -1220,8 +1220,8 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
   const wetGrain = hasBarn && s.shape === "grain" && weatherOn(t) === "shower";
   const writes: any[] = [hasBarn
     ? DB.prepare(`INSERT INTO f_barn (user, strain, count) VALUES (?, ?, ?)
-                  ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.odd ? "p:eye" : s.id, crop)
-    : DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("harvest_to_dust", { item: s.id, quantity: crop, unitPrice: s.dust }), crop * s.dust, u.id)];
+                  ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count RETURNING count`).bind(u.id, s.odd ? "p:eye" : s.id, crop)
+    : DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ? RETURNING dust").bind(dustContext("harvest_to_dust", { item: s.id, quantity: crop, unitPrice: s.dust }), crop * s.dust, u.id)];
   writes.push(plotAudit(u.id, receivedAt, "harvest", idx, s.id, crop));
   if (wetGrain) writes.push(DB.prepare("INSERT INTO f_wet (user, strain, n, dry_at) VALUES (?, ?, ?, ?)").bind(u.id, s.id, crop, t + WET_DRY));
   if (cometDust + mythDust) writes.push(DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("harvest_bonus", { item: s.id, cometDust, mythDust }), cometDust + mythDust, u.id));
@@ -1234,10 +1234,11 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
                                                  + COALESCE((SELECT count FROM f_chest WHERE user = ? AND strain = 'anomaly'), 0)`, [u.id, u.id]))[0][0]) : 0;
   const seeds = s.odd ? ((await oddHeld(u.id)) >= ODD_PER_USER ? 0 : (fresh && oddStock === 0) || (await oddInGame()) + 1 <= (await oddCap()) ? 1 : 0) : s.color === "anomaly" ? 1 : (s.myth ? 0 : SEEDS_MIN + (Math.random() < SEEDS_EXTRA ? 1 : 0) + (s.bonus === "seedy" ? 1 : 0)) * (marks.includes("gseed") ? 3 : 1);   // травяная пыль — семян втрое   // мифическое семян не даёт
   if (seeds) writes.push(DB.prepare(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)
-                                     ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count`).bind(u.id, s.id, seeds));
-  await DB.batch(writes);
+                                     ON CONFLICT(user, strain) DO UPDATE SET count = count + excluded.count RETURNING count, listed`).bind(u.id, s.id, seeds));
+  const [payout, ...extra] = await DB.batch(writes);
+  const seedRows = seeds ? [{ strain: s.id, ...extra.at(-1)!.results[0] }] : [];
   // Скрещивание учитывает грядки, соприкасающиеся стороной или углом.
-  let hybrid: any = null;
+  let hybrid: any = null, seedDropUntil = 0, breedingAdvanced = false;
   const row = Math.floor(idx / 3), col = idx % 3;
   const neighbors = all.filter(([i, crop]) => crop !== p[1] && ss[crop] && !ss[crop].myth &&
     Math.max(Math.abs(Math.floor(Number(i) / 3) - row), Math.abs(Number(i) % 3 - col)) === 1);
@@ -1258,21 +1259,24 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
     const event = started && foundAt >= started && foundAt < started + BREEDING_DURATION ? [
       DB.prepare(BREEDING_PLAYER_SQL).bind(...breedingPlayerArgs(u.id, started)),
       DB.prepare(`INSERT OR IGNORE INTO f_breeding_hybrid (user, started, strain)
-        SELECT user, started, ? FROM f_breeding_player WHERE user = ? AND started = ? AND hybrids < goal`).bind(h.id, u.id, started),
+        SELECT user, started, ? FROM f_breeding_player WHERE user = ? AND started = ? AND hybrids < goal RETURNING 1`).bind(h.id, u.id, started),
     ] : [];
-    const [, , discovery] = await DB.batch([
+    const [, , discovery, hybridSeed, , , breedingDiscovery] = await DB.batch([
       DB.prepare("INSERT OR IGNORE INTO f_strains (id, name, genes, created) VALUES (?, ?, ?, ?)").bind(h.id, h.name, genes, foundAt),
       DB.prepare(`INSERT INTO f_strain_origin (strain, breeder, mutation, parent_a, parent_b, parent_a_id, parent_b_id)
         SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`).bind(h.id, u.id, mutation || "none", s.name, other.name, s.id, other.id),
       DB.prepare(`INSERT INTO f_evlog (user, kind, at) SELECT ?, ?, ?
                   WHERE NOT EXISTS (SELECT 1 FROM f_inv WHERE user = ? AND strain = ?) RETURNING 1`)
         .bind(u.id, SEED_DROP_KEY + h.id, foundAt, u.id, h.id),
-      DB.prepare("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1").bind(u.id, h.id),
+      DB.prepare("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1 RETURNING count, listed").bind(u.id, h.id),
       DB.prepare("DELETE FROM f_evlog WHERE user = ? AND kind >= 'seed:hybrid:' AND kind < 'seed:hybrid;' AND at <= ?").bind(u.id, foundAt - SEED_DROP_SECONDS),
       ...event,
     ]);
     STRAIN_NONE.delete(h.id);
     hybrid = { ...h, mutation, parents: [s.name, other.name], fresh: (discovery.results || []).length > 0 };
+    seedRows.push({ strain: h.id, ...hybridSeed.results[0] });
+    if (hybrid.fresh) seedDropUntil = foundAt + SEED_DROP_SECONDS;
+    breedingAdvanced = !!breedingDiscovery?.results?.length;
   }
   const luck = (s.bonus === "lucky" ? 2 : 1) * (weatherOn(t) === "fullmoon" ? 2 : 1);
   const vinyl = await dropVinyl(u.id, s.vinyl * luck);
@@ -1297,11 +1301,26 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
                       DB.prepare("INSERT INTO f_evlog (user, kind, at) VALUES (?, 'sun', ?)").bind(u.id, t)]);
     }
   }
-  const state = await farmState(u);
-  const farm = vinyl ? { ...state, vinyls: (await q(`SELECT item, tier, finish, count FROM g_items
+  const result = { card, crop, dust, wet: wetGrain ? t + WET_DRY : 0, honey_lost: honeyLost, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl };
+  const vinyls = vinyl ? (await q(`SELECT item, tier, finish, count FROM g_items
     WHERE user = ? AND game = 'farm' AND kind = 'vinyl' AND item = ?`, [u.id, vinyl.id]))
-    .map(([id, tier, finish, count]) => ({ id, tier, finish, count: Number(count) })) } : state;
-  return { card, crop, dust, wet: wetGrain ? t + WET_DRY : 0, honey_lost: honeyLost, comet: cometDust, myth_dust: mythDust, star, moss2: mossX, gem2, frost, thawed, sunbeam, barn: hasBarn, points, rain, double, seeds, hybrid, vinyl, farm };
+    .map(([id, tier, finish, count]) => ({ id, tier, finish, count: Number(count) })) : undefined;
+  if (compact && previousEvents?.length === 0 && !s.odd && !s.myth && !hon.length && !marks.length &&
+      !mossX && !wetGrain && !frost && !thawed.length && sunbeam < 0 && !breedingAdvanced) {
+    const row = payout.results[0];
+    const balance = vinyl?.dust
+      ? Number((await q("SELECT dust FROM f_farms WHERE user = ?", [u.id]))[0][0])
+      : hasBarn ? undefined : Number(row.dust);
+    const products: Record<string, any> = {};
+    if (hasBarn) for (const id of cropProductKeys(s)) products[id] = productInfo(id, {});
+    return { ...result, vinyls, farm_patch: {
+      kind: "harvest", plot: { idx, crop: null }, dust: balance, seeds: seedRows,
+      barn: hasBarn ? { strain: s.id, count: Number(row.count) } : undefined,
+      seed_drop_until: seedDropUntil, products, now: now(),
+    } };
+  }
+  const state = await farmState(u);
+  return { ...result, farm: vinyls ? { ...state, vinyls } : state };
 }
 
 // амбар → звёздная пыль: s.dust за штуку. strain = "*" — продать всё.
@@ -1652,6 +1671,12 @@ export async function collectEggs(u: any) {
   });
 }
 
+function cropProductKeys(g: Strain) {
+  const keys = g.shape === "grain" ? ["p:flour@" + flourKey(g)] : [];
+  for (const recipe in RAW_MAIN) if (RAW_MAIN[recipe] === g.shape) keys.push("p:" + recipe + "@" + rawKey(g));
+  return keys;
+}
+
 function productIds(ids: string[]) { return ids.filter((x) => String(x).startsWith("p:")); }
 async function productsFor(ids: string[]) {
   const ss = await strains(productIds(ids).map(sortOf).filter(Boolean)), out: Record<string, any> = { ...PRODUCTS };
@@ -1746,7 +1771,7 @@ export async function cook(u: any, recipe: string, n: number, sort = "") {
   }
   if (main && !(sort && sort.startsWith("r:"))) {           // суп, похлёбка, чай, джем: сорт главного сырья; не выбран — самый дешёвый, которого хватает
     const by: Record<string, number> = {}, price: Record<string, number> = {};
-    for (const [id, c] of barn) { const g = ss[id]; if (g?.shape !== main) continue; const key = rawKey(g); by[key] = (by[key] || 0) + Number(c); price[key] = Math.min(price[key] ?? 1e9, g.dust); }
+    for (const [id, c] of barn) { const g = ss[id]; if (g?.shape !== main) continue; const key = rawKey(g); by[key] = (by[key] || 0) + Number(c); price[key] = Math.min(price[key] ?? g.dust, g.dust); }
     const opts = Object.keys(by).filter((x) => by[x] >= r.needs[main] * k).sort((a, c) => price[a] - price[c]);
     sort = opts[0] || "";
   }
