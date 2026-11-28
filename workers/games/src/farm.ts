@@ -112,7 +112,12 @@ let q: (sql: string, args?: any[]) => Promise<any[][]>;
 let DB: any;
 let now: () => number, today: () => string, nameOf: (u: any) => string;
 let prefetch: (list: [string, any[]][]) => Promise<any[][][]>, preClear: () => void;
-export function setup(deps: any) { ({ q, DB, now, today, nameOf, prefetch, preClear } = deps); }
+let breedingStart = 0;
+export function setup(deps: any) {
+  ({ q, DB, now, today, nameOf, prefetch, preClear } = deps);
+  const configured = Number(deps.breedingStart);
+  breedingStart = Number.isSafeInteger(configured) && configured > 0 ? configured : 0;
+}
 
 // ---------- пластинки: одна пластинка — один трек (каталог games/vinyls.json сайта, кэш на час) ----------
 // У любого трека есть все варианты: редкость и отделка выпадают при каждой находке, а не закреплены за треком.
@@ -755,6 +760,38 @@ export async function slimesDone(u: any) {
   return { ok: true };
 }
 
+const BREEDING_DURATION = 3 * DAY, BREEDING_GOAL = 12, BREEDING_STARTER = 100, BREEDING_REWARD = 100;
+const BREEDING_PLAYER_SQL = `INSERT OR IGNORE INTO f_breeding_player (user, started, starter, goal, reward)
+  VALUES (?, ?, ?, ?, ?)`;
+const BREEDING_PROGRESS_SQL = "SELECT starter, hybrids, goal, reward, intro_seen FROM f_breeding_player WHERE user = ? AND started = ?";
+function breedingPlayerArgs(uid: number, started: number) {
+  return [uid, started, BREEDING_STARTER, BREEDING_GOAL, BREEDING_REWARD];
+}
+async function breedingState(uid: number, t: number, started: number, preloaded?: any[][]) {
+  if (!started || t < started) return null;
+  const until = started + BREEDING_DURATION;
+  let [row] = preloaded ?? await q(BREEDING_PROGRESS_SQL, [uid, started]);
+  if (!row && t < until) {
+    [row] = await q(BREEDING_PLAYER_SQL + " RETURNING starter, hybrids, goal, reward, intro_seen", breedingPlayerArgs(uid, started));
+    if (!row) [row] = await q(BREEDING_PROGRESS_SQL, [uid, started]);
+  }
+  if (!row) return null;
+  const [starter, hybrids, goal, reward, introSeen] = row.map(Number);
+  return { started, until, starter, grant: BREEDING_STARTER, hybrids, goal, reward, intro_seen: introSeen === 1 };
+}
+export async function breedingCodes(uid: number, started: number) {
+  if (!started || started !== breedingStart) return { codes: [] };
+  const rows = await q(`SELECT strain FROM f_breeding_hybrid
+    WHERE user = ? AND started = ? ORDER BY strain LIMIT ?`, [uid, started, BREEDING_GOAL]);
+  return { codes: rows.map(([strain]) => String(strain)) };
+}
+export async function breedingIntroSeen(uid: number, started: number) {
+  const t = now();
+  if (!started || started !== breedingStart || t < started || t >= started + BREEDING_DURATION) return { show: false };
+  const rows = await q("UPDATE f_breeding_player SET intro_seen = 1 WHERE user = ? AND started = ? AND intro_seen = 0 RETURNING 1", [uid, started]);
+  return { show: rows.length > 0 };
+}
+
 const TEA_PRANK_PLAYER = 8808980009;
 
 async function teaPrank(uid: number) {
@@ -840,13 +877,16 @@ export async function finishTeaPrank(uid: number, slots: unknown) {
 export async function farmState(u: any) {
   // первым в пакете — «завести ферму, если её нет» (то же, что ensureFarm); новичку следом — стартовый мешок
   const pub0 = [...crypto.getRandomValues(new Uint8Array(9))].map((b) => b.toString(16).padStart(2, "0")).join(""), t0 = now();
+  const started = breedingStart, eventRead = started > 0 && t0 >= started;
+  const reads = farmReads(u.id, t0);
+  if (eventRead) reads.push([BREEDING_PROGRESS_SQL, [u.id, started]]);
   let pre: any[][][] | null = null;
-  try { pre = await prefetch([["INSERT OR IGNORE INTO f_farms (user, pub, created, unlocked) VALUES (?, ?, ?, 3) RETURNING 1", [u.id, pub0, t0]], ...farmReads(u.id, t0)]); }
+  try { pre = await prefetch([["INSERT OR IGNORE INTO f_farms (user, pub, created, unlocked) VALUES (?, ?, ?, 3) RETURNING 1", [u.id, pub0, t0]], ...reads]); }
   catch (e) { console.error("prefetch", e); preClear(); await ensureFarm(u); }      // пакет не прошёл — грузим по-старому, по одному запросу
   if (pre && pre[0].length) await DB.batch(STARTER.map(([k, n]) => DB.prepare("INSERT OR IGNORE INTO f_inv (user, strain, count, listed) VALUES (?, ?, ?, 0)").bind(u.id, k, n)));
-  try { return await farmState1(u, t0); } finally { preClear(); }
+  try { return await farmState1(u, t0, started, eventRead ? pre?.at(-1) : undefined); } finally { preClear(); }
 }
-async function farmState1(u: any, t: number) {
+async function farmState1(u: any, t: number, started: number, eventRows?: any[][]) {
   await normFlour(u.id);
   await mythTick(u.id); await mossEnd(u.id);
   const EVS = await plotEvents(u.id), HON = await honeyTick(u.id, EVS);
@@ -875,7 +915,9 @@ async function farmState1(u: any, t: number) {
   for (const [i, n, pl, c] of await q("SELECT idx, n, planted, credit FROM f_fert WHERE user = ?", [u.id])) if (by.get(Number(i)) && Number(by.get(Number(i))[2]) === Number(pl)) FER[Number(i)] = { n: Number(n), c: Number(c) };
   const kit = await kitchenOf(u.id);                           // один раз на запрос: раньше постройки, работы и уровни читались дважды, а работы — трижды
   const chicken_pen = kit.builds.includes("chicken_pen") ? { ...await chickenPenState(u.id, t), has_barn: kit.builds.includes("barn") } : null;
+  const breeding = await breedingState(u.id, t, started, eventRows);
   return {
+    ...(breeding ? { breeding } : {}),
     chicken_pen,
     ...(Number(u.id) === TEA_PRANK_PLAYER ? { tea_prank: await teaPrank(u.id) } : {}),
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
@@ -1212,7 +1254,12 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
     const other = pick0 || (pool.length ? ss[pool[Math.floor(Math.random() * pool.length)][1]] : view(base[Math.floor(Math.random() * base.length)]));
     const { strain: h, genes, mutation } = await breed(s, other, gcross ? 3 : 1);
     // Строка сорта в f_inv остаётся после расхода всех семян. Проверка и выдача идут одним пакетом.
-    const foundAt = now();
+    const foundAt = now(), started = breedingStart;
+    const event = started && foundAt >= started && foundAt < started + BREEDING_DURATION ? [
+      DB.prepare(BREEDING_PLAYER_SQL).bind(...breedingPlayerArgs(u.id, started)),
+      DB.prepare(`INSERT OR IGNORE INTO f_breeding_hybrid (user, started, strain)
+        SELECT user, started, ? FROM f_breeding_player WHERE user = ? AND started = ? AND hybrids < goal`).bind(h.id, u.id, started),
+    ] : [];
     const [, , discovery] = await DB.batch([
       DB.prepare("INSERT OR IGNORE INTO f_strains (id, name, genes, created) VALUES (?, ?, ?, ?)").bind(h.id, h.name, genes, foundAt),
       DB.prepare(`INSERT INTO f_strain_origin (strain, breeder, mutation, parent_a, parent_b, parent_a_id, parent_b_id)
@@ -1222,6 +1269,7 @@ export async function harvest(u: any, idx: number, receivedAt = Date.now()) {
         .bind(u.id, SEED_DROP_KEY + h.id, foundAt, u.id, h.id),
       DB.prepare("INSERT INTO f_inv (user, strain, count, listed) VALUES (?, ?, 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1").bind(u.id, h.id),
       DB.prepare("DELETE FROM f_evlog WHERE user = ? AND kind >= 'seed:hybrid:' AND kind < 'seed:hybrid;' AND at <= ?").bind(u.id, foundAt - SEED_DROP_SECONDS),
+      ...event,
     ]);
     STRAIN_NONE.delete(h.id);
     hybrid = { ...h, mutation, parents: [s.name, other.name], fresh: (discovery.results || []).length > 0 };
@@ -2462,7 +2510,8 @@ export async function forgetFarm(uid: number) {
   for (const sql of ["DELETE FROM f_farms WHERE user = ?", "DELETE FROM f_plots WHERE user = ?", "DELETE FROM g_items WHERE user = ? AND game = 'farm'",
                      "DELETE FROM f_gifts WHERE to_user = ?", "DELETE FROM f_daily WHERE user = ?", "DELETE FROM f_inv WHERE user = ?", "DELETE FROM f_stall WHERE user = ?", "DELETE FROM f_plotev WHERE user = ?", "DELETE FROM f_evlog WHERE user = ?", "DELETE FROM f_stars WHERE user = ?", "DELETE FROM f_cratercrop WHERE user = ?", "DELETE FROM f_mono WHERE user = ?", "DELETE FROM f_monomark WHERE user = ?", "DELETE FROM f_clumps WHERE user = ?", "DELETE FROM f_notify WHERE user = ?", "DELETE FROM f_orders WHERE user = ?", "DELETE FROM f_chest WHERE user = ?", "DELETE FROM f_prices WHERE user = ?",
                      "DELETE FROM f_sales WHERE seller = ?", "DELETE FROM f_barn WHERE user = ?", "DELETE FROM f_builds WHERE user = ?", "DELETE FROM f_jobs WHERE user = ?",
-                     "DELETE FROM f_levels WHERE user = ?", "DELETE FROM f_jobtake WHERE user = ?"]) await q(sql, [uid]);
+                     "DELETE FROM f_levels WHERE user = ?", "DELETE FROM f_jobtake WHERE user = ?",
+                     "DELETE FROM f_breeding_hybrid WHERE user = ?", "DELETE FROM f_breeding_player WHERE user = ?"]) await q(sql, [uid]);
   await q("DELETE FROM f_given WHERE from_user = ? OR to_user = ?", [uid, uid]);
   await q("DELETE FROM f_feed WHERE actor = ? OR target = ?", [uid, uid]);              // из ленты новостей — тоже
   // всё, что добавилось после (его решение 2026-11-20: удалил данные — теряешь всё наигранное): украшения, улей, подземелье…
@@ -2928,7 +2977,9 @@ export async function dgBrew(u: any, n: number) {                          // в
 // Сделано как прибавка к росту: оставшееся время сразу сокращается (R → R·старая/новая скорость). Странное растение не ускоряется.
 // Очки за сбор потом урезаются на ту же долю (credit) — очки в час остаются честными. Пакетик берётся из амбара («p:fert»).
 export const FERT_MAX = 2;
-export async function fertilize(u: any, idx: number) {
+export async function fertilize(u: any, idx: number, starter = false) {
+  const started = breedingStart;
+  if (starter && !started) return { error: "Стартовых удобрений нет" };
   await ensureFarm(u);
   const EV = await plotEvents(u.id);
   if (EV[idx] && (EV[idx].kind === "burning" || EV[idx].kind === "coal")) return { error: "Грядка горит" };
@@ -2945,11 +2996,23 @@ export async function fertilize(u: any, idx: number) {
   if (n >= FERT_MAX) return { error: "Больше двух удобрений на одну посадку нельзя" };
   const total = s.minutes * 60 * (1 - (1 - ODD_NEAR) * Number(fast)), rem = Math.max(0, total - growth(p, t, boost, rainSlow(s)));
   const credit = Math.round(rem * (1 - (1 + n) / (2 + n)));   // скорость ×2, второй пакетик ×3 (его решение 2026-11-20; было +⅓ за пакетик)
-  if (!(await q("UPDATE f_barn SET count = count - 1 WHERE user = ? AND strain = 'p:fert' AND count > 0 RETURNING 1", [u.id])).length) return { error: "В амбаре нет удобрения" };
-  await DB.batch([
-    DB.prepare("UPDATE f_plots SET grown = grown + ? WHERE user = ? AND idx = ? AND planted = ?").bind(credit, u.id, idx, p[2]),
-    DB.prepare("INSERT INTO f_fert (user, idx, planted, n, credit) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user, idx) DO UPDATE SET planted = excluded.planted, n = excluded.n, credit = excluded.credit")
+  // Списание и применение идут в одном пакете. Если грядка изменилась, пакетик остаётся у игрока.
+  const unchanged = `AND EXISTS (SELECT 1 FROM f_plots WHERE user = ? AND idx = ? AND crop = ?
+      AND planted = ? AND grown = ? AND wet_from = ? AND water_until = ?)
+    AND COALESCE((SELECT n FROM f_fert WHERE user = ? AND idx = ? AND planted = ?), 0) = ?`;
+  const expected = [u.id, idx, p[1], p[2], p[3], p[4], p[5], u.id, idx, p[2], n];
+  const debit = starter
+    ? DB.prepare(`UPDATE f_breeding_player SET starter = starter - 1
+        WHERE user = ? AND started = ? AND starter > 0 ${unchanged} RETURNING 1`).bind(u.id, started, ...expected)
+    : DB.prepare(`UPDATE f_barn SET count = count - 1
+        WHERE user = ? AND strain = 'p:fert' AND count > 0 ${unchanged} RETURNING 1`).bind(u.id, ...expected);
+  const [spent] = await DB.batch([
+    debit,
+    DB.prepare("UPDATE f_plots SET grown = grown + ? WHERE user = ? AND idx = ? AND changes() = 1").bind(credit, u.id, idx),
+    DB.prepare(`INSERT INTO f_fert (user, idx, planted, n, credit) SELECT ?, ?, ?, ?, ? WHERE changes() = 1
+      ON CONFLICT(user, idx) DO UPDATE SET planted = excluded.planted, n = excluded.n, credit = excluded.credit`)
       .bind(u.id, idx, p[2], n + 1, had + credit),
   ]);
+  if (!spent.results?.length) return { error: "Грядка изменилась или удобрение закончилось" };
   return { ok: true, n: n + 1, credit, farm: await farmState(u) };
 }

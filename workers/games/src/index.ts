@@ -305,7 +305,7 @@ export default {
   async fetch(req: Request, env: any): Promise<Response> {
     RAW = env.DB; ENV = env; PRE.clear();
     DB = { prepare: (sql: string) => RAW.prepare(sql), batch: (st: any[]) => { PRE.clear(); return RAW.batch(st); } };
-    farm.setup({ q, DB, now, today, nameOf, prefetch, preClear });
+    farm.setup({ q, DB, now, today, nameOf, prefetch, preClear, breedingStart: env.FARM_BREEDING_START });
     try {
       return await handle(req, env);
     } catch (e) {
@@ -610,6 +610,8 @@ async function handle(req: Request, env: any): Promise<Response> {
     case "/api/farm/crater": return json(await farm.fixCrater(user, Number(body.idx)));
     case "/api/farm/coal": return json(await farm.takeCoal(user, Number(body.idx)));
     case "/api/farm/slimes": return json(await farm.slimesDone(user));
+    case "/api/farm/breeding/codes": return json(await farm.breedingCodes(user.id, Number(body?.started)));
+    case "/api/farm/breeding/seen": return json(await farm.breedingIntroSeen(user.id, Number(body?.started)));
     case "/api/farm/notice": return json(await farm.noticeSeen(user, String(body.id || "").slice(0, 40)));
     case "/api/farm/gem": return json(await farm.buyGem(user, String(body.kind || "moon").slice(0, 12)));
     case "/api/farm/gemdust": return json(await farm.gemDust(user, Number(body.idx), String(body.kind || "moon").slice(0, 12)));
@@ -647,7 +649,7 @@ async function handle(req: Request, env: any): Promise<Response> {
     case "/api/farm/roof": return json(await farm.setRoof(user, String(body.color || "")));
     case "/api/farm/shell": return json(await farm.dustShell(user));
     case "/api/farm/decor": return json(await farm.setDecor(user, String(body.slot || ""), String(body.item || ""), body.on !== false));
-    case "/api/farm/fertilize": return json(await farm.fertilize(user, Number(body.idx)));
+    case "/api/farm/fertilize": return json(await farm.fertilize(user, Number(body.idx), body?.starter === true));
     case "/api/farm/fill": return json(await farm.fill(user));
     case "/api/farm/book": return json(await farm.book(user));
     case "/api/farm/herbarium/strain": {

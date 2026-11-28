@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611281454";
+    var BUILD = "202611281825";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -490,10 +490,28 @@
   .variants span { text-align: right; }
 
   /* «Лунная ферма»: сцена во всю ширину, сверху — небо сцены, кнопки поверх неба */
-  .scene { margin: calc(-18px - var(--top)) -16px 0; padding-top: calc(var(--top) + 46px); background: #241a52; }
+  .scene { margin: calc(-18px - var(--top)) -16px 0; padding-top: calc(var(--top) + 46px + var(--breeding-inset, 0px)); background: #241a52; }
   .scene .farm-top { position: absolute; left: 16px; right: 16px; top: calc(var(--top) + 10px); z-index: 2; }
   .scene .farm-top .mono { color: rgba(255, 255, 255, .85); }
-  .plots { position: absolute; left: 0; right: 0; bottom: 0; top: calc(var(--top) + 46px); display: block; padding: 0; }
+  .scene.breeding-active { --breeding-inset: 54px; }
+  .breeding-hud { position: absolute; z-index: 2; left: 16px; top: calc(var(--top) + 49px);
+    display: grid; gap: 2px; min-width: 92px; padding: 6px 9px; text-align: left;
+    border: 1px solid #a582de; border-radius: 7px; background: #201835ef; color: #f6ebff;
+    font: 700 12px/1.25 var(--pix); }
+  .breeding-hud b { font-size: 14px; font-variant-numeric: tabular-nums; }
+  .breeding-hud span { color: #e1cef9; }
+  .breeding-wrap { align-items: center; padding: 16px; }
+  body[data-screen="farm"] .breeding-sheet { max-width: 392px; padding: 22px 20px 18px;
+    border: 2px solid #a582de; border-radius: 14px; background: #251936; color: #fbf1ff; animation: fadein .18s ease-out; }
+  .breeding-sheet h3 { margin: 0 38px 8px 0; font-size: 22px; }
+  .breeding-sheet p { margin: 10px 0; line-height: 1.4; }
+  .breeding-sheet .breeding-supply { display: flex; align-items: center; gap: 9px; color: #eee0ff; }
+  .breeding-supply canvas { display: block; width: 32px; height: auto; image-rendering: pixelated; }
+  .breeding-codes { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; padding: 0; list-style: none; }
+  .breeding-codes li { padding: 3px 7px; background: #241735; border: 1px solid #a582de;
+    color: #f6ebff; font: 700 12px/1.25 var(--mono); }
+
+  .plots { position: absolute; left: 0; right: 0; bottom: 0; top: calc(var(--top) + 46px + var(--breeding-inset, 0px)); display: block; padding: 0; }
   .plot { position: absolute; border-radius: 0; clip-path: polygon(50% 0, 100% 60%, 50% 100%, 0 60%); }
   .plot.well { clip-path: none; }
   @keyframes bumpit { 0% { transform: scale(1); } 40% { transform: scale(1.15); } 100% { transform: scale(1); } }
@@ -1167,6 +1185,9 @@
   <section class="screen" id="farm" hidden>
     <div class="scene">
       <div class="farm-top" id="farmtop"><button class="exit" type="button" data-go="home" id="farmexit">← Гильдия</button><div class="pills"><button type="button" class="dust-pill gempill" id="gempill" aria-label="Самоцветная пыль" hidden><canvas class="pix" id="gemicon"></canvas><span id="gemn"></span></button><button type="button" class="dust-pill gempill" id="fertpill" aria-label="Удобрение" hidden><canvas class="pix" id="ferticon"></canvas><span id="fertn"></span></button><button type="button" class="dust-pill decorbtn" id="decorbtn" aria-label="Вид фермы"><canvas class="pix" id="decoricon"></canvas></button><button type="button" class="dust-pill rainpill" id="weather" hidden></button><div class="dust-pill" id="dustpill">✦ 0</div></div></div>
+      <button type="button" class="breeding-hud" id="breedinghud" aria-label="Событие селекции" hidden>
+        <b id="breedingtime"></b><span id="breedingprogress"></span>
+      </button>
       <canvas class="pix" id="scenecv" width="184" height="190"></canvas><div class="plots" id="plots"></div><div class="toolbox" id="toolbox"></div>
     </div>
     <div id="farmbanners"></div>
@@ -1240,12 +1261,13 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var farmPauseUntil = 0, farmPauseTick = null;
-  function remainingTime(until) {
-    var seconds = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+  function countdown(seconds) {
+    seconds = Math.max(0, Math.ceil(seconds));
     if (!seconds) return "";
     var parts = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
     return parts.map(function (n) { return String(n).padStart(2, "0"); }).join(":");
   }
+  function remainingTime(until) { return countdown((until - Date.now()) / 1000); }
   function farmPauseMessage() {
     var remaining = remainingTime(farmPauseUntil);
     return remaining ? "Откроется через " + remaining : "";
@@ -4057,6 +4079,7 @@
     "p:jam":     ["....kkkkkk....", "....kmmmmk....", "...kkkkkkkk...", "...kWRRRRrk...", "...kRRpRRrk...", "...kRRRRRrk...", "...kRyyyyrk...", "...kRyyyyrk...", "...krRRRrrk...", "....kkkkkk...."],
   };
   // pal — палитра сорта колосьев: корочка и метка на мешке муки берут его цвет (пшеница — как есть)
+  DISH["p:fert_starter"] = DISH["p:fert"].map(function (row) { return row.replace(/G/g, "V"); });
   function mixHex(a, b, t) { var p = function (h, k) { return parseInt(h.slice(1 + k * 2, 3 + k * 2), 16); }; return "rgb(" + [0, 1, 2].map(function (k) { return Math.round(p(a, k) * (1 - t) + p(b, k) * t); }).join(",") + ")"; }
   var TINT = { y: [1, 1], h: [2, .28], b: [1, .18], w: [2, .35], x: [5, .3] };
   // мёд в цвет растения (его правка 2026-11-18): в баночке и в глазури медовых блюд янтарь смешан с цветом расцветки
@@ -4947,9 +4970,102 @@
     farmCall("/api/farm/fill").catch(function () {});
   }
 
+  var breedingIntroKey = "", breedingIntroAttempted = false, breedingIntroPending = false, breedingIntroShown = false;
+  function renderBreeding(event, now) {
+    var left = event ? countdown(event.until - now) : "", hud = $("breedinghud");
+    hud.hidden = !left;
+    hud.parentElement.classList.toggle("breeding-active", !!left);
+    if (!left) return;
+    setText($("breedingtime"), left);
+    setText($("breedingprogress"), "Гибриды " + event.hybrids + " / " + event.goal);
+  }
+  var breedingCodeCache;
+  function showBreedingCodes(section, event) {
+    var key = breedingIntroKeyFor(F.state) + ":" + event.hybrids;
+    function paint(codes) {
+      var list = el("ul", "breeding-codes");
+      list.setAttribute("aria-label", "Коды выведенных сортов");
+      var short = codes.map(function (code) { return code.slice(1, 5).toUpperCase(); });
+      codes.forEach(function (code, i) {
+        var label = short.indexOf(short[i]) === short.lastIndexOf(short[i]) ? short[i] : code.slice(1).toUpperCase();
+        var entry = el("li", "", label);
+        entry.title = code.slice(1).toUpperCase();
+        list.appendChild(entry);
+      });
+      section.replaceChildren(list);
+    }
+    if (breedingCodeCache && breedingCodeCache.key === key) { paint(breedingCodeCache.codes); return; }
+    section.textContent = "Загружаю коды…";
+    call("/api/farm/breeding/codes", { started: event.started }).then(function (r) {
+      if (r.codes.length === event.hybrids) breedingCodeCache = { key: key, codes: r.codes };
+      if (section.isConnected) paint(r.codes);
+    }).catch(function () {
+      if (section.isConnected) section.textContent = "Не удалось загрузить коды.";
+    });
+  }
+  function openBreedingSheet(event) {
+    var w = sheet(function (sh, close) {
+      sh.classList.add("breeding-sheet");
+      sh.setAttribute("role", "dialog");
+      sh.setAttribute("aria-modal", "true");
+      sh.setAttribute("aria-labelledby", "breeding-title");
+      var title = el("h3", "", "Событие селекции");
+      title.id = "breeding-title";
+      sh.appendChild(title);
+      sh.appendChild(el("p", "", "Выведи " + event.goal + " разных гибридов за 3 дня. Засчитываются сорта, которые ты сам получил скрещиванием во время события. Каждый код считается один раз."));
+      var supply = el("p", "breeding-supply"), icon = el("canvas", "pix");
+      itemIcon(icon, "p:fert_starter");
+      supply.append(icon, el("span", "", event.grant + " стартовых удобрений можно использовать на грядках."));
+      sh.appendChild(supply);
+      sh.appendChild(el("p", "", event.hybrids >= event.goal
+        ? "Задание выполнено. Награда — " + event.reward + " обычных удобрений — уже в амбаре."
+        : "Награда за выполнение — " + event.reward + " обычных удобрений."));
+      if (event.hybrids) {
+        var codes = el("div");
+        sh.append(el("b", "", "Выведенные сорта"), codes);
+        showBreedingCodes(codes, event);
+      }
+      sh.appendChild(btn("Понятно", "", close));
+    });
+    w.classList.add("breeding-wrap");
+  }
+  function breedingIntroKeyFor(s) { return s.pub + ":" + s.breeding.started; }
+  function requestBreedingIntro(s, manual) {
+    var event = s.breeding, key = breedingIntroKeyFor(s);
+    if (breedingIntroKey !== key) {
+      breedingIntroKey = key;
+      breedingIntroAttempted = breedingIntroPending = breedingIntroShown = false;
+    }
+    if (manual) { breedingIntroShown = true; breedingIntroPending = false; }
+    if (!event.intro_seen && !breedingIntroAttempted) {
+      breedingIntroAttempted = true;
+      call("/api/farm/breeding/seen", { started: event.started }).then(function (r) {
+        if (breedingIntroKey !== key || !r.show || breedingIntroShown) return;
+        breedingIntroPending = true;
+        maybeShowBreeding();
+      }).catch(function () {});
+    }
+  }
+  function maybeShowBreeding() {
+    var s = F.state, event = s && s.breeding;
+    if (!event || farmNow() >= event.until || $("farm").hidden || document.hidden
+        || document.querySelector(".sheet-wrap,.thanks-wrap")) return;
+    requestBreedingIntro(s, false);
+    if (!breedingIntroPending) return;
+    breedingIntroPending = false; breedingIntroShown = true;
+    openBreedingSheet(event);
+  }
+  $("breedinghud").onclick = function () {
+    var s = F.state;
+    if (!s || !s.breeding || farmNow() >= s.breeding.until) return;
+    requestBreedingIntro(s, true);
+    openBreedingSheet(s.breeding);
+  };
+
   function renderFarm() {
     var s = F.state; if (!s) return;
     var now = farmNow();
+    renderBreeding(s.breeding, now);
     setText($("dustpill"), "✦ " + s.dust);
     var rkNow = roofKey(s); if (F.decorIconKey !== rkNow) { F.decorIconKey = rkNow; decorIcon($("decoricon"), ROOF_PAL[rkNow]); }
     gemPill();
@@ -5056,6 +5172,9 @@
   }
   function setFarm(st, compact) {
     if (!compact) farmSnapshotAt = Date.now();
+    var previous = F.state && F.state.breeding, event = st.breeding;
+    if (previous && event && previous.started === event.started && previous.hybrids < event.goal && event.hybrids >= event.goal)
+      toast("Событие выполнено! +" + event.reward + " удобрений в амбаре.");
     siblings(st);
     var wasW = F.state && F.state.wanderer && F.state.wanderer.left > 0 && F.wanderIn;       // стоял странник, а полнолуние кончилось — уходит
     evSpot(st);
@@ -5066,7 +5185,12 @@
   }
   function farmLoop() {
     clearInterval(F.tick);
-    F.tick = setInterval(function () { if (F.state && !$("farm").hidden && !(F.bookEl && F.bookEl.isConnected)) renderFarm(); }, 1000);   // подписи «сколько осталось»
+    F.tick = setInterval(function () {
+      if (F.state && !$("farm").hidden && !(F.bookEl && F.bookEl.isConnected)) {
+        renderFarm();
+        maybeShowBreeding();
+      }
+    }, 1000);   // подписи «сколько осталось»
   }
   function openFarm() {
     if (farmOpening) return farmOpening;
@@ -5077,7 +5201,7 @@
       renderFarm();
       farmLoop(); farmAnim();
       return loadFarm().then(function (st) {
-        if (F.state === st && document.body.dataset.screen === "farm") { showNotice(); slimeRaid(); }
+        if (F.state === st && document.body.dataset.screen === "farm") { showNotice(); maybeShowBreeding(); slimeRaid(); }
       }).catch(function () {});
     }
     var revision = farmRevision, canApply = !F.pending, loading = $("farm-loading");
@@ -5092,7 +5216,7 @@
       loadReleases();
       if (!F.state || (canApply && !F.pending && revision === farmRevision)) setFarm(st);
       else renderFarm();
-      farmLoop(); farmAnim(); showNotice(); slimeRaid();
+      farmLoop(); farmAnim(); showNotice(); maybeShowBreeding(); slimeRaid();
     }).catch(function (e) {
       toast("Не получилось: " + e.message);
     }).finally(function () {
@@ -5292,17 +5416,19 @@
       }).catch(function () {});
     }
     if (F.sel === "fert") {                                                         // удобрение: оставшееся время сразу сокращается (как на сервере)
-      var fb2 = barnOf("p:fert"), fn = pl.fert || 0;
-      if (!fb2 || fb2.count < 1) { F.sel = "can"; renderHotbar(); return toast("Удобрение кончилось"); }
+      var starter = F.state.breeding && F.state.breeding.starter > 0, fb2 = barnOf("p:fert"), fn = pl.fert || 0;
+      if (!starter && (!fb2 || fb2.count < 1)) { F.sel = "can"; renderHotbar(); return toast("Удобрение кончилось"); }
       if (inf.s.odd) { haptic("error"); return toast("Странное растение не торопится — удобрение на него не действует"); }
       if (inf.ripe) { haptic("error"); return toast("Уже созрело — собери урожай"); }
       if (fn >= 2) { haptic("error"); return toast("Больше двух удобрений на одну посадку нельзя"); }
       var cr = Math.round(inf.left * (1 - (1 + fn) / (2 + fn)));   // скорость ×2, ×3 (его решение 2026-11-20; было +⅓ за пакетик)
       var q3 = F.state.plots[pl.idx] || pl;                                          // правим саму грядку в состоянии фермы — экран сразу показывает новое время
-      haptic("success"); fb2.count--; q3.grown += cr; q3.fert = fn + 1; q3.fert_c = (q3.fert_c || 0) + cr; if (q3 !== pl) { pl.grown = q3.grown; pl.fert = q3.fert; pl.fert_c = q3.fert_c; }
+      haptic("success");
+      if (starter) F.state.breeding.starter--; else fb2.count--;
+      q3.grown += cr; q3.fert = fn + 1; q3.fert_c = (q3.fert_c || 0) + cr; if (q3 !== pl) { pl.grown = q3.grown; pl.fert = q3.fert; pl.fert_c = q3.fert_c; }
       if (typeof statics !== "undefined") statics = {}; renderHotbar(); renderFarm();
       floatText(pl.idx, fn ? "удобрение ×2 — ещё быстрее" : "удобрено: растёт быстрее", "big");
-      return farmCall("/api/farm/fertilize", { idx: pl.idx }).catch(function () {});
+      return farmCall("/api/farm/fertilize", { idx: pl.idx, starter: !!starter }).catch(function () {});
     }
     if (F.sel === "gem") {                                                          // самоцветная пыль: что делает — зависит от цвета
       var kind = F.gemKind, gk = GEMK[kind], gd2 = gk && barnOf(gk.dust);
@@ -5675,10 +5801,18 @@
   // кнопка пыли — наверху вместо капель (его решение 2026-11-16), видна, пока в амбаре есть пыль; нажатие — меню выбора
   // удобрение (его решение 2026-11-19): пакетик в верхней полоске, как самоцветная пыль — нажал на него, потом на растущую грядку
   function fertPill() {
-    var b = $("fertpill"); if (!b || !F.state) return; var fb = barnOf("p:fert"), n = fb ? fb.count : 0;
+    var b = $("fertpill"); if (!b || !F.state) return;
+    var starter = F.state.breeding && F.state.breeding.starter > 0;
+    var fb = barnOf("p:fert"), n = starter ? F.state.breeding.starter : fb ? fb.count : 0;
     if (!n) { b.hidden = true; if (F.sel === "fert") F.sel = "can"; return; }
     b.hidden = false; b.classList.toggle("on", F.sel === "fert");
-    if (b.dataset.k !== String(n)) { b.dataset.k = String(n); itemIcon($("ferticon"), "p:fert"); setText($("fertn"), String(n)); }
+    var id = starter ? "p:fert_starter" : "p:fert", key = id + ":" + n;
+    if (b.dataset.k !== key) {
+      b.dataset.k = key;
+      b.setAttribute("aria-label", starter ? "Стартовое удобрение" : "Удобрение");
+      itemIcon($("ferticon"), id);
+      setText($("fertn"), String(n));
+    }
   }
   document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("#fertpill")) { haptic("light"); F.sel = F.sel === "fert" ? "can" : "fert"; renderHotbar(); renderFarm(); } });
   function gemPill() {
