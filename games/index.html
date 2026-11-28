@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611282039";
+    var BUILD = "202611282056";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -5502,11 +5502,11 @@
   }
   function barnOf(id) { var r = null; (F.state.barn || []).forEach(function (it) { if (it.strain === id) r = it; }); return r; }
   function barnAdd(id, n) { F.state.barn = F.state.barn || []; var it = barnOf(id); if (it) it.count += n; else F.state.barn.push({ strain: id, count: n }); }
-  function toDust(items, redraw) {
+  function toDust(items, redraw, exact) {
     if (F.barnSelling) return;
     F.barnSelling = true;
     haptic("light"); redraw();
-    var body = items.length === 1 ? items[0] : { items: items };
+    var body = items.length === 1 && !exact ? items[0] : { items: items };
     return farmCall("/api/farm/sell", body).then(function (r) {
       if (r.error) return;
       haptic("success"); toast("+✦ " + formatGameNumber(r.dust) + " звёздной пыли");
@@ -6952,8 +6952,30 @@
       var barnBox = el("div"); sh.appendChild(barnBox);
       // описание выбранного и кнопки — прижаты к низу окна и видны всегда, сколько бы ни было ячеек (его просьба 2026-11-17, как в лавке)
       var foot = el("div", "sheetfoot"), footInfo = el("div"); foot.appendChild(footInfo);
+      function confirmDust(items, total) {
+        var count = items.reduce(function (sum, item) { return sum + item.n; }, 0);
+        haptic("light");
+        sheet(function (dialog, dismiss) {
+          dialog.setAttribute("role", "dialog");
+          dialog.setAttribute("aria-modal", "true");
+          dialog.setAttribute("aria-labelledby", "barn-dust-title");
+          var title = el("h3", "", "Распылить предметы?");
+          title.id = "barn-dust-title";
+          dialog.appendChild(title);
+          dialog.appendChild(el("p", "sub", formatGameNumber(count) + " " + plural(count, "предмет", "предмета", "предметов") +
+            " на ✦ " + formatGameNumber(total) + " пыли. Распыление нельзя отменить."));
+          var buttons = el("div", "salebtns");
+          buttons.appendChild(btn("Отмена", "ghost", dismiss));
+          buttons.appendChild(btn("Распылить", "", function () {
+            if (!dialog.isConnected) return;
+            dismiss();
+            toDust(items, drawBarn, true);
+          }));
+          dialog.appendChild(buttons);
+        });
+      }
       var drawBarn = function () {
-        var cur = F.state, barn = barnItems(), bgrid = el("div", "invgrid"), total = 0;
+        var barn = barnItems(), bgrid = el("div", "invgrid"), allItems = [], total = 0;
         barnBox.innerHTML = ""; footInfo.innerHTML = "";
         // выделять одну ячейку или несколько — переключатель над ячейками (его просьба 2026-11-17: постоянное выделение нескольких не всегда удобно);
         // выбор запоминается на устройстве, по умолчанию — одна
@@ -6963,7 +6985,10 @@
         Object.keys(selSet).forEach(function (id) { var bo = barnOf(id); if (!bo || bo.count <= 0) delete selSet[id]; });
         barn.forEach(function (it) {
           var st = itemOf(it.strain), b = el("button", "slot" + (selSet[it.strain] ? " on" : "")); b.type = "button"; b.setAttribute("aria-label", st.name);
-          if (!gemOf(it.strain) && it.strain !== "p:eye") total += it.count * st.dust;   // самоцветы и странные глаза в «весь урожай в пыль» не входят
+          if (!gemOf(it.strain) && it.strain !== "p:eye") {
+            allItems.push({ strain: it.strain, n: it.count });
+            total += it.count * st.dust;
+          }
           var cv = el("canvas", "pix"), product = it.strain.startsWith("p:");
           itemIcon(cv, it.strain, it.strain === "p:eye" || (!product && st.color === "anomaly"));
           fitIcon(cv, product ? 84 : 70); b.appendChild(cv); b.appendChild(el("span", "n", it.count));
@@ -7008,19 +7033,25 @@
           var wn = wetOf(sel.strain); if (wn > 0) footInfo.appendChild(el("div", "sub", "Мокрые после ливня: " + wn + " " + plural(wn, "сноп", "снопа", "снопов") + ". Смолоть их можно, когда просохнут, — через " + fmtLeft(wetLeft(sel.strain)) + ". Продать можно и мокрыми."));
           var bsel = sel;
           qtyBox(footInfo, { key: "barn:" + bsel.strain, max: function () { return (barnOf(bsel.strain) || { count: 0 }).count; },
-            acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + formatGameNumber(st.dust * n); }, run: function (n) { toDust([{ strain: bsel.strain, n: n }], drawBarn); } },
+            acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + formatGameNumber(st.dust * n); }, run: function (n) {
+              var items = [{ strain: bsel.strain, n: n }];
+              if (n > 1 && n === (barnOf(bsel.strain) || {}).count) confirmDust(items, st.dust * n);
+              else toDust(items, drawBarn);
+            } },
                    { t: function (n) { return "В лавку " + n; }, cls: "sell", run: function (n) { toStall([{ strain: bsel.strain, count: n }]); } }] });
         } else if (picked.length > 1) {
           var cnt = 0, sum = 0; picked.forEach(function (x) { cnt += x.count; sum += x.count * itemOf(x.strain).dust; });
           footInfo.appendChild(el("div", "sub", "Выделено ячеек: " + picked.length + " — " + cnt + " " + plural(cnt, "штука", "штуки", "штук") + ", в пыль это ✦ " + formatGameNumber(sum) + "."));
           acts.appendChild(btn("В пыль · ✦ " + formatGameNumber(sum), "", function () {
-            toDust(picked.map(function (x) { return { strain: x.strain, n: x.count }; }), drawBarn);
+            confirmDust(picked.map(function (x) { return { strain: x.strain, n: x.count }; }), sum);
           }));
           acts.appendChild(btn("В лавку", "sell", function () { toStall(picked); }));
           acts.appendChild(btn("Отменить", "ghost", function () { F.barnSet = {}; drawBarn(); }));
         } else {
           footInfo.appendChild(el("div", "sub", "Нажми на ячейку, чтобы превратить урожай в звёздную пыль или выставить в лавку." + (BARN_MULTI ? " Можно выделить несколько." : "")));
-          acts.appendChild(btn("Весь урожай в пыль · ✦ " + formatGameNumber(total), "", function () { toDust([{ strain: "*", n: 0 }], drawBarn); }));
+          var all = btn("Весь урожай в пыль · ✦ " + formatGameNumber(total), "", function () { confirmDust(allItems, total); });
+          all.disabled = !allItems.length;
+          acts.appendChild(all);
         }
         footInfo.appendChild(acts);
       };
