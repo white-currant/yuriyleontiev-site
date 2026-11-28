@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611282217";
+    var BUILD = "202611282231";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -4984,11 +4984,17 @@
   }
 
   var breedingIntroKey = "", breedingIntroAttempted = false, breedingIntroPending = false, breedingIntroShown = false;
+  var breedingSheet;
+  function breedingStarter(s) { return s.breeding ? s.breeding.starter : s.breeding_starter || 0; }
   function renderBreeding(event, now) {
     var left = event ? countdown(event.until - now) : "", hud = $("breedinghud");
     hud.hidden = !left;
     hud.parentElement.classList.toggle("breeding-active", !!left);
-    if (!left) return;
+    if (!left) {
+      if (breedingSheet && breedingSheet.isConnected) breedingSheet.click();
+      breedingSheet = null;
+      return;
+    }
     setText($("breedingtime"), left);
     setText($("breedingprogress"), "Гибриды " + event.hybrids + " / " + event.goal);
   }
@@ -5031,8 +5037,8 @@
       supply.append(icon, el("span", "", event.grant + " стартовых удобрений можно использовать на грядках."));
       sh.appendChild(supply);
       sh.appendChild(el("p", "", event.hybrids >= event.goal
-        ? "Задание выполнено. Награда — " + event.reward + " обычных удобрений — уже в амбаре."
-        : "Награда за выполнение — " + event.reward + " обычных удобрений."));
+        ? "Задание выполнено. В амбаре " + event.reward + " обычных удобрений, а в достижениях — медаль."
+        : "Награда за выполнение — " + event.reward + " обычных удобрений и медаль."));
       if (event.hybrids) {
         var codes = el("div");
         sh.append(el("b", "", "Выведенные сорта"), codes);
@@ -5041,6 +5047,7 @@
       sh.appendChild(btn("Понятно", "", close));
     });
     w.classList.add("breeding-wrap");
+    breedingSheet = w;
   }
   function breedingIntroKeyFor(s) { return s.pub + ":" + s.breeding.started; }
   function requestBreedingIntro(s, manual) {
@@ -5068,6 +5075,9 @@
     breedingIntroPending = false; breedingIntroShown = true;
     openBreedingSheet(event);
   }
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && F.state && !$("farm").hidden) renderBreeding(F.state.breeding, farmNow());
+  });
   $("breedinghud").onclick = function () {
     var s = F.state;
     if (!s || !s.breeding || farmNow() >= s.breeding.until) return;
@@ -5208,7 +5218,7 @@
     if (!compact) farmSnapshotAt = Date.now();
     var previous = F.state && F.state.breeding, event = st.breeding;
     if (previous && event && previous.started === event.started && previous.hybrids < event.goal && event.hybrids >= event.goal)
-      toast("Событие выполнено! +" + event.reward + " удобрений в амбаре.");
+      toast("Событие выполнено! +" + event.reward + " удобрений и медаль.");
     siblings(st);
     var wasW = F.state && F.state.wanderer && F.state.wanderer.left > 0 && F.wanderIn;       // стоял странник, а полнолуние кончилось — уходит
     evSpot(st);
@@ -5450,7 +5460,7 @@
       }).catch(function () {});
     }
     if (F.sel === "fert") {                                                         // удобрение: оставшееся время сразу сокращается (как на сервере)
-      var starter = F.state.breeding && F.state.breeding.starter > 0, fb2 = barnOf("p:fert"), fn = pl.fert || 0;
+      var starter = breedingStarter(F.state) > 0, fb2 = barnOf("p:fert"), fn = pl.fert || 0;
       if (!starter && (!fb2 || fb2.count < 1)) { F.sel = "can"; renderHotbar(); return toast("Удобрение кончилось"); }
       if (inf.s.odd) { haptic("error"); return toast("Странное растение не торопится — удобрение на него не действует"); }
       if (inf.ripe) { haptic("error"); return toast("Уже созрело — собери урожай"); }
@@ -5458,7 +5468,9 @@
       var cr = Math.round(inf.left * (1 - (1 + fn) / (2 + fn)));   // скорость ×2, ×3 (его решение 2026-11-20; было +⅓ за пакетик)
       var q3 = F.state.plots[pl.idx] || pl;                                          // правим саму грядку в состоянии фермы — экран сразу показывает новое время
       haptic("success");
-      if (starter) F.state.breeding.starter--; else fb2.count--;
+      if (!starter) fb2.count--;
+      else if (F.state.breeding) F.state.breeding.starter--;
+      else F.state.breeding_starter--;
       q3.grown += cr; q3.fert = fn + 1; q3.fert_c = (q3.fert_c || 0) + cr; if (q3 !== pl) { pl.grown = q3.grown; pl.fert = q3.fert; pl.fert_c = q3.fert_c; }
       if (typeof statics !== "undefined") statics = {}; renderHotbar(); renderFarm();
       floatText(pl.idx, fn ? "удобрение ×2 — ещё быстрее" : "удобрено: растёт быстрее", "big");
@@ -5836,8 +5848,8 @@
   // удобрение (его решение 2026-11-19): пакетик в верхней полоске, как самоцветная пыль — нажал на него, потом на растущую грядку
   function fertPill() {
     var b = $("fertpill"); if (!b || !F.state) return;
-    var starter = F.state.breeding && F.state.breeding.starter > 0;
-    var fb = barnOf("p:fert"), n = starter ? F.state.breeding.starter : fb ? fb.count : 0;
+    var starter = breedingStarter(F.state);
+    var fb = barnOf("p:fert"), n = starter || (fb ? fb.count : 0);
     if (!n) { b.hidden = true; if (F.sel === "fert") F.sel = "can"; return; }
     b.hidden = false; b.classList.toggle("on", F.sel === "fert");
     var id = starter ? "p:fert_starter" : "p:fert", key = id + ":" + n;
@@ -8101,6 +8113,8 @@
   }
 
   var EVENT_MEDALS = {
+    breeding: ["Событие селекции", "СОБЫТИЕ", "СЕЛЕКЦИИ", ["#f6dcff", "#ab76d2", "#2a143b", "#7548ae"],
+      "M30 61V37C26 24 19 17 9 12l4-3c8 4 14 9 19 18 4-8 10-13 18-18l4 3C43 18 36 25 34 37v24ZM8 10C4 7 3 4 4 0c17 1 26 9 24 26-9-1-15-5-18-10l9 2c-3-3-7-6-11-8ZM56 10c4-3 5-6 4-10-17 1-26 9-24 26 9-1 15-5 18-10l-9 2c3-3 7-6 11-8ZM10 36c10 0 17 6 19 13-9 1-17-3-19-13ZM54 36c-10 0-17 6-19 13 9 1 17-3 19-13Z"],
     tea: ["Чайное событие", "ЧАЙНОЕ", "СОБЫТИЕ", ["#ffe8ae", "#bd7a37", "#351719", "#a16131"], "p:tea"],
     solstice: ["Солнцестояние", "СОБЫТИЕ", "СОЛНЦЕСТОЯНИЕ", ["#fff6b0", "#d38c27", "#592307", "#d78331"],
       "M32 14a18 18 0 1 1 0 36a18 18 0 1 1 0-36M33 1 36 11H28ZM33 63 28 53H36ZM1 31 11 28V36ZM63 32 53 36V28ZM10 11 20 14 14 20ZM54 10 50 20 44 14ZM11 54 14 44 20 50ZM54 54 44 50 50 44Z"],

@@ -768,19 +768,21 @@ function breedingPlayerArgs(uid: number, started: number) {
   return [uid, started, BREEDING_STARTER, BREEDING_GOAL, BREEDING_REWARD];
 }
 async function breedingState(uid: number, t: number, started: number, preloaded?: any[][]) {
-  if (!started || t < started) return null;
+  if (!started || t < started) return {};
   const until = started + BREEDING_DURATION;
   let [row] = preloaded ?? await q(BREEDING_PROGRESS_SQL, [uid, started]);
   if (!row && t < until) {
     [row] = await q(BREEDING_PLAYER_SQL + " RETURNING starter, hybrids, goal, reward, intro_seen", breedingPlayerArgs(uid, started));
     if (!row) [row] = await q(BREEDING_PROGRESS_SQL, [uid, started]);
   }
-  if (!row) return null;
+  if (!row) return {};
   const [starter, hybrids, goal, reward, introSeen] = row.map(Number);
-  return { started, until, starter, grant: BREEDING_STARTER, hybrids, goal, reward, intro_seen: introSeen === 1 };
+  if (t >= until) return starter > 0 ? { breeding_starter: starter } : {};
+  return { breeding: { started, until, starter, grant: BREEDING_STARTER, hybrids, goal, reward, intro_seen: introSeen === 1 } };
 }
 export async function breedingCodes(uid: number, started: number) {
-  if (!started || started !== breedingStart) return { codes: [] };
+  const t = now();
+  if (!started || started !== breedingStart || t < started || t >= started + BREEDING_DURATION) return { codes: [] };
   const rows = await q(`SELECT strain FROM f_breeding_hybrid
     WHERE user = ? AND started = ? ORDER BY strain LIMIT ?`, [uid, started, BREEDING_GOAL]);
   return { codes: rows.map(([strain]) => String(strain)) };
@@ -808,14 +810,17 @@ const MEDAL_EVENTS = ["solstice", "constellation", "moss", "fire", "comet"];
 export async function achievementsOf(uid: number) {
   const [tea, events, farms] = await Promise.all([
     Number(uid) === TEA_PRANK_PLAYER ? teaPrank(uid) : null,
-    q("SELECT kind, started FROM f_mono WHERE user = ? AND started <= ? ORDER BY started DESC, kind", [uid, now()]),
+    q(`SELECT kind, started FROM f_mono WHERE user = ?1 AND started <= ?2
+      UNION ALL
+      SELECT 'breeding', started FROM f_breeding_player WHERE user = ?1 AND started <= ?2 AND hybrids >= goal
+      ORDER BY started DESC, kind`, [uid, now()]),
     q(`SELECT created, EXISTS (SELECT 1 FROM f_evlog WHERE user = ?1 AND kind = 'promo:slimes')
        FROM f_farms WHERE user = ?1`, [uid]),
   ]);
   const datesByEvent = new Map<string, number[]>();
   for (const [kind, started] of events) {
     const id = String(kind);
-    if (!MEDAL_EVENTS.includes(id)) continue;
+    if (id !== "breeding" && !MEDAL_EVENTS.includes(id)) continue;
     const dates = datesByEvent.get(id);
     if (dates) dates.push(Number(started));
     else datesByEvent.set(id, [Number(started)]);
@@ -914,9 +919,9 @@ async function farmState1(u: any, t: number, started: number, eventRows?: any[][
   for (const [i, n, pl, c] of await q("SELECT idx, n, planted, credit FROM f_fert WHERE user = ?", [u.id])) if (by.get(Number(i)) && Number(by.get(Number(i))[2]) === Number(pl)) FER[Number(i)] = { n: Number(n), c: Number(c) };
   const kit = await kitchenOf(u.id);                           // один раз на запрос: раньше постройки, работы и уровни читались дважды, а работы — трижды
   const chicken_pen = kit.builds.includes("chicken_pen") ? { ...await chickenPenState(u.id, t), has_barn: kit.builds.includes("barn") } : null;
-  const breeding = await breedingState(u.id, t, started, eventRows);
+  const breeding = await breedingState(u.id, now(), started, eventRows);
   return {
-    ...(breeding ? { breeding } : {}),
+    ...breeding,
     chicken_pen,
     ...(Number(u.id) === TEA_PRANK_PLAYER ? { tea_prank: await teaPrank(u.id) } : {}),
     dust: Number(dust), unlocked: Number(unlocked), max: PLOTS_MAX, pub, water: Number(water), can_max: CAN_MAX, dry_limit: DRY_LIMIT,
