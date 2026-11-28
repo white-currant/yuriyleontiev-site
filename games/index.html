@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611282056";
+    var BUILD = "202611282057";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -7035,7 +7035,7 @@
           qtyBox(footInfo, { key: "barn:" + bsel.strain, max: function () { return (barnOf(bsel.strain) || { count: 0 }).count; },
             acts: [{ t: function (n) { return "В пыль " + n + " · ✦ " + formatGameNumber(st.dust * n); }, run: function (n) {
               var items = [{ strain: bsel.strain, n: n }];
-              if (n > 1 && n === (barnOf(bsel.strain) || {}).count) confirmDust(items, st.dust * n);
+              if (n === (barnOf(bsel.strain) || {}).count) confirmDust(items, st.dust * n);
               else toDust(items, drawBarn);
             } },
                    { t: function (n) { return "В лавку " + n; }, cls: "sell", run: function (n) { toStall([{ strain: bsel.strain, count: n }]); } }] });
