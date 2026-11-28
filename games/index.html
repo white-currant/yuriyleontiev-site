@@ -11,7 +11,7 @@
   // Свежая версия без ожидания кэша: Телеграм и сайт держат страницу до 10 минут и дольше.
   // Спрашиваем номер версии в обход кэша; если на сайте новее — перезагружаемся на неё (данные Телеграма в #… сохраняются).
   (function () {
-    var BUILD = "202611282057";
+    var BUILD = "202611282209";
     function check() {
       try {
         fetch("version.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (v) {
@@ -2684,7 +2684,7 @@
     for (i = 0; i < 5; i++) flower(c, wx - 14 + i * 7 + (r() * 2 | 0), wy + 12 + (i % 2) * 2, C.flowers[(i * 3) % C.flowers.length]);
     MOSSGEO.well = { wx: wx, wy: wy, ap: ap, el: el2, ef: ef, er: er };
     // деревья и цветы по углам луга
-    tree(c, 10, 160, 9, TREES[0]); tree(c, 180, 150, 10, TREES[0]); tree(c, 5, 96, 6, TREES[1]);
+    tree(c, 10, 175, 9, TREES[0]); tree(c, 180, 150, 10, TREES[0]); tree(c, 5, 96, 6, TREES[1]);
     for (i = 0; i < 26; i++) { x = 2 + (r() * (FW - 4) | 0); y = 150 + (r() * (FH - 154) | 0); if (Math.abs(x - YC[2][0]) < 14 || (x > 60 && y < 166)) continue; if (yk.plaza !== "none" && Math.abs(x - PLAZA[0]) < 14 && y > PLAZA[1] - 16) continue; flower(c, x, y, C.flowers[(i * 7) % C.flowers.length]); }
     drawPlaza(c, yk.plaza, PLAZA[0], PLAZA[1]);                                     // площадка у печи (украшение)
     if (yk.scare !== "none") drawScarecrow(c, SCARE[0], SCARE[1], yk.scare);
@@ -7591,7 +7591,11 @@
 
   // ---------- лавка: купить (станция и игроки) / продать (свои выведенные сорта) ----------
   F.shopTab = "buy";
-  var shopMarketRequest = 0, shopSeedLoading = false, shopSeedFailed = false, shopSeedObserver;
+  var SHOP_CACHE_MS = 120000, shopOffers = new Map(), shopOfferOwner, shopSeedObserver, shopPurchasePending = false;
+  function marketKey() { return F.shopFocus ? "strain:" + F.shopFocus : F.shopCat; }
+  function visibleOfferEntry(entry) {
+    return F.shopTab === "buy" && !$("farm-shop").hidden && shopOffers.get(marketKey()) === entry;
+  }
   function watchSeedOffers(marker) {
     if (!shopSeedObserver) {
       shopSeedObserver = new IntersectionObserver(function (entries) {
@@ -7603,13 +7607,17 @@
     shopSeedObserver.observe(marker);
   }
   function seedOfferKey(offer) { return "of:" + offer.pub + ":" + offer.strain; }
+  function marketResponse(data) {
+    if (data.error) throw new Error(data.error);
+    return data;
+  }
   function loadMoreSeedOffers() {
-    var m = F.market, active = shopMarketRequest;
-    if (!m || !m.next_seed_page || shopSeedLoading || shopSeedFailed || $("farm-shop").hidden) return;
-    shopSeedLoading = true;
+    var entry = shopOffers.get("seed"), m = entry && entry.data;
+    if (!m || !m.next_seed_page || entry.pageLoading || !visibleOfferEntry(entry)) return;
+    entry.pageLoading = true; entry.pageFailed = false;
     renderShopTab();
-    return call("/api/farm/market", { seed_page: m.next_seed_page }).then(function (page) {
-      if (active !== shopMarketRequest) return;
+    return call("/api/farm/market", { category: "seed", seed_page: m.next_seed_page }).then(marketResponse).then(function (page) {
+      if (shopOffers.get("seed") !== entry) return;
       var known = new Map(m.offers.map(function (offer) { return [seedOfferKey(offer), offer]; }));
       page.offers.forEach(function (offer) { known.set(seedOfferKey(offer), offer); });
       m.offers = Array.from(known.values());
@@ -7617,38 +7625,58 @@
       m.next_seed_page = page.next_seed_page;
       extend(page);
     }).catch(function () {
-      if (active === shopMarketRequest) shopSeedFailed = true;
+      entry.pageFailed = true;
     }).finally(function () {
-      if (active !== shopMarketRequest) return;
-      shopSeedLoading = false;
-      if (!$("farm-shop").hidden) renderShopTab();
+      entry.pageLoading = false;
+      if (visibleOfferEntry(entry)) renderShopTab();
     });
+  }
+  function loadShopOffers() {
+    var owner = F.state && F.state.pub;
+    if (shopOfferOwner !== owner) { shopOffers.clear(); shopOfferOwner = owner; }
+    var now = Date.now(), key = marketKey(), focus = F.shopFocus;
+    var entry = shopOffers.get(key);
+    shopOffers.forEach(function (item, itemKey) {
+      if (itemKey !== key && !item.pending && item.until <= now) shopOffers.delete(itemKey);
+    });
+    if (entry && entry.pending) { renderShopTab(); return entry.pending; }
+    if (entry && entry.until > now && entry.data) {
+      var cachedOffer = focus && !F.shopSel && entry.data.offers[entry.data.offers.length - 1];
+      if (cachedOffer) F.shopSel = seedOfferKey(cachedOffer);
+      renderShopTab();
+      return Promise.resolve(entry.data);
+    }
+    entry = { until: 0 };
+    shopOffers.set(key, entry);
+    entry.pending = call("/api/farm/market", focus ? { strain: focus } : { category: F.shopCat }).then(marketResponse).then(function (m) {
+      if (shopOffers.get(key) !== entry) return;
+      if (focus) {
+        m.offers = m.offers.filter(function (offer) { return offer.strain === focus; });
+        var offer = m.offers[m.offers.length - 1];
+        if (offer && visibleOfferEntry(entry)) F.shopSel = seedOfferKey(offer);
+      }
+      entry.data = m; entry.until = Date.now() + SHOP_CACHE_MS;
+      extend(m);
+      return m;
+    }).catch(function () {
+      entry.failed = true;
+    }).finally(function () {
+      entry.pending = null;
+      if (visibleOfferEntry(entry)) renderShopTab();
+    });
+    renderShopTab();
+    return entry.pending;
   }
   function openShop(tab, strain) {
     if (pauseTrade()) return;
-    var focus = strain || "", active = ++shopMarketRequest;
-    if (focus !== (F.shopFocus || "")) { F.market = null; F.shopSel = null; }
-    F.shopFocus = focus; F.shopMarketFailed = false; shopSeedLoading = shopSeedFailed = false;
-    if ((tab || F.shopTab) === "buy") F.market = null;
+    var focus = strain || "";
+    if (focus !== (F.shopFocus || "") && (tab || F.shopTab) === "buy") F.shopSel = null;
+    F.shopFocus = focus;
     if (focus) F.shopCat = "seed";
     F.shopTab = tab || F.shopTab; show("farm-shop");
     document.querySelectorAll("#shoptabs button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.st === F.shopTab)); });
+    if (F.shopTab === "buy") return loadShopOffers();
     renderShopTab();
-    if (F.shopTab === "buy") {
-      return call("/api/farm/market", focus ? { strain: focus } : { seed_page: true }).then(function (m) {
-        if (active !== shopMarketRequest) return;
-        if (focus) {
-          m.offers = m.offers.filter(function (offer) { return offer.strain === focus; });
-          var offer = m.offers[m.offers.length - 1];
-          F.shopSel = offer ? seedOfferKey(offer) : null;
-        }
-        F.market = m; extend(m);
-        if (F.shopTab === "buy" && !$("farm-shop").hidden) renderShopTab();
-      }).catch(function () {
-        if (!focus || active !== shopMarketRequest || $("farm-shop").hidden) return;
-        F.shopMarketFailed = true; renderShopTab();
-      });
-    }
   }
   // Разделы: семена · урожай · продукты (мука и еда). Цена урожая и продуктов у игроков — в 1,5 раза выше, чем дать пыль в амбаре.
   F.shopCat = "seed";
@@ -7724,36 +7752,39 @@
   function itemIconOf(id) { return function (cv) { itemIcon(cv, id); }; }
   function selectShopCategory(category) {
     haptic("light"); F.shopCat = category; F.shopSel = null;
-    if (F.shopFocus) openShop("buy");
-    else renderShopTab();
+    if (F.shopTab === "buy") {
+      F.shopFocus = "";
+      if (!pauseTrade()) return loadShopOffers();
+    }
+    renderShopTab();
   }
   function renderShopTab() {
     var s = F.state, box = $("shopview"); if (!s) return;
     if (shopSeedObserver) shopSeedObserver.disconnect();
     box.innerHTML = ""; setText($("shopdust"), "✦ " + formatGameNumber(s.dust));
     // в «Купить» — кружок: сколько штук игроки выставили в разделе
-    var cnt = { seed: 0, crop: 0, food: 0, fert: 0 }, mk = F.market;
-    if (mk) { mk.offers.forEach(function (o) { cnt.seed += o.count; }); (mk.items || []).forEach(function (o) { cnt[catOf(o.item)] += o.count; }); }
+    var entry = shopOffers.get(marketKey()), now = Date.now();
     document.querySelectorAll("#shopcats button").forEach(function (b) {
       b.setAttribute("aria-pressed", String(b.dataset.cat === F.shopCat));
       var old = b.querySelector(".badge"); if (old) old.remove();
-      var n = F.shopTab === "buy" ? cnt[b.dataset.cat] : 0;
-      if (n) b.appendChild(el("span", "badge", n > 99 ? "99+" : String(n) + (b.dataset.cat === "seed" && mk.next_seed_page ? "+" : "")));
+      if (F.shopTab !== "buy" || F.shopFocus) return;
+      var cached = shopOffers.get(b.dataset.cat), mk = cached && cached.until > now && cached.data;
+      if (!mk) return;
+      var n = mk.offers.concat(mk.items).reduce(function (sum, offer) { return sum + offer.count; }, 0);
+      if (n) b.appendChild(el("span", "badge", n > 99 ? "99+" : String(n) + (mk.next_seed_page ? "+" : "")));
     });
     var cat = F.shopCat, sel = F.shopSel, pick = function (k) { F.shopSel = k; renderShopTab(); };
     var note = function (t) { box.appendChild(el("div", "farm-note left", t)); };
     if (F.shopTab === "buy") {
-      var m = F.market, wares = [], act = {}, focus = F.shopFocus;
-      if (focus) {
-        box.appendChild(btn("Все семена", "ghost", function () { openShop("buy"); }));
-        if (F.shopMarketFailed) {
-          note("Не удалось обновить предложения.");
-          box.appendChild(btn("Повторить", "", function () { openShop("buy", focus); }));
-          return;
-        }
-        if (!m) { note("Загружаю предложения…"); return; }
-        if (!m.offers.length) { note("Этот сорт сейчас не продаётся."); return; }
+      var m = entry && entry.data, wares = [], act = {}, focus = F.shopFocus;
+      if (focus) box.appendChild(btn("Все семена", "ghost", function () { openShop("buy"); }));
+      if (entry && entry.failed) {
+        note("Не удалось обновить предложения.");
+        box.appendChild(btn("Повторить", "", loadShopOffers));
+        return;
       }
+      if (!m && (focus || cat !== "seed")) { note("Загружаю предложения…"); return; }
+      if (focus && !m.offers.length) { note("Этот сорт сейчас не продаётся."); return; }
       if (cat === "seed") {
         (focus ? [] : ["moss", "berry", "crystal", "wheat"]).forEach(function (k) {
           var st = s.strains[k]; if (!st) return;
@@ -7807,7 +7838,6 @@
           };
         });
       }
-      if (!m && cat !== "seed") { note("Загружаю…"); return; }
       if (!wares.length) {
         note(cat === "fert" ? "Удобрение пока никто не выставил. Его варят в подземелье из костей монстров." : cat === "crop" ? "Урожай пока никто не выставил. Свой можно выставить во вкладке «Продать» — это выгоднее, чем превращать его в пыль."
           : "Блюд пока никто не выставил. Муку мелет мельница, еду печёт печь — продать их игрокам выгоднее всего.");
@@ -7817,9 +7847,12 @@
       shelf(box, wares, sel, pick);
       if (sel) act[sel](); else note((cat === "seed" ? "Нажми на товар, чтобы посмотреть и купить. Базовые семена — у станции, выведенные сорта продают игроки." : "Нажми на товар, чтобы посмотреть и купить.")
         + " Зелёная метка «✓ 3» в углу — столько таких " + (cat === "seed" ? "семян" : "у тебя") + (cat === "seed" ? " у тебя уже есть (в инвентаре и сундуке)." : " уже есть (в амбаре и сундуке)."));
+      if (cat === "seed" && !m) note("Загружаю предложения…");
       if (cat === "seed" && m && m.next_seed_page) {
-        if (shopSeedFailed) note("Не удалось загрузить предложения. Открой лавку заново.");
-        else if (shopSeedLoading) note("Загружаю предложения…");
+        if (entry.pageFailed) {
+          note("Не удалось загрузить предложения.");
+          box.appendChild(btn("Повторить", "", loadMoreSeedOffers));
+        } else if (entry.pageLoading) note("Загружаю предложения…");
         else {
           var marker = el("div", "shop-seed-end");
           marker.setAttribute("aria-hidden", "true");
@@ -7892,15 +7925,42 @@
     else { d.insertBefore(el("div", "sub", "Оба странных растения уже растут — третьему места нет."), d.lastChild); if (b) b.disabled = true; }
   }
   function buyWare(b, pub, id, kind, price, gain, done) {
-    var cur = F.state;
-    if (cur.dust < price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
-    haptic("success"); buyFx(b, gain, "−✦ " + formatGameNumber(price));
-    cur.dust -= price; setText($("shopdust"), "✦ " + formatGameNumber(cur.dust));
-    b.disabled = true; b.textContent = "Покупаю…";
-    call("/api/farm/buy", { pub: pub, strain: id, kind: kind }).then(function (r) {
-      if (r.error) { toast(r.error); loadFarm().catch(function () {}); return openShop("buy", F.shopFocus); }
-      toast(r.odd_evicted ? "Куплено. Одно старое странное семя пропало" : done); F.shopSel = null; setFarm(r.farm); openShop("buy", F.shopFocus);
-    }).catch(function (e) { toast("Не получилось: " + e.message); b.disabled = false; });
+    if (shopPurchasePending) return;
+    if (F.state.dust < price) { haptic("error"); bumpDust(true); return toast("Не хватает звёздной пыли"); }
+    shopPurchasePending = true;
+    haptic("light"); b.disabled = true; b.textContent = "Покупаю…";
+    var active = marketKey();
+    var keys = kind === "seed" ? ["seed", "strain:" + id] : [catOf(id)];
+    call("/api/farm/buy", { pub: pub, strain: id, kind: kind, price: price }).then(function (r) {
+      var stillHere = F.shopTab === "buy" && !$("farm-shop").hidden && active === marketKey();
+      if (r.error) {
+        toast(r.error);
+        if (r.market_changed) {
+          keys.forEach(function (key) { shopOffers.delete(key); });
+          if (stillHere) loadShopOffers();
+        }
+        return;
+      }
+      keys.forEach(function (key) {
+        var entry = shopOffers.get(key), m = entry && entry.data;
+        if (!m) return;
+        var list = kind === "seed" ? m.offers : m.items;
+        var index = list.findIndex(function (offer) { return offer.pub === pub && (offer.strain || offer.item) === id; });
+        if (index < 0) return;
+        var remaining = r.remaining == null ? list[index].count - 1 : r.remaining;
+        if (remaining > 0) list[index].count = remaining;
+        else list.splice(index, 1);
+      });
+      if (stillHere) { haptic("success"); buyFx(b, gain, "−✦ " + formatGameNumber(price)); F.shopSel = null; }
+      toast(r.odd_evicted ? "Куплено. Одно старое странное семя пропало" : done);
+      setFarm(r.farm);
+    }).catch(function (e) {
+      toast("Не получилось: " + e.message);
+      loadFarm().catch(function () {});
+    }).finally(function () {
+      shopPurchasePending = false;
+      if (b.isConnected) { b.disabled = false; b.textContent = "Купить за ✦ " + formatGameNumber(price); }
+    });
   }
 
   // ---------- пластинки: одна пластинка — один трек; у каждого трека все варианты редкости и отделки ----------

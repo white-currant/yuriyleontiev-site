@@ -1087,20 +1087,21 @@ async function anomalyLive(t = now()) {
   }
   return null;
 }
-async function buyAnomaly(u: any) {
+async function buyAnomaly(u: any, expectedPrice?: number) {
   const o = await anomalyLive();
-  if (!o) return { error: "Его здесь больше нет" };
+  if (!o) return { error: "Его здесь больше нет", market_changed: true };
+  if (expectedPrice != null && o.price !== expectedPrice) return { error: "Цена изменилась. Проверь новую цену.", market_changed: true };
   await ensureFarm(u);
   const full = (await oddHeld(u.id)) >= ODD_PER_USER;
   if (full && !(await oddEvictable(u.id))) return { error: ODD_FULL };
   if (!(await q("INSERT INTO f_evlog (user, kind, at) SELECT 0, ?, ? WHERE NOT EXISTS (SELECT 1 FROM f_evlog WHERE user = 0 AND kind = ?) RETURNING 1",
-                [o.key, now(), o.key])).length) return { error: "Уже раскупили" };
+                [o.key, now(), o.key])).length) return { error: "Уже раскупили", market_changed: true };
   if (!(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("buy_seed_from_station", { item: "anomaly", quantity: 1 }), o.price, u.id, o.price])).length) {
     await q("DELETE FROM f_evlog WHERE user = 0 AND kind = ?", [o.key]); return { error: "Не хватает звёздной пыли" }; }
   const evicted = full && (await oddEvict(u.id));
   await q(`INSERT INTO f_inv (user, strain, count, listed) VALUES (?, 'anomaly', 1, 0) ON CONFLICT(user, strain) DO UPDATE SET count = count + 1`, [u.id]);
   await oddFresh(u.id);
-  return { ok: true, price: o.price, odd_evicted: evicted, farm: await farmState(u) };
+  return { ok: true, price: o.price, remaining: 0, odd_evicted: evicted, farm: await farmState(u) };
 }
 
 // «Семенная лавка станции»: базовые семена в мешок за пыль
@@ -2247,17 +2248,19 @@ export async function listItem(u: any, item: string, delta: number) {
   }
   return { farm: await farmState(u) };
 }
-async function buyItem(u: any, seller: number, pub: string, item: string, myName: string) {
+async function buyItem(u: any, seller: number, pub: string, item: string, myName: string, expectedPrice?: number) {
   if (item === "p:fert" && !dgOpen()) return { error: "Такого товара нет" };                 // пока подземелье скрыто — удобрение не купить
   if (!(await q("SELECT 1 FROM f_builds WHERE user = ? AND kind = 'barn'", [u.id])).length) return { error: "Урожай и продукты кладут в амбар — сначала построй его" };
   const it = (await itemInfo([item])).info[item];
   if (!it) return { error: "Такого товара нет" };
   const price = sellerPrice(stallPrice(it.dust), (await ownPrices(seller))[item]);
+  if (expectedPrice != null && price !== expectedPrice) return { error: "Цена изменилась. Проверь новую цену.", market_changed: true };
   if (!(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("market_buy_item", { item, seller }), price, u.id, price])).length)
     return { error: "Не хватает звёздной пыли" };
-  if (!(await q("UPDATE f_stall SET listed = listed - 1 WHERE user = ? AND item = ? AND listed > 0 RETURNING 1", [seller, item])).length) {
+  const [sale] = await q("UPDATE f_stall SET listed = listed - 1 WHERE user = ? AND item = ? AND listed > 0 RETURNING listed", [seller, item]);
+  if (!sale) {
     await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("market_refund", { item, seller }), price, u.id]);
-    return { error: "Уже раскупили" };
+    return { error: "Уже раскупили", market_changed: true };
   }
   await DB.batch([
     DB.prepare("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?").bind(dustContext("market_sell_item", { item, buyer: u.id }), price, seller),
@@ -2266,14 +2269,14 @@ async function buyItem(u: any, seller: number, pub: string, item: string, myName
   ]);
   await logFeed("buy", u.id, seller, item);
   if (item.includes("@") && !/@[gr]:/.test(item)) NORM_MEM.delete(u.id);   // купил товар старого формата — разложить сразу, не ждать полчаса
-  return { ok: true, price, ...(await visit(u, pub)), farm: await farmState(u) };
+  return { ok: true, price, remaining: Number(sale[0]), ...(await visit(u, pub)), farm: await farmState(u) };
 }
 
-export async function buy(u: any, pub: string, strain: string, myName: string, kind = "seed") {
-  if (pub === ANOM_PUB) return strain === "anomaly" ? buyAnomaly(u) : { error: "Такого товара нет" };
+export async function buy(u: any, pub: string, strain: string, myName: string, kind = "seed", expectedPrice?: number) {
+  if (pub === ANOM_PUB) return strain === "anomaly" ? buyAnomaly(u, expectedPrice) : { error: "Такого товара нет" };
   const [f] = await q("SELECT user FROM f_farms WHERE pub = ?", [pub]);
   if (!f || Number(f[0]) === u.id) return { error: "Лавка не найдена" };
-  if (kind === "item") { await ensureFarm(u); return buyItem(u, Number(f[0]), pub, strain, myName); }
+  if (kind === "item") { await ensureFarm(u); return buyItem(u, Number(f[0]), pub, strain, myName, expectedPrice); }
   if (CROPS[strain] && !CROPS[strain].odd) return { error: "Такого товара нет" };
   const s = (await strains([strain]))[strain];
   if (!s) return { error: "Такого товара нет" };
@@ -2281,12 +2284,14 @@ export async function buy(u: any, pub: string, strain: string, myName: string, k
   const full = strain === "anomaly" && (await oddHeld(u.id)) >= ODD_PER_USER;
   if (full && !(await oddEvictable(u.id))) return { error: ODD_FULL };
   const price = sellerPrice(s.price!, (await ownPrices(Number(f[0])))["s:" + strain]);
+  if (expectedPrice != null && price !== expectedPrice) return { error: "Цена изменилась. Проверь новую цену.", market_changed: true };
   if (!(await q("UPDATE f_farms SET dust_context = ?, dust = dust - ? WHERE user = ? AND dust >= ? RETURNING 1", [dustContext("market_buy_seed", { item: strain, seller: Number(f[0]) }), price, u.id, price])).length)
     return { error: "Не хватает звёздной пыли" };
   // товар забирает ровно один покупатель; не вышло — пыль возвращаем
-  if (!(await q("UPDATE f_inv SET count = count - 1, listed = listed - 1 WHERE user = ? AND strain = ? AND listed > 0 RETURNING 1", [f[0], strain])).length) {
+  const [sale] = await q("UPDATE f_inv SET count = count - 1, listed = listed - 1 WHERE user = ? AND strain = ? AND listed > 0 RETURNING listed", [f[0], strain]);
+  if (!sale) {
     await q("UPDATE f_farms SET dust_context = ?, dust = dust + ? WHERE user = ?", [dustContext("market_refund", { item: strain, seller: Number(f[0]) }), price, u.id]);
-    return { error: "Уже раскупили" };
+    return { error: "Уже раскупили", market_changed: true };
   }
   const evicted = full && (await oddEvict(u.id));                          // третье — сначала пропадает одно старое, потом приходит новое
   await DB.batch([
@@ -2297,7 +2302,7 @@ export async function buy(u: any, pub: string, strain: string, myName: string, k
   ]);
   await logFeed("buy", u.id, Number(f[0]), strain);
   if (strain === "anomaly") await oddFresh(u.id);                          // купленное у игрока — тоже «свежее»
-  return { ok: true, price, odd_evicted: evicted, ...(await visit(u, pub)), farm: await farmState(u) };
+  return { ok: true, price, remaining: Number(sale[0]), odd_evicted: evicted, ...(await visit(u, pub)), farm: await farmState(u) };
 }
 
 // справочник: все сорта, которые у игрока когда-либо были (строки инвентаря не удаляются — в т.ч. посаженные и проданные)
@@ -2413,14 +2418,19 @@ export async function herbariumLineage(id: unknown) {
 }
 
 // рынок: все семена, выставленные игроками (кроме своих). Наружу — публичное имя продавца и номер участка (pub), не аккаунт.
-export async function market(u: any, hidden: number[], exact?: unknown, seedPage?: unknown) {
+export async function market(u: any, hidden: number[], exact?: unknown, seedPage?: unknown, category?: unknown) {
+  if (category != null && category !== "seed" && category !== "crop" && category !== "food" && category !== "fert")
+    return { error: "Раздел лавки не найден" };
   const strain = typeof exact === "string" && /^h[0-9a-f]{10}$/.test(exact) ? exact : "";
   if (exact != null && !strain) return { offers: [], items: [], strains: {}, products: {}, bonuses: BONUSES };
+  if (!strain && category && category !== "seed") {
+    return { offers: [], ...await marketItems(u.id, hidden, category), bonuses: BONUSES };
+  }
   const filter = typeof seedPage === "string" ? /^(\d+):(\d+)$/.exec(seedPage) : null;
   const cursor = filter ? [Number(filter[1]), Number(filter[2])] : [];
   if (typeof seedPage === "string" && (!filter || cursor.some((value) => !Number.isSafeInteger(value) || value <= 0)))
     return { error: "Обнови предложения лавки" };
-  const paged = !strain && (seedPage === true || cursor.length > 0);
+  const paged = !strain && (category === "seed" || seedPage === true || cursor.length > 0);
   const size = 30;
   const rows = paged
     ? await q(`SELECT i.user, f.pub, i.strain, i.listed, p.name, pr.price, i.offer_id FROM (
@@ -2447,13 +2457,22 @@ export async function market(u: any, hidden: number[], exact?: unknown, seedPage
   if (cursor.length) return { offers, items: [], strains: ss, products: {}, bonuses: BONUSES, next_seed_page };
   const an = await anomalyLive();                                // ночная аномалия — среди семян игроков, на случайном месте
   if (an) { ss.anomaly = view(CROPS.anomaly); offers.splice(fnv(an.key) % (offers.length + 1), 0, { pub: ANOM_PUB, strain: "anomaly", count: 1, price: an.price, seller: an.seller }); }
+  if (category === "seed") return { offers, items: [], strains: ss, products: {}, bonuses: BONUSES, next_seed_page };
+  const goods = await marketItems(u.id, hidden);
+  return { offers, ...goods, strains: { ...ss, ...goods.strains }, bonuses: BONUSES, next_seed_page };
+}
+
+async function marketItems(user: number, hidden: number[], category?: "crop" | "food" | "fert") {
+  const filter = category === "crop" ? "AND (s.item NOT LIKE 'p:%' OR s.item = 'p:eye')"
+    : category === "food" ? "AND s.item LIKE 'p:%' AND s.item NOT IN ('p:eye','p:fert')"
+      : category === "fert" ? "AND s.item = 'p:fert'" : "";
   const st = await q(`SELECT s.user, f.pub, s.item, s.listed, p.name, pr.price FROM f_stall s JOIN f_farms f ON f.user = s.user
                       LEFT JOIN g_profiles p ON p.user = s.user LEFT JOIN f_prices pr ON pr.user = s.user AND pr.item = s.item
-                      WHERE s.listed > 0 AND s.user != ? AND (? OR s.item != 'p:fert') LIMIT 300`, [u.id, dgOpen() ? 1 : 0]);   // удобрение на рынке пока не показываем (2026-11-19)
+                      WHERE s.listed > 0 AND s.user != ? AND (? OR s.item != 'p:fert') ${filter} LIMIT 300`, [user, dgOpen() ? 1 : 0]);   // удобрение на рынке пока не показываем (2026-11-19)
   const ii = await itemInfo(st.map((r) => String(r[2])));
   const items = st.map(([uid, pub, item, n, name, own]) => ({ pub, item: String(item), count: Number(n), price: ii.info[String(item)] ? sellerPrice(stallPrice(ii.info[String(item)].dust), own) : 0,
                                                           seller: hidden.includes(Number(uid)) ? "Сосед" : name || "Сосед" })).filter((o) => o.price);
-  return { offers, items, strains: { ...ss, ...ii.strains }, products: ii.products, bonuses: BONUSES, next_seed_page };
+  return { items, strains: ii.strains, products: ii.products };
 }
 
 export async function salesSeen(u: any) {

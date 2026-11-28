@@ -670,7 +670,7 @@ async function handle(req: Request, env: any): Promise<Response> {
     case "/api/dg/altar": return json(await farm.dgAltar(user, String(body.run || "").slice(0, 32)));
     case "/api/dg/drink": return json(await farm.dgDrink(user, String(body.item || "").slice(0, 80)));
     case "/api/dg/brew": return json(await farm.dgBrew(user, Number(body.n) || 1));
-    case "/api/farm/market": return json(await farm.market(user, await hiddenIds(), body?.strain, body?.seed_page));
+    case "/api/farm/market": return json(await farm.market(user, await hiddenIds(), body?.strain, body?.seed_page, body?.category));
     case "/api/farm/seeds": return json(await farm.buySeeds(user, String(body.crop || ""), Number(body.n || 1)));
     case "/api/farm/list": return json(await farm.list(user, String(body.strain || ""), Number(body.delta || 0)));
     case "/api/farm/price": return json(await farm.setPrice(user, String(body.item || "").slice(0, 80), Number(body.price || 0), body.kind === "seed" ? "seed" : "item"));
@@ -682,7 +682,8 @@ async function handle(req: Request, env: any): Promise<Response> {
     case "/api/farm/sales/seen": return json(await farm.salesSeen(user));
     case "/api/farm/buy": {
       const [p] = await q("SELECT name FROM g_profiles WHERE user = ?", [user.id]);
-      return json(await farm.buy(user, String(body.pub || ""), String(body.strain || ""), p?.[0] || "Сосед", body.kind === "item" ? "item" : "seed"));
+      return json(await farm.buy(user, String(body.pub || ""), String(body.strain || ""), p?.[0] || "Сосед", body.kind === "item" ? "item" : "seed",
+        Number.isSafeInteger(body.price) ? body.price : undefined));
     }
     case "/api/farm/gift": {
       // в подарке — публичное имя (как в «Звёздном зале»), а не имя из Телеграма
